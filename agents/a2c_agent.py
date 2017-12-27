@@ -50,7 +50,7 @@ class A2CAgent(object):
         num_steps = 0
         obs_mb, action_mb, reward_mb = [], [], []
         while (not done[0]) and num_steps < self._rollout_num_steps:
-            obs_feat = np.eye(5, dtype=np.float32)[np.array(obs)][:, :, :, 1:]
+            obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
             obs_feat = torch.from_numpy(obs_feat.transpose((0, 3, 1, 2)))
             prob_logit, _ = self._model(Variable(obs_feat))
             action = self._sample_action(prob_logit)
@@ -68,8 +68,7 @@ class A2CAgent(object):
 
         r = torch.zeros(len(done), 1)
         if not done[0]:
-            last_obs_feat = np.eye(
-                5, dtype=np.float32)[np.array(obs)][:, :, :, 1:]
+            last_obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
             last_obs_feat = torch.from_numpy(
                 last_obs_feat.transpose((0, 3, 1, 2)))
             _, last_value = self._model(Variable(last_obs_feat))
