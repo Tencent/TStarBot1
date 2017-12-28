@@ -23,20 +23,30 @@ class A2CAgent(object):
                  rollout_num_steps=5,
                  discount=0.99,
                  ent_coef=1e-3,
-                 val_coef=1.0):
-        self._model = FullyConvNet(dims)
-        self._optimizer = optim.RMSprop(self._model.parameters(), lr=rmsprop_lr,
-                                        eps=rmsprop_eps, centered=False)
+                 val_coef=1.0,
+                 use_gpu=True):
+        self._actor_critic = FullyConvNet(dims)
+        if torch.cuda.device_count() > 1:
+            self._actor_critic = nn.DataParallel(self._actor_critic)
+        if use_gpu:
+            self._actor_critic.cuda()
+        self._optimizer = optim.RMSprop(self._actor_critic.parameters(),
+                                        lr=rmsprop_lr,
+                                        eps=rmsprop_eps,
+                                        centered=False)
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
         self._val_coef = val_coef
+        self._use_gpu = use_gpu
 
     def step(self, obs):
         obs_feat = np.eye(5, dtype=np.float32)[np.stack([obs])][:, :, :, 1:]
         obs_feat = torch.from_numpy(obs_feat.transpose((0, 3, 1, 2)))
-        prob_logit, _ = self._model(Variable(obs_feat))
-        action = self._sample_action(prob_logit)
+        if self._use_gpu:
+            obs_feat = obs_feat.cuda()
+        prob_logit, _ = self._actor_critic(Variable(obs_feat))
+        action = self._sample_action(prob_logit.data)
         return action
 
     def train(self, envs):
@@ -52,26 +62,33 @@ class A2CAgent(object):
         while (not done[0]) and num_steps < self._rollout_num_steps:
             obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
             obs_feat = torch.from_numpy(obs_feat.transpose((0, 3, 1, 2)))
-            prob_logit, _ = self._model(Variable(obs_feat))
-            action = self._sample_action(prob_logit)
+            if self._use_gpu:
+                obs_feat = obs_feat.cuda()
+            prob_logit, _ = self._actor_critic(Variable(obs_feat))
+            action = self._sample_action(prob_logit.data)
             obs_mb.append(obs_feat)
             action_mb.append(action)
-            reward_mb.append(torch.Tensor(reward))
-            obs, reward, done, _ = envs.step(action)
+            reward_mb.append(torch.cuda.FloatTensor(reward) if self._use_gpu
+                             else torch.Tensor(reward))
+            if self._use_gpu:
+                action = action.cpu()
+            obs, reward, done, _ = envs.step(action.numpy())
             num_steps += 1
         return obs_mb, action_mb, reward_mb, obs, reward, done
 
     def _update(self, obs_mb, action_mb, reward_mb, obs, done):
-        prob_logit, value = self._model(Variable(torch.cat(obs_mb, 0)))
+        prob_logit, value = self._actor_critic(Variable(torch.cat(obs_mb, 0)))
         log_prob, prob = F.log_softmax(prob_logit, 1), F.softmax(prob_logit, 1)
         entropy = -(log_prob * prob).sum(1)
 
-        r = torch.zeros(len(done), 1)
+        r = value.data.new(len(done), 1).zero_()
         if not done[0]:
             last_obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
             last_obs_feat = torch.from_numpy(
                 last_obs_feat.transpose((0, 3, 1, 2)))
-            _, last_value = self._model(Variable(last_obs_feat))
+            if self._use_gpu:
+                last_obs_feat = last_obs_feat.cuda()
+            _, last_value = self._actor_critic(Variable(last_obs_feat))
             r = last_value.data
         returns = []
         for reward in reversed(reward_mb):
@@ -89,12 +106,12 @@ class A2CAgent(object):
                self._ent_coef * entropy_loss
         self._optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm(self._model.parameters(), 40)
+        torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
         self._optimizer.step()
 
     def _sample_action(self, logit):
-        noise = torch.log(-torch.log(torch.rand(logit.size())))
-        _, action = torch.max(logit.data - noise * 0, 1)
+        noise = torch.log(-torch.log(logit.new(logit.size()).uniform_()))
+        _, action = torch.max(logit - noise, 1)
         return action.unsqueeze(1)
 
             

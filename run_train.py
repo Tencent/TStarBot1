@@ -14,6 +14,7 @@ flags.DEFINE_integer("select_army_freq", 5, "Frequency for re-selecting army.")
 flags.DEFINE_float("rmsprop_lr", 3e-4, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
 flags.DEFINE_integer("rollout_num_steps", 5, "Rollout steps for A2C.")
+flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.mark_flag_as_required("map")
 
 
@@ -27,7 +28,8 @@ def train():
         dims=FLAGS.resolution,
         rmsprop_lr=FLAGS.rmsprop_lr,
         rmsprop_eps=FLAGS.rmsprop_eps,
-        rollout_num_steps=FLAGS.rollout_num_steps)
+        rollout_num_steps=FLAGS.rollout_num_steps,
+        use_gpu=FLAGS.use_gpu)
     agent.train(envs)
 
 
