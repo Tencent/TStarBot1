@@ -40,12 +40,9 @@ class A2CAgent(object):
         self._val_coef = val_coef
         self._use_gpu = use_gpu
 
-    def step(self, obs):
-        obs_feat = np.eye(5, dtype=np.float32)[np.stack([obs])][:, :, :, 1:]
-        obs_feat = torch.from_numpy(obs_feat.transpose((0, 3, 1, 2)))
-        if self._use_gpu:
-            obs_feat = obs_feat.cuda()
-        prob_logit, _ = self._actor_critic(Variable(obs_feat))
+    def step(self, ob):
+        ob = self._transform_observation(ob.expand_dims(0))
+        prob_logit, _ = self._actor_critic(Variable(ob))
         action = self._sample_action(prob_logit.data)
         return action
 
@@ -56,17 +53,21 @@ class A2CAgent(object):
                 envs, obs, reward, done)
             self._update(obs_mb, action_mb, reward_mb, obs, done)
 
+    def _transform_observation(self, obs):
+        obs = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
+        obs = torch.from_numpy(obs.transpose((0, 3, 1, 2)))
+        if self._use_gpu:
+            obs = obs.cuda()
+        return obs
+
     def _rollout(self, envs, obs, reward, done):
         num_steps = 0
         obs_mb, action_mb, reward_mb = [], [], []
         while (not done[0]) and num_steps < self._rollout_num_steps:
-            obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
-            obs_feat = torch.from_numpy(obs_feat.transpose((0, 3, 1, 2)))
-            if self._use_gpu:
-                obs_feat = obs_feat.cuda()
-            prob_logit, _ = self._actor_critic(Variable(obs_feat))
+            obs = self._transform_observation(obs)
+            prob_logit, _ = self._actor_critic(Variable(obs))
             action = self._sample_action(prob_logit.data)
-            obs_mb.append(obs_feat)
+            obs_mb.append(obs)
             action_mb.append(action)
             reward_mb.append(torch.cuda.FloatTensor(reward) if self._use_gpu
                              else torch.Tensor(reward))
@@ -83,12 +84,8 @@ class A2CAgent(object):
 
         r = value.data.new(len(done), 1).zero_()
         if not done[0]:
-            last_obs_feat = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
-            last_obs_feat = torch.from_numpy(
-                last_obs_feat.transpose((0, 3, 1, 2)))
-            if self._use_gpu:
-                last_obs_feat = last_obs_feat.cuda()
-            _, last_value = self._actor_critic(Variable(last_obs_feat))
+            obs = self._transform_observation(obs)
+            _, last_value = self._actor_critic(Variable(obs))
             r = last_value.data
         returns = []
         for reward in reversed(reward_mb):
