@@ -107,10 +107,7 @@ class A2CAgent(object):
         self._optimizer.step()
 
     def _sample_action(self, logit):
-        noise = torch.log(-torch.log(logit.new(logit.size()).uniform_()))
-        _, action = torch.max(logit - noise, 1)
-        return action.unsqueeze(1)
-
+        return F.softmax(Variable(logit), 1).multinomial(1).data
             
 class FullyConvNet(nn.Module):
     def __init__(self, dims):
@@ -121,8 +118,8 @@ class FullyConvNet(nn.Module):
                                                      stride=1, padding=1)
         self.conv3 = nn.Conv2d(in_channels=32, out_channels=1, kernel_size=1,
                                                      stride=1, padding=0)
-        self.fc = nn.Linear(32 * dims * dims, 128)
-        self.value_fc = nn.Linear(128, 1)
+        self.fc = nn.Linear(32 * dims * dims, 64)
+        self.value_fc = nn.Linear(64, 1)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
