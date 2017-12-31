@@ -30,7 +30,11 @@ def train():
         rmsprop_eps=FLAGS.rmsprop_eps,
         rollout_num_steps=FLAGS.rollout_num_steps,
         use_gpu=FLAGS.use_gpu)
-    agent.train(envs)
+    try:
+        agent.train(envs)
+    except KeyboardInterrupt:
+        pass
+    envs.close()
 
 
 def main(argv):

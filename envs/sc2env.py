@@ -59,7 +59,7 @@ class SC2MiniEnv(gym.Env):
         try:
             timestep = self._sc2_env.step(action)[0]
         except ValueError:
-            self._select_army()
+            self._select_all_army()
             timestep = self._sc2_env.step(action)[0]
         return timestep
 
