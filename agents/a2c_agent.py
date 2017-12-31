@@ -82,18 +82,8 @@ class A2CAgent(object):
         log_prob, prob = F.log_softmax(prob_logit, 1), F.softmax(prob_logit, 1)
         entropy = -(log_prob * prob).sum(1)
 
-        r = value.data.new(len(done), 1).zero_()
-        if not done[0]:
-            obs = self._transform_observation(obs)
-            _, last_value = self._actor_critic(Variable(obs))
-            r = last_value.data
-        returns = []
-        for reward in reversed(reward_mb):
-            r = self._discount * r + reward.unsqueeze(1)
-            returns.append(r)
-        returns = Variable(torch.cat(returns[::-1]))
-
-        advantage = returns - value
+        value_target = self._boostrapped_value(reward_mb, obs, done)
+        advantage = Variable(value_target) - value
         action = Variable(torch.cat(action_mb))
         value_loss = advantage.pow(2).mean() * 0.5
         policy_loss = - (log_prob.gather(1, action) *
@@ -105,6 +95,21 @@ class A2CAgent(object):
         loss.backward()
         torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
         self._optimizer.step()
+
+    def _boostrapped_value(self, reward_mb, obs, done):
+        if self._use_gpu:
+            r = torch.cuda.FloatTensor(len(done), 1).zero_()
+        else:
+            r = torch.FloatTensor(len(done), 1).zero_()
+        if not done[0]:
+            obs = self._transform_observation(obs)
+            _, last_value = self._actor_critic(Variable(obs))
+            r = last_value.data
+        value = []
+        for reward in reversed(reward_mb):
+            r = self._discount * r + reward.unsqueeze(1)
+            value.append(r)
+        return torch.cat(value[::-1])
 
     def _sample_action(self, logit):
         return F.softmax(Variable(logit), 1).multinomial(1).data
