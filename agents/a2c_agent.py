@@ -24,7 +24,12 @@ class A2CAgent(object):
                  discount=0.99,
                  ent_coef=1e-3,
                  val_coef=1.0,
-                 use_gpu=True):
+                 use_gpu=True,
+                 seed=0):
+        torch.manual_seed(seed)
+        if use_gpu:
+            torch.cuda.manual_seed(seed)
+
         self._actor_critic = FullyConvNet(dims)
         if torch.cuda.device_count() > 1:
             self._actor_critic = nn.DataParallel(self._actor_critic)
@@ -34,6 +39,7 @@ class A2CAgent(object):
                                         lr=rmsprop_lr,
                                         eps=rmsprop_eps,
                                         centered=False)
+
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
@@ -44,14 +50,13 @@ class A2CAgent(object):
         ob = self._transform_observation(ob.expand_dims(0))
         prob_logit, _ = self._actor_critic(Variable(ob))
         action = self._sample_action(prob_logit.data)
-        return action
+        return action.numpy() if not self._use_gpu else action.cpu().numpy()
 
     def train(self, envs):
-        obs, reward, done, _ = envs.reset()
+        obs = envs.reset()
         while True:
-            obs_mb, action_mb, reward_mb, obs, reward, done = self._rollout(
-                envs, obs, reward, done)
-            self._update(obs_mb, action_mb, reward_mb, obs, done)
+            obs_mb, action_mb, target_value_mb, obs = self._rollout(envs, obs)
+            self._update(obs_mb, action_mb, target_value_mb)
 
     def _transform_observation(self, obs):
         obs = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
@@ -60,30 +65,30 @@ class A2CAgent(object):
             obs = obs.cuda()
         return obs
 
-    def _rollout(self, envs, obs, reward, done):
-        num_steps = 0
-        obs_mb, action_mb, reward_mb = [], [], []
-        while (not done[0]) and num_steps < self._rollout_num_steps:
+    def _rollout(self, envs, obs):
+        obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
+        for _ in xrange(self._rollout_num_steps):
             obs = self._transform_observation(obs)
-            prob_logit, _ = self._actor_critic(Variable(obs))
+            prob_logit, _ = self._actor_critic(Variable(obs, volatile=True))
             action = self._sample_action(prob_logit.data)
             obs_mb.append(obs)
             action_mb.append(action)
-            reward_mb.append(torch.cuda.FloatTensor(reward) if self._use_gpu
-                             else torch.Tensor(reward))
-            if self._use_gpu:
-                action = action.cpu()
-            obs, reward, done, _ = envs.step(action.numpy())
-            num_steps += 1
-        return obs_mb, action_mb, reward_mb, obs, reward, done
+            obs, reward, done, _ = envs.step(action.numpy() if not self._use_gpu
+                                             else action.cpu().numpy())
+            reward_mb.append(torch.Tensor(reward) if not self._use_gpu
+                             else torch.cuda.FloatTensor(reward))
+            done_mb.append(torch.Tensor(done.tolist()) if not self._use_gpu
+                           else torch.cuda.FloatTensor(done.tolist()))
+        target_value_mb = self._boostrap(reward_mb, done_mb, obs)
+        return obs_mb, action_mb, target_value_mb,  obs
 
-    def _update(self, obs_mb, action_mb, reward_mb, obs, done):
-        prob_logit, value = self._actor_critic(Variable(torch.cat(obs_mb, 0)))
-        log_prob, prob = F.log_softmax(prob_logit, 1), F.softmax(prob_logit, 1)
+    def _update(self, obs_mb, action_mb, target_value_mb):
+        prob_logit, value = self._actor_critic(Variable(torch.cat(obs_mb)))
+        log_prob = F.log_softmax(prob_logit, 1)
+        prob = F.softmax(prob_logit, 1)
         entropy = -(log_prob * prob).sum(1)
 
-        value_target = self._boostrapped_value(reward_mb, obs, done)
-        advantage = Variable(value_target) - value
+        advantage = Variable(torch.cat(target_value_mb)) - value
         action = Variable(torch.cat(action_mb))
         value_loss = advantage.pow(2).mean() * 0.5
         policy_loss = - (log_prob.gather(1, action) *
@@ -91,25 +96,22 @@ class A2CAgent(object):
         entropy_loss = entropy.mean()
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
+
         self._optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
         self._optimizer.step()
 
-    def _boostrapped_value(self, reward_mb, obs, done):
-        if self._use_gpu:
-            r = torch.cuda.FloatTensor(len(done), 1).zero_()
-        else:
-            r = torch.FloatTensor(len(done), 1).zero_()
-        if not done[0]:
-            obs = self._transform_observation(obs)
-            _, last_value = self._actor_critic(Variable(obs))
-            r = last_value.data
-        value = []
-        for reward in reversed(reward_mb):
-            r = self._discount * r + reward.unsqueeze(1)
-            value.append(r)
-        return torch.cat(value[::-1])
+    def _boostrap(self, reward_mb, done_mb, last_obs):
+        _, last_value = self._actor_critic(
+            Variable(self._transform_observation(last_obs), volatile=True))
+        target_value = []
+        r = last_value.data.squeeze() * (1 - done_mb[-1])
+        for reward, done in reversed(zip(reward_mb, done_mb)):
+            r *= 1 - done 
+            r = self._discount * r + reward
+            target_value.append(r.unsqueeze(1))
+        return target_value[::-1]
 
     def _sample_action(self, logit):
         return F.softmax(Variable(logit), 1).multinomial(1).data

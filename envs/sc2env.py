@@ -42,7 +42,7 @@ class SC2MiniEnv(gym.Env):
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
-        return self._convert_observation(timestep)
+        return self._convert_observation(timestep)[0]
 
     def _close(self):
         self._sc2_env.close()
@@ -66,7 +66,6 @@ class SC2MiniEnv(gym.Env):
     def _convert_observation(self, timestep):
         obs = timestep.observation["screen"][
             SCREEN_FEATURES.player_relative.index]
-        done = False
-        #done = timestep.last()
+        done = timestep.last()
         info = None
         return obs, timestep.reward, done, info

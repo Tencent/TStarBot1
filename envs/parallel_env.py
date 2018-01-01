@@ -13,8 +13,8 @@ def worker(pipe, env_create_func):
             if done: ob = env.reset()
             pipe.send((ob, reward, done, info))
         elif cmd == 'reset':
-            ob, reward, done, info = env.reset()
-            pipe.send((ob, reward, done, info))
+            ob = env.reset()
+            pipe.send(ob)
         elif cmd == 'close':
             env.close()
             break
@@ -45,9 +45,8 @@ class ParallelEnvWrapper(gym.Env):
     def _reset(self):
         for pipe in self._pipes:
             pipe.send(('reset', None))
-        results = [pipe.recv() for pipe in self._pipes]
-        obs, rewards, dones, infos = zip(*results)
-        return np.stack(obs), np.stack(rewards), np.stack(dones), infos
+        obs = [pipe.recv() for pipe in self._pipes]
+        return np.stack(obs)
 
     def _close(self):
         for pipe in self._pipes:
