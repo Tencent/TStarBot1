@@ -1,7 +1,7 @@
 from absl import app
 from absl import flags
 
-from envs.sc2env import SC2MiniEnv
+from envs.sc2_median_env import SC2MedianEnv
 from envs.parallel_env import ParallelEnvWrapper 
 from agents.a2c_agent import A2CAgent
 
@@ -19,7 +19,7 @@ flags.mark_flag_as_required("map")
 
 
 def train():
-    envs = ParallelEnvWrapper([lambda: SC2MiniEnv(
+    envs = ParallelEnvWrapper([lambda: SC2MedianEnv(
         map_name=FLAGS.map,
         step_mul=FLAGS.step_mul,
         screen_size_px=(FLAGS.resolution, FLAGS.resolution),
