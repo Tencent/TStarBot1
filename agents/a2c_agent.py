@@ -35,12 +35,12 @@ class A2CAgent(object):
             torch.cuda.manual_seed(seed)
 
         self._actor_critic = FullyConvNet(dims)
+        if init_model_path:
+            self._load_model(init_model_path)
         if torch.cuda.device_count() > 1:
             self._actor_critic = nn.DataParallel(self._actor_critic)
         if use_gpu:
             self._actor_critic.cuda()
-        if init_model_path:
-            self._load_model(init_model_path)
         self._optimizer = optim.RMSprop(self._actor_critic.parameters(),
                                         lr=rmsprop_lr,
                                         eps=rmsprop_eps,
@@ -133,7 +133,8 @@ class A2CAgent(object):
         torch.save(self._actor_critic.state_dict(), model_path)
 
     def _load_model(self, model_path):
-        self._actor_critic.load_state_dict(torch.load(model_path))
+        self._actor_critic.load_state_dict(
+            torch.load(model_path, map_location=lambda storage, loc: storage))
             
 class FullyConvNet(nn.Module):
     def __init__(self, dims):
