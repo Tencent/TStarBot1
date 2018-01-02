@@ -40,13 +40,23 @@ class ParallelEnvWrapper(gym.Env):
             pipe.send(('step', action))
         results = [pipe.recv() for pipe in self._pipes]
         obs, rewards, dones, infos = zip(*results)
-        return np.stack(obs), np.stack(rewards), np.stack(dones), infos
+        if isinstance(obs[0], tuple):
+            n = len(obs[0])
+            obs = tuple(np.stack([ob[c] for ob in obs]) for c in xrange(n))
+        else:
+            obs = np.stack(obs)
+        return obs, np.stack(rewards), np.stack(dones), infos
 
     def _reset(self):
         for pipe in self._pipes:
             pipe.send(('reset', None))
         obs = [pipe.recv() for pipe in self._pipes]
-        return np.stack(obs)
+        if isinstance(obs[0], tuple):
+            n = len(obs[0])
+            obs = tuple(np.stack([ob[c] for ob in obs]) for c in xrange(n))
+        else:
+            obs = np.stack(obs)
+        return obs
 
     def _close(self):
         for pipe in self._pipes:

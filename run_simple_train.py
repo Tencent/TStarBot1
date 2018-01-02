@@ -1,9 +1,9 @@
 from absl import app
 from absl import flags
 
-from envs.sc2_env import SC2Env
+from envs.sc2_simple_env import SC2SimpleEnv
 from envs.parallel_env import ParallelEnvWrapper 
-from agents.a2c_agent import A2CAgent
+from agents.a2c_simple_agent import A2CSimpleAgent
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string("map", None, "Name of a map to use.")
@@ -19,15 +19,13 @@ flags.mark_flag_as_required("map")
 
 
 def train():
-    envs = ParallelEnvWrapper([lambda: SC2Env(
+    envs = ParallelEnvWrapper([lambda: SC2SimpleEnv(
         map_name=FLAGS.map,
         step_mul=FLAGS.step_mul,
         screen_size_px=(FLAGS.resolution, FLAGS.resolution),
         select_army_freq=FLAGS.select_army_freq) for _ in range(FLAGS.n_envs)])
-    agent = A2CAgent(
+    agent = A2CSimpleAgent(
         dims=FLAGS.resolution,
-        in_channel_screen=1899,
-        in_channel_minimap=27,
         rmsprop_lr=FLAGS.rmsprop_lr,
         rmsprop_eps=FLAGS.rmsprop_eps,
         rollout_num_steps=FLAGS.rollout_num_steps,

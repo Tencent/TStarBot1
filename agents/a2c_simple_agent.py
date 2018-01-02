@@ -14,12 +14,10 @@ from pysc2.lib import actions
 from pysc2.lib import features
 
 
-class A2CAgent(object):
+class A2CSimpleAgent(object):
 
     def __init__(self,
                  dims, 
-                 in_channel_screen,
-                 in_channel_minimap,
                  rmsprop_lr=1e-4,
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
@@ -31,8 +29,7 @@ class A2CAgent(object):
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
 
-        self._actor_critic = FullyConvNet(dims, in_channel_screen,
-                                          in_channel_minimap)
+        self._actor_critic = FullyConvNet(dims)
         if torch.cuda.device_count() > 1:
             self._actor_critic = nn.DataParallel(self._actor_critic)
         if use_gpu:
@@ -49,13 +46,9 @@ class A2CAgent(object):
         self._use_gpu = use_gpu
 
     def step(self, ob):
-        if isinstance(ob, tuple):
-            ob = tuple(np.expand_dims(ob, 0) for o in ob)
-        else:
-            ob = np.expand_dims(ob, 0)
-        ob = self._ndarray_to_tensor(ob)
-        prob_logit, _ = self._actor_critic(
-            tuple(Variable(tensor, volatile=True) for tensor in ob))
+        ob = torch.from_numpy(np.expand_dims(ob, 0))
+        if self._use_gpu: ob = ob.cuda()
+        prob_logit, _ = self._actor_critic(Variable(ob))
         action = self._sample_action(prob_logit.data)
         return action.numpy() if not self._use_gpu else action.cpu().numpy()
 
@@ -68,9 +61,9 @@ class A2CAgent(object):
     def _rollout(self, envs, obs):
         obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
         for _ in xrange(self._rollout_num_steps):
-            obs = self._ndarray_to_tensor(obs)
-            prob_logit, _ = self._actor_critic(
-                tuple(Variable(tensor, volatile=True) for tensor in obs))
+            obs = torch.from_numpy(obs)
+            if self._use_gpu: obs = obs.cuda()
+            prob_logit, _ = self._actor_critic(Variable(obs, volatile=True))
             action = self._sample_action(prob_logit.data)
             obs_mb.append(obs)
             action_mb.append(action)
@@ -84,9 +77,7 @@ class A2CAgent(object):
         return obs_mb, action_mb, target_value_mb,  obs
 
     def _update(self, obs_mb, action_mb, target_value_mb):
-        prob_logit, value = self._actor_critic(
-            tuple(Variable(torch.cat([obs[c] for obs in obs_mb])) 
-                  for c in xrange(len(obs_mb[0]))))
+        prob_logit, value = self._actor_critic(Variable(torch.cat(obs_mb)))
         log_prob = F.log_softmax(prob_logit, 1)
         prob = F.softmax(prob_logit, 1)
         entropy = -(log_prob * prob).sum(1)
@@ -106,9 +97,9 @@ class A2CAgent(object):
         self._optimizer.step()
 
     def _boostrap(self, reward_mb, done_mb, last_obs):
-        last_obs = self._ndarray_to_tensor(last_obs)
-        _, last_value = self._actor_critic(
-            tuple(Variable(tensor, volatile=True) for tensor in last_obs))
+        last_obs = torch.from_numpy(last_obs)
+        if self._use_gpu: last_obs = last_obs.cuda()
+        _, last_value = self._actor_critic(Variable(last_obs, volatile=True))
         target_value = []
         r = last_value.data.squeeze() * (1 - done_mb[-1])
         for reward, done in reversed(zip(reward_mb, done_mb)):
@@ -117,62 +108,27 @@ class A2CAgent(object):
             target_value.append(r.unsqueeze(1))
         return target_value[::-1]
 
-    def _ndarray_to_tensor(self, arrays):
-        if isinstance(arrays, tuple):
-            if self._use_gpu:
-                return [torch.from_numpy(array).cuda() for array in arrays]
-            else:
-                return [torch.from_numpy(o) for array in arrays]
-        else:
-            if self._use_gpu:
-                return torch.from_numpy(arrays).cuda()
-            else:
-                return torch.from_numpy(arrays)
-
-
     def _sample_action(self, logit):
         return F.softmax(Variable(logit), 1).multinomial(1).data
             
 class FullyConvNet(nn.Module):
-    def __init__(self, dims, in_channels_screen, in_channels_minimap):
+    def __init__(self, dims):
         super(FullyConvNet, self).__init__()
-        self.screen_conv1 = nn.Conv2d(in_channels=in_channels_screen,
-                                      out_channels=16,
-                                      kernel_size=5,
-                                      stride=1,
-                                      padding=2)
-        self.screen_conv2 = nn.Conv2d(in_channels=16,
-                                      out_channels=32,
-                                      kernel_size=3,
-                                      stride=1,
-                                      padding=1)
-        self.minimap_conv1 = nn.Conv2d(in_channels=in_channels_minimap,
-                                       out_channels=16,
-                                       kernel_size=5,
-                                       stride=1,
-                                       padding=2)
-        self.minimap_conv2 = nn.Conv2d(in_channels=16,
-                                       out_channels=32,
-                                       kernel_size=3,
-                                       stride=1,
-                                       padding=1)
-        self.policy_conv = nn.Conv2d(in_channels=64,
-                                     out_channels=1,
-                                     kernel_size=1,
-                                     stride=1,
-                                     padding=0)
-        self.fc = nn.Linear(64 * dims * dims, 64)
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=5,
+                                                     stride=1, padding=2)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3,
+                                                     stride=1, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=1, kernel_size=1,
+                                                     stride=1, padding=0)
+        self.fc = nn.Linear(32 * dims * dims, 64)
         self.value_fc = nn.Linear(64, 1)
 
     def forward(self, x):
-        screen_x, minimap_x = x
-        screen_x = F.relu(self.screen_conv1(screen_x))
-        screen_x = F.relu(self.screen_conv2(screen_x))
-        minimap_x = F.relu(self.minimap_conv1(minimap_x))
-        minimap_x = F.relu(self.minimap_conv2(minimap_x))
-        x = torch.cat((screen_x, minimap_x), 1)
-        v = F.relu(self.fc(x.view(x.size(0), -1)))
-        x = self.policy_conv(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x1 = x.view(x.size(0), -1)
+        v = F.relu(self.fc(x1))
+        x = self.conv3(x)
         policy = x.view(x.size(0), -1) * 3
         value = self.value_fc(v)
         return policy, value

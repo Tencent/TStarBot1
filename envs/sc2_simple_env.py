@@ -6,10 +6,10 @@ from gym.spaces.discrete import Discrete
 
 from pysc2.lib import actions
 from pysc2.lib.features import SCREEN_FEATURES
-from pysc2.env.sc2_env import SC2Env
+from pysc2.env.sc2_env import SC2Env as PySC2Env
 
 
-class SC2MedianEnv(gym.Env):
+class SC2SimpleEnv(gym.Env):
 
     def __init__(self,
                  map_name,
@@ -17,7 +17,7 @@ class SC2MedianEnv(gym.Env):
                  game_steps_per_episode=0,
                  screen_size_px=(64, 64),
                  select_army_freq=5):
-        self._sc2_env = SC2Env(
+        self._sc2_env = PySC2Env(
             map_name=map_name,
             step_mul=step_mul,
             game_steps_per_episode=game_steps_per_episode,
@@ -38,11 +38,11 @@ class SC2MedianEnv(gym.Env):
             self._select_all_army()
         timestep = self._attack_move(action)
         self._num_steps += 1
-        return self._convert_observation(timestep)
+        return self._transform_observation(timestep)
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
-        return self._convert_observation(timestep)[0]
+        return self._transform_observation(timestep)[0]
 
     def _close(self):
         self._sc2_env.close()
@@ -63,9 +63,11 @@ class SC2MedianEnv(gym.Env):
             timestep = self._sc2_env.step(action)[0]
         return timestep
 
-    def _convert_observation(self, timestep):
+    def _transform_observation(self, timestep):
         obs = timestep.observation["screen"][
             SCREEN_FEATURES.player_relative.index]
+        obs = np.transpose(np.eye(5, dtype=np.float32)[obs][:, :, 1:],
+                           (2, 0, 1))
         done = timestep.last()
         info = None
         return obs, timestep.reward, done, info
