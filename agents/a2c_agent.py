@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import numpy as np
 
 import torch
@@ -25,6 +26,9 @@ class A2CAgent(object):
                  ent_coef=1e-3,
                  val_coef=1.0,
                  use_gpu=True,
+                 init_model_path=None,
+                 save_model_dir=None,
+                 save_model_freq=500,
                  seed=0):
         torch.manual_seed(seed)
         if use_gpu:
@@ -35,6 +39,8 @@ class A2CAgent(object):
             self._actor_critic = nn.DataParallel(self._actor_critic)
         if use_gpu:
             self._actor_critic.cuda()
+        if init_model_path:
+            self._load_model(init_model_path)
         self._optimizer = optim.RMSprop(self._actor_critic.parameters(),
                                         lr=rmsprop_lr,
                                         eps=rmsprop_eps,
@@ -45,6 +51,8 @@ class A2CAgent(object):
         self._ent_coef = ent_coef
         self._val_coef = val_coef
         self._use_gpu = use_gpu
+        self._save_model_dir = save_model_dir
+        self._save_model_freq = save_model_freq
 
     def step(self, ob):
         ob = self._transform_observation(ob.expand_dims(0))
@@ -54,9 +62,14 @@ class A2CAgent(object):
 
     def train(self, envs):
         obs = envs.reset()
+        steps = 0
         while True:
             obs_mb, action_mb, target_value_mb, obs = self._rollout(envs, obs)
             self._update(obs_mb, action_mb, target_value_mb)
+            steps += 1
+            if steps % self._save_model_freq == 0:
+                self._save_model(os.path.join(self._save_model_dir,
+                                              'agent.model-%d' % steps))
 
     def _transform_observation(self, obs):
         obs = np.eye(5, dtype=np.float32)[obs][:, :, :, 1:]
@@ -115,6 +128,12 @@ class A2CAgent(object):
 
     def _sample_action(self, logit):
         return F.softmax(Variable(logit), 1).multinomial(1).data
+
+    def _save_model(self, model_path):
+        torch.save(self._actor_critic.state_dict(), model_path)
+
+    def _load_model(self, model_path):
+        self._actor_critic.load_state_dict(torch.load(model_path))
             
 class FullyConvNet(nn.Module):
     def __init__(self, dims):
