@@ -13,13 +13,13 @@ def worker(pipe, env_create_func):
             if done: ob = env.reset()
             pipe.send((ob, reward, done, info))
         elif cmd == 'reset':
-            ob = env.reset()
-            pipe.send(ob)
+            ob, info = env.reset()
+            pipe.send((ob, info))
         elif cmd == 'close':
             env.close()
             break
-        elif cmd == 'get_spaces':
-            pipe.send((env.action_space, env.observation_space))
+        elif cmd == 'get_spec':
+            pipe.send(env.action_spec)
         else:
             raise NotImplementedError
 
@@ -34,6 +34,9 @@ class ParallelEnvWrapper(gym.Env):
         for p in self._processes:
             p.daemon = True
             p.start()
+
+        self._pipes[0].send(('get_spec', None))
+        self.action_spec = self._pipes[0].recv()
 
     def _step(self, actions):
         for pipe, action in zip(self._pipes, actions):
@@ -50,13 +53,14 @@ class ParallelEnvWrapper(gym.Env):
     def _reset(self):
         for pipe in self._pipes:
             pipe.send(('reset', None))
-        obs = [pipe.recv() for pipe in self._pipes]
+        results = [pipe.recv() for pipe in self._pipes]
+        obs, infos = zip(*results)
         if isinstance(obs[0], tuple):
             n = len(obs[0])
             obs = tuple(np.stack([ob[c] for ob in obs]) for c in xrange(n))
         else:
             obs = np.stack(obs)
-        return obs
+        return obs, infos
 
     def _close(self):
         for pipe in self._pipes:

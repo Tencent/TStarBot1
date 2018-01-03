@@ -28,14 +28,17 @@ def train():
         dims=FLAGS.resolution,
         in_channel_screen=1899,
         in_channel_minimap=27,
+        action_spec=envs.action_spec,
         rmsprop_lr=FLAGS.rmsprop_lr,
         rmsprop_eps=FLAGS.rmsprop_eps,
         rollout_num_steps=FLAGS.rollout_num_steps,
         use_gpu=FLAGS.use_gpu)
     try:
         agent.train(envs)
-    except KeyboardInterrupt:
-        pass
+    #except KeyboardInterrupt:
+    except:
+        import traceback
+        traceback.print_exc()
     envs.close()
 
 

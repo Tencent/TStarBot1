@@ -20,6 +20,7 @@ class A2CAgent(object):
                  dims, 
                  in_channel_screen,
                  in_channel_minimap,
+                 action_spec,
                  rmsprop_lr=1e-4,
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
@@ -28,25 +29,28 @@ class A2CAgent(object):
                  val_coef=1.0,
                  use_gpu=True,
                  seed=0):
-        torch.manual_seed(seed)
-        if use_gpu: torch.cuda.manual_seed(seed)
-
-        self._actor_critic = FullyConvNet(dims, in_channel_screen,
-                                          in_channel_minimap)
-        if torch.cuda.device_count() > 1:
-            self._actor_critic = nn.DataParallel(self._actor_critic)
-        if use_gpu:
-            self._actor_critic.cuda()
-        self._optimizer = optim.RMSprop(self._actor_critic.parameters(),
-                                        lr=rmsprop_lr,
-                                        eps=rmsprop_eps,
-                                        centered=False)
-
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
         self._val_coef = val_coef
         self._use_gpu = use_gpu
+        self._action_num_heads = action_spec[0]
+        self._action_head_sizes = action_spec[1]
+        self._action_args_map = action_spec[2]
+
+        torch.manual_seed(seed)
+        if use_gpu: torch.cuda.manual_seed(seed)
+
+        self._actor_critic = FullyConvNet(
+            dims, in_channel_screen, in_channel_minimap, 3,
+            [self._action_num_heads] + self._action_head_sizes[3:])
+        if torch.cuda.device_count() > 1:
+            self._actor_critic = nn.DataParallel(self._actor_critic)
+        if use_gpu:
+            self._actor_critic.cuda()
+        self._optimizer = optim.RMSprop(
+            self._actor_critic.parameters(), lr=rmsprop_lr,
+            eps=rmsprop_eps, centered=False)
 
     def step(self, ob):
         if isinstance(ob, tuple):
@@ -60,42 +64,54 @@ class A2CAgent(object):
         return action.numpy() if not self._use_gpu else action.cpu().numpy()
 
     def train(self, envs):
-        obs = envs.reset()
+        obs, infos = envs.reset()
         while True:
-            obs_mb, action_mb, target_value_mb, obs = self._rollout(envs, obs)
+            obs_mb, action_mb, target_value_mb, obs, infos = self._rollout(
+                envs, obs, infos)
             self._update(obs_mb, action_mb, target_value_mb)
 
-    def _rollout(self, envs, obs):
+    def _rollout(self, envs, obs, infos):
         obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
         for _ in xrange(self._rollout_num_steps):
             obs = self._ndarray_to_tensor(obs)
             prob_logit, _ = self._actor_critic(
                 tuple(Variable(tensor, volatile=True) for tensor in obs))
-            action = self._sample_action(prob_logit.data)
+            action = self._sample_action(prob_logit, infos)
             obs_mb.append(obs)
-            action_mb.append(action)
-            obs, reward, done, _ = envs.step(action.numpy() if not self._use_gpu
-                                             else action.cpu().numpy())
+            action_mb += action
+            obs, reward, done, infos = envs.step(action)
             reward_mb.append(torch.Tensor(reward) if not self._use_gpu
                              else torch.cuda.FloatTensor(reward))
             done_mb.append(torch.Tensor(done.tolist()) if not self._use_gpu
                            else torch.cuda.FloatTensor(done.tolist()))
         target_value_mb = self._boostrap(reward_mb, done_mb, obs)
-        return obs_mb, action_mb, target_value_mb,  obs
+        return obs_mb, action_mb, target_value_mb, obs, infos
 
     def _update(self, obs_mb, action_mb, target_value_mb):
         prob_logit, value = self._actor_critic(
             tuple(Variable(torch.cat([obs[c] for obs in obs_mb])) 
                   for c in xrange(len(obs_mb[0]))))
-        log_prob = F.log_softmax(prob_logit, 1)
-        prob = F.softmax(prob_logit, 1)
-        entropy = -(log_prob * prob).sum(1)
-
         advantage = Variable(torch.cat(target_value_mb)) - value
-        action = Variable(torch.cat(action_mb))
+        func_logit = prob_logit[0]
+        func_action = torch.LongTensor([[action[0]] for action in action_mb])
+        if self._use_gpu:
+            func_action = func_action.cuda()
+        func_log_prob = F.log_softmax(func_logit, 1)
+        func_prob = F.softmax(func_logit, 1)
+        entropy = -(func_log_prob * func_prob).sum(1)
+        log_prob_action = func_log_prob.gather(1, Variable(func_action))
+
+        for idx, action in enumerate(action_mb):
+            func = action[0]
+            for arg_val, arg_id in zip(action[1:], self._action_args_map[func]):
+                arg_logit = prob_logit[arg_id + 1][idx, :]
+                log_prob = F.log_softmax(arg_logit, 0)
+                prob = F.softmax(arg_logit, 0)
+                entropy[idx] = entropy[idx] - (log_prob * prob).sum()
+                log_prob_action[idx] = log_prob_action[idx] + log_prob[arg_val]
+
         value_loss = advantage.pow(2).mean() * 0.5
-        policy_loss = - (log_prob.gather(1, action) *
-                         Variable(advantage.data)).mean()
+        policy_loss = - (log_prob_action * Variable(advantage.data)).mean()
         entropy_loss = entropy.mean()
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
@@ -129,12 +145,29 @@ class A2CAgent(object):
             else:
                 return torch.from_numpy(arrays)
 
-
-    def _sample_action(self, logit):
-        return F.softmax(Variable(logit), 1).multinomial(1).data
+    def _sample_action(self, logits, available_actions):
+        # sample function ids
+        function_logit = logits[0]
+        mask = function_logit.data.new(function_logit.size()).zero_()
+        for i, valids in enumerate(available_actions):
+            mask[[i], valids] = 1
+        masked_probs = F.softmax(logits[0], 1) * Variable(mask)
+        functions = masked_probs.multinomial(1).data
+        actions = []
+        # sample arguments
+        for i in range(functions.size(0)):
+            func = functions[i, 0]
+            cur_action = [func]
+            for j in self._action_args_map[func]:
+                arg_logit = logits[j + 1]
+                arg = F.softmax(arg_logit[i, :], 0).multinomial(1).data[0]
+                cur_action.append(arg)
+            actions.append(cur_action)
+        return actions
             
 class FullyConvNet(nn.Module):
-    def __init__(self, dims, in_channels_screen, in_channels_minimap):
+    def __init__(self, dims, in_channels_screen, in_channels_minimap,
+                 out_channels_spatial, out_dims_nonspatial):
         super(FullyConvNet, self).__init__()
         self.screen_conv1 = nn.Conv2d(in_channels=in_channels_screen,
                                       out_channels=16,
@@ -156,13 +189,15 @@ class FullyConvNet(nn.Module):
                                        kernel_size=3,
                                        stride=1,
                                        padding=1)
-        self.policy_conv = nn.Conv2d(in_channels=64,
-                                     out_channels=1,
-                                     kernel_size=1,
-                                     stride=1,
-                                     padding=0)
+        self.spatial_policy_conv = nn.Conv2d(in_channels=64,
+                                             out_channels=out_channels_spatial,
+                                             kernel_size=1,
+                                             stride=1,
+                                             padding=0)
         self.fc = nn.Linear(64 * dims * dims, 64)
+        self.nonspatial_policy_fc = nn.Linear(64, sum(out_dims_nonspatial))
         self.value_fc = nn.Linear(64, 1)
+        self._out_dims = out_dims_nonspatial
 
     def forward(self, x):
         screen_x, minimap_x = x
@@ -171,8 +206,18 @@ class FullyConvNet(nn.Module):
         minimap_x = F.relu(self.minimap_conv1(minimap_x))
         minimap_x = F.relu(self.minimap_conv2(minimap_x))
         x = torch.cat((screen_x, minimap_x), 1)
-        v = F.relu(self.fc(x.view(x.size(0), -1)))
-        x = self.policy_conv(x)
-        policy = x.view(x.size(0), -1) * 3
-        value = self.value_fc(v)
+        s = F.relu(self.fc(x.view(x.size(0), -1)))
+        value = self.value_fc(s)
+        spatial_policy = self.spatial_policy_conv(x) * 3
+        nonspatial_policy = self.nonspatial_policy_fc(s)
+        policy = self._transform_policy(spatial_policy, nonspatial_policy)
         return policy, value
+
+    def _transform_policy(self, sp, nonsp):
+        spatial_policy = [chunk.contiguous().view(chunk.size(0), -1)
+                          for chunk in sp.chunk(sp.size(1), dim=1)]
+        idx, nonspatial_policy = 0, []
+        for dim in self._out_dims:
+            nonspatial_policy.append(nonsp[:, idx:idx+dim])
+            idx += dim
+        return nonspatial_policy[0:1] + spatial_policy + nonspatial_policy[1:]
