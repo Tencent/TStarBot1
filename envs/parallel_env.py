@@ -10,7 +10,7 @@ def worker(pipe, env_create_func):
         cmd, data = pipe.recv()
         if cmd == 'step':
             ob, reward, done, info = env.step(data)
-            if done: ob = env.reset()
+            if done: ob, info = env.reset()
             pipe.send((ob, reward, done, info))
         elif cmd == 'reset':
             ob, info = env.reset()
@@ -18,8 +18,10 @@ def worker(pipe, env_create_func):
         elif cmd == 'close':
             env.close()
             break
-        elif cmd == 'get_spec':
+        elif cmd == 'get_action_spec':
             pipe.send(env.action_spec)
+        elif cmd == 'get_observation_spec':
+            pipe.send(env.observation_spec)
         else:
             raise NotImplementedError
 
@@ -35,8 +37,15 @@ class ParallelEnvWrapper(gym.Env):
             p.daemon = True
             p.start()
 
-        self._pipes[0].send(('get_spec', None))
-        self.action_spec = self._pipes[0].recv()
+    @property
+    def action_spec(self):
+        self._pipes[0].send(('get_action_spec', None))
+        return self._pipes[0].recv()
+
+    @property
+    def observation_spec(self):
+        self._pipes[0].send(('get_observation_spec', None))
+        return self._pipes[0].recv()
 
     def _step(self, actions):
         for pipe, action in zip(self._pipes, actions):

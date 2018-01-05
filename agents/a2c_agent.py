@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import numpy as np
 
 import torch
@@ -18,8 +19,7 @@ class A2CAgent(object):
 
     def __init__(self,
                  dims, 
-                 in_channel_screen,
-                 in_channel_minimap,
+                 observation_spec,
                  action_spec,
                  rmsprop_lr=1e-4,
                  rmsprop_eps=1e-8,
@@ -27,8 +27,12 @@ class A2CAgent(object):
                  discount=0.99,
                  ent_coef=1e-3,
                  val_coef=1.0,
+                 func_id_loss_coef=0.01,
                  use_gpu=True,
-                 seed=0):
+                 init_model_path=None,
+                 save_model_dir=None,
+                 save_model_freq=500,
+                 seed=1):
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
@@ -37,13 +41,24 @@ class A2CAgent(object):
         self._action_num_heads = action_spec[0]
         self._action_head_sizes = action_spec[1]
         self._action_args_map = action_spec[2]
+        self._save_model_dir = save_model_dir
+        self._save_model_freq = save_model_freq
+        self._func_id_loss_coef = func_id_loss_coef
 
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
 
         self._actor_critic = FullyConvNet(
-            dims, in_channel_screen, in_channel_minimap, 3,
-            [self._action_num_heads] + self._action_head_sizes[3:])
+            screen_minimap_size=dims,
+            in_channels_screen=observation_spec[0],
+            in_channels_minimap=observation_spec[1],
+            out_channels_spatial=3,
+            out_dims_nonspatial= [self._action_num_heads] + \
+                                 self._action_head_sizes[3:])
+        self._actor_critic.apply(weights_init)
+        if init_model_path:
+            self._load_model(init_model_path)
+
         if torch.cuda.device_count() > 1:
             self._actor_critic = nn.DataParallel(self._actor_critic)
         if use_gpu:
@@ -65,10 +80,15 @@ class A2CAgent(object):
 
     def train(self, envs):
         obs, infos = envs.reset()
+        steps = 0
         while True:
             obs_mb, action_mb, target_value_mb, obs, infos = self._rollout(
                 envs, obs, infos)
             self._update(obs_mb, action_mb, target_value_mb)
+            steps += 1
+            if steps % self._save_model_freq == 0:
+                self._save_model(os.path.join(self._save_model_dir,
+                                              'agent.model-%d' % steps))
 
     def _rollout(self, envs, obs, infos):
         obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
@@ -100,10 +120,14 @@ class A2CAgent(object):
         func_prob = F.softmax(func_logit, 1)
         entropy = -(func_log_prob * func_prob).sum(1)
         log_prob_action = func_log_prob.gather(1, Variable(func_action))
+        entropy = entropy * self._func_id_loss_coef
+        log_prob_action = log_prob_action * self._func_id_loss_coef
 
         for idx, action in enumerate(action_mb):
             func = action[0]
             for arg_val, arg_id in zip(action[1:], self._action_args_map[func]):
+                if arg_id == 3: # queued is forced to False
+                    continue
                 arg_logit = prob_logit[arg_id + 1][idx, :]
                 log_prob = F.log_softmax(arg_logit, 0)
                 prob = F.softmax(arg_logit, 0)
@@ -112,9 +136,9 @@ class A2CAgent(object):
 
         value_loss = advantage.pow(2).mean() * 0.5
         policy_loss = - (log_prob_action * Variable(advantage.data)).mean()
-        entropy_loss = entropy.mean()
+        entropy_loss = - entropy.mean()
         loss = policy_loss + self._val_coef * value_loss + \
-               self._ent_coef * entropy_loss
+            self._ent_coef * entropy_loss
 
         self._optimizer.zero_grad()
         loss.backward()
@@ -138,7 +162,7 @@ class A2CAgent(object):
             if self._use_gpu:
                 return [torch.from_numpy(array).cuda() for array in arrays]
             else:
-                return [torch.from_numpy(o) for array in arrays]
+                return [torch.from_numpy(array) for array in arrays]
         else:
             if self._use_gpu:
                 return torch.from_numpy(arrays).cuda()
@@ -151,23 +175,47 @@ class A2CAgent(object):
         mask = function_logit.data.new(function_logit.size()).zero_()
         for i, valids in enumerate(available_actions):
             mask[[i], valids] = 1
-        masked_probs = F.softmax(logits[0], 1) * Variable(mask)
+        probs = F.softmax(logits[0], 1) + 1e-20
+        masked_probs = probs * Variable(mask)
         functions = masked_probs.multinomial(1).data
-        actions = []
         # sample arguments
+        actions = []
         for i in range(functions.size(0)):
             func = functions[i, 0]
             cur_action = [func]
             for j in self._action_args_map[func]:
+                if j == 3: # queued is forced to False
+                    cur_action.append(0)
+                    continue
                 arg_logit = logits[j + 1]
                 arg = F.softmax(arg_logit[i, :], 0).multinomial(1).data[0]
                 cur_action.append(arg)
             actions.append(cur_action)
         return actions
+
+    def _save_model(self, model_path):
+        torch.save(self._actor_critic.state_dict(), model_path)
+
+    def _load_model(self, model_path):
+        self._actor_critic.load_state_dict(
+            torch.load(model_path, map_location=lambda storage, loc: storage))
+
+
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv2d') != -1:
+        m.bias.data.fill_(0)
+    elif classname.find('Linear') != -1:
+        m.bias.data.fill_(0)
+
             
 class FullyConvNet(nn.Module):
-    def __init__(self, dims, in_channels_screen, in_channels_minimap,
-                 out_channels_spatial, out_dims_nonspatial):
+    def __init__(self,
+                 screen_minimap_size,
+                 in_channels_screen,
+                 in_channels_minimap,
+                 out_channels_spatial,
+                 out_dims_nonspatial):
         super(FullyConvNet, self).__init__()
         self.screen_conv1 = nn.Conv2d(in_channels=in_channels_screen,
                                       out_channels=16,
@@ -194,9 +242,9 @@ class FullyConvNet(nn.Module):
                                              kernel_size=1,
                                              stride=1,
                                              padding=0)
-        self.fc = nn.Linear(64 * dims * dims, 64)
-        self.nonspatial_policy_fc = nn.Linear(64, sum(out_dims_nonspatial))
-        self.value_fc = nn.Linear(64, 1)
+        self.fc = nn.Linear(64 * (screen_minimap_size ** 2), 256)
+        self.nonspatial_policy_fc = nn.Linear(256, sum(out_dims_nonspatial))
+        self.value_fc = nn.Linear(256, 1)
         self._out_dims = out_dims_nonspatial
 
     def forward(self, x):

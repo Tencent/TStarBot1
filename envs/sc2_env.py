@@ -20,7 +20,9 @@ class SC2Env(gym.Env):
                  step_mul=8,
                  game_steps_per_episode=0,
                  screen_size_px=(64, 64),
-                 select_army_freq=5):
+                 select_army_freq=5,
+                 action_filter=[],
+                 observation_filter=[]):
         self._select_army_freq = select_army_freq
         self._screen_size_px = screen_size_px
         self._num_steps = 0
@@ -31,10 +33,19 @@ class SC2Env(gym.Env):
             screen_size_px=screen_size_px,
             minimap_size_px=screen_size_px,
             visualize=False)
-        self.action_spec = self._get_action_spec()
+        self._valid_action_ids = list(set(range(524)) - set(action_filter))
+        self._observation_filter = set(observation_filter) 
+    
+    @property
+    def action_spec(self):
+        return self._get_action_spec()
+
+    @property
+    def observation_spec(self):
+        return self._get_observation_spec()
 
     def _step(self, action):
-        function_id = action[0]
+        function_id = self._valid_action_ids[action[0]]
         function_args = []
         for arg_val, arg_info in zip(action[1:], FUNCTIONS[function_id].args):
             if len(arg_info.sizes) == 2:
@@ -42,17 +53,14 @@ class SC2Env(gym.Env):
                 function_args.append(coords[::-1])
             elif len(arg_info.sizes) == 1:
                 function_args.append([arg_val])
-        print(function_id, function_args)
         op = actions.FunctionCall(function_id, function_args)
         timestep = self._sc2_env.step([op])[0]
-        #if function_id == 1:
-            #assert False
         return self._transform_observation(timestep)
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
-        info = timestep.observation["available_actions"]
-        return self._transform_observation(timestep)[0], info
+        return (self._transform_observation(timestep)[0],
+                self._transform_observation(timestep)[3])
 
     def _close(self):
         self._sc2_env.close()
@@ -65,11 +73,15 @@ class SC2Env(gym.Env):
         obs = (obs_screen, obs_minimap)
         done = timestep.last()
         info = timestep.observation["available_actions"]
+        info = [self._valid_action_ids.index(fid)
+                for fid in info if fid in self._valid_action_ids]
         return obs, timestep.reward, done, info
 
     def _transform_spatial_features(self, obs, specs):
         features = []
         for ob, spec in zip(obs, specs):
+            if spec.name in self._observation_filter:
+                continue
             if spec.type == FeatureType.CATEGORICAL:
                 features.append(
                     np.eye(spec.scale, dtype=np.float32)[ob][:, :, 1:])
@@ -89,6 +101,21 @@ class SC2Env(gym.Env):
             else:
                 raise NotImplementedError
         action_args_map = []
-        for func in FUNCTIONS:
-            action_args_map.append([arg.id for arg in func.args])
-        return len(FUNCTIONS), action_head_sizes, action_args_map
+        for func_id in self._valid_action_ids:
+            action_args_map.append([arg.id for arg in FUNCTIONS[func_id].args])
+        return len(self._valid_action_ids), action_head_sizes, action_args_map
+
+    def _get_observation_spec(self):
+        def get_spatial_channels(specs):
+            num_channels = 0
+            for spec in specs:
+                if spec.name in self._observation_filter:
+                    continue
+                if spec.type == FeatureType.CATEGORICAL:
+                    num_channels += spec.scale - 1
+                else:
+                    num_channels += 1
+            return num_channels
+        num_channels_screen = get_spatial_channels(SCREEN_FEATURES)
+        num_channels_minimap = get_spatial_channels(MINIMAP_FEATURES)
+        return num_channels_screen, num_channels_minimap
