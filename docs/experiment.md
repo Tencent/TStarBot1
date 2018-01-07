@@ -1,14 +1,14 @@
 # Primitive Experimental Results for StarCraft-II
 
-## Mini-Games with Simplified Obs/Acation Spaces
+## Mini-Games with Restricted Obs/Acation Spaces
 
 <center>
 
-MiniGame                | Ours-Simplified   |  Random   | DeepMind | Human
+MiniGame                | Ours-Restricted   |  Random   | DeepMind | Human
 :---------------------  | ---------------:  | -----:    | ----:    | -----:
 *MoveToBeacon*          |     26.1          |   1       | 26       | 26
-*CollectMineralShards*  |     91.9          |   17      | 103      | 133 
-*DefeatRoaches*         |     81.6          |   1       | 100      | 41
+*CollectMineralShards*  |     96.2          |   17      | 103      | 133 
+*DefeatRoaches*         |     87.0          |   1       | 100      | 41
 
 </center>
 
@@ -24,8 +24,12 @@ Possible reasons for the current performance gap:
 
 (On-going)
 
-MiniGame                | Ours-Simplified   |  Ours-Full  | Random   | DeepMind | Human
+MiniGame                | Ours-Restricted   |  Ours-Full  | Random   | DeepMind | Human
 :---------------------  | ---------------:  | ----------: | -----:   | ----:    | -----:
 *MoveToBeacon*          |     26.1          |   -         |  1       | 26       | 26
-*CollectMineralShards*  |     91.9          |   -         |  17      | 103      | 133 
-*DefeatRoaches*         |     81.6          |   -         |  1       | 100      | 41
+*CollectMineralShards*  |     96.2          |   -         |  17      | 103      | 133 
+*DefeatRoaches*         |     87.0          |   -         |  1       | 100      | 41
+*DefeatZerglingsAndBanelings*|49.3          |   -         |  23      | 62       | 729
+*FindAndDefeatZerglings*|     18.3          |   -         |  4       | 45       | 46
+*CollectMineralAndGas   |     -             |   -         |  12      | 3978     | 6880
+*BuildMarines*          |     -             |   -         |  < 1     | 3        | 138
