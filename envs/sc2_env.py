@@ -20,10 +20,8 @@ class SC2Env(gym.Env):
                  step_mul=8,
                  game_steps_per_episode=0,
                  screen_size_px=(64, 64),
-                 select_army_freq=5,
                  action_filter=[],
                  observation_filter=[]):
-        self._select_army_freq = select_army_freq
         self._screen_size_px = screen_size_px
         self._num_steps = 0
         self._sc2_env = PySC2Env(

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import numpy as np
 
 import torch
@@ -25,25 +26,35 @@ class A2CSimpleAgent(object):
                  ent_coef=1e-3,
                  val_coef=1.0,
                  use_gpu=True,
+                 init_model_path=None,
+                 save_model_dir=None,
+                 save_model_freq=10000,
                  seed=0):
-        torch.manual_seed(seed)
-        if use_gpu: torch.cuda.manual_seed(seed)
-
-        self._actor_critic = FullyConvNet(dims)
-        if torch.cuda.device_count() > 1:
-            self._actor_critic = nn.DataParallel(self._actor_critic)
-        if use_gpu:
-            self._actor_critic.cuda()
-        self._optimizer = optim.RMSprop(self._actor_critic.parameters(),
-                                        lr=rmsprop_lr,
-                                        eps=rmsprop_eps,
-                                        centered=False)
-
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
         self._val_coef = val_coef
         self._use_gpu = use_gpu
+        self._save_model_dir = save_model_dir
+        self._save_model_freq = save_model_freq
+        self._steps_count = 0
+
+        torch.manual_seed(seed)
+        if use_gpu: torch.cuda.manual_seed(seed)
+
+        self._actor_critic = FullyConvNet(dims)
+        if init_model_path:
+            self._load_model(init_model_path)
+            self._steps_count = int(init_model_path[
+                init_model_path.rfind('-')+1:])
+
+        if torch.cuda.device_count() > 1:
+            self._actor_critic = nn.DataParallel(self._actor_critic)
+        if use_gpu:
+            self._actor_critic.cuda()
+        self._optimizer = optim.RMSprop(
+            self._actor_critic.parameters(), lr=rmsprop_lr,
+            eps=rmsprop_eps, centered=False)
 
     def step(self, ob):
         ob = torch.from_numpy(np.expand_dims(ob, 0))
@@ -53,10 +64,14 @@ class A2CSimpleAgent(object):
         return action.numpy() if not self._use_gpu else action.cpu().numpy()
 
     def train(self, envs):
-        obs = envs.reset()
+        obs, _ = envs.reset()
         while True:
             obs_mb, action_mb, target_value_mb, obs = self._rollout(envs, obs)
             self._update(obs_mb, action_mb, target_value_mb)
+            self._steps_count += 1
+            if self._steps_count % self._save_model_freq == 0:
+                self._save_model(os.path.join(
+                    self._save_model_dir, 'agent.model-%d' % self._steps_count))
 
     def _rollout(self, envs, obs):
         obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
@@ -110,6 +125,14 @@ class A2CSimpleAgent(object):
 
     def _sample_action(self, logit):
         return F.softmax(Variable(logit), 1).multinomial(1).data
+
+    def _save_model(self, model_path):
+        torch.save(self._actor_critic.state_dict(), model_path)
+
+    def _load_model(self, model_path):
+        self._actor_critic.load_state_dict(
+            torch.load(model_path, map_location=lambda storage, loc: storage))
+
             
 class FullyConvNet(nn.Module):
     def __init__(self, dims):

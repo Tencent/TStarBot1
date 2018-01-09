@@ -24,13 +24,17 @@ class SC2SimpleEnv(gym.Env):
             screen_size_px=screen_size_px,
             minimap_size_px=screen_size_px,
             visualize=False)
-        self.action_space = Discrete(screen_size_px[0] * screen_size_px[1])
-        self.observation_space = Box(
-            low=0, high=SCREEN_FEATURES.player_relative.scale,
-            shape=[screen_size_px[0], screen_size_px[1], 1])
         self._select_army_freq = select_army_freq
         self._screen_size_px = screen_size_px
         self._num_steps = 0
+
+    @property
+    def action_spec(self):
+        return None
+
+    @property
+    def observation_spec(self):
+        return None
 
     def _step(self, action):
         if (self._select_army_freq > 0 and
@@ -42,7 +46,9 @@ class SC2SimpleEnv(gym.Env):
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
-        return self._transform_observation(timestep)[0]
+        return (self._transform_observation(timestep)[0],
+                self._transform_observation(timestep)[3])
+
 
     def _close(self):
         self._sc2_env.close()

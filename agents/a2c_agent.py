@@ -31,7 +31,7 @@ class A2CAgent(object):
                  use_gpu=True,
                  init_model_path=None,
                  save_model_dir=None,
-                 save_model_freq=500,
+                 save_model_freq=10000,
                  seed=0):
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
@@ -44,6 +44,7 @@ class A2CAgent(object):
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
         self._func_id_loss_coef = func_id_loss_coef
+        self._steps_count = 0
 
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
@@ -58,6 +59,8 @@ class A2CAgent(object):
         self._actor_critic.apply(weights_init)
         if init_model_path:
             self._load_model(init_model_path)
+            self._steps_count = int(init_model_path[
+                init_model_path.rfind('-')+1:])
 
         if torch.cuda.device_count() > 1:
             self._actor_critic = nn.DataParallel(self._actor_critic)
@@ -80,15 +83,14 @@ class A2CAgent(object):
 
     def train(self, envs):
         obs, infos = envs.reset()
-        steps = 0
         while True:
             obs_mb, action_mb, target_value_mb, obs, infos = self._rollout(
                 envs, obs, infos)
             self._update(obs_mb, action_mb, target_value_mb)
-            steps += 1
-            if steps % self._save_model_freq == 0:
-                self._save_model(os.path.join(self._save_model_dir,
-                                              'agent.model-%d' % steps))
+            self._steps_count += 1
+            if self._steps_count % self._save_model_freq == 0:
+                self._save_model(os.path.join(
+                    self._save_model_dir, 'agent.model-%d' % self._steps_count))
 
     def _rollout(self, envs, obs, infos):
         obs_mb, action_mb, reward_mb, done_mb = [], [], [], []
