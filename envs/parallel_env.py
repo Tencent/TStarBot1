@@ -10,16 +10,18 @@ def worker(pipe, env_create_func):
         cmd, data = pipe.recv()
         if cmd == 'step':
             ob, reward, done, info = env.step(data)
-            if done: ob = env.reset()
+            if done: ob, info = env.reset()
             pipe.send((ob, reward, done, info))
         elif cmd == 'reset':
-            ob = env.reset()
-            pipe.send(ob)
+            ob, info = env.reset()
+            pipe.send((ob, info))
         elif cmd == 'close':
             env.close()
             break
-        elif cmd == 'get_spaces':
-            pipe.send((env.action_space, env.observation_space))
+        elif cmd == 'get_action_spec':
+            pipe.send(env.action_spec)
+        elif cmd == 'get_observation_spec':
+            pipe.send(env.observation_spec)
         else:
             raise NotImplementedError
 
@@ -35,18 +37,39 @@ class ParallelEnvWrapper(gym.Env):
             p.daemon = True
             p.start()
 
+    @property
+    def action_spec(self):
+        self._pipes[0].send(('get_action_spec', None))
+        return self._pipes[0].recv()
+
+    @property
+    def observation_spec(self):
+        self._pipes[0].send(('get_observation_spec', None))
+        return self._pipes[0].recv()
+
     def _step(self, actions):
         for pipe, action in zip(self._pipes, actions):
             pipe.send(('step', action))
         results = [pipe.recv() for pipe in self._pipes]
         obs, rewards, dones, infos = zip(*results)
-        return np.stack(obs), np.stack(rewards), np.stack(dones), infos
+        if isinstance(obs[0], tuple):
+            n = len(obs[0])
+            obs = tuple(np.stack([ob[c] for ob in obs]) for c in xrange(n))
+        else:
+            obs = np.stack(obs)
+        return obs, np.stack(rewards), np.stack(dones), infos
 
     def _reset(self):
         for pipe in self._pipes:
             pipe.send(('reset', None))
-        obs = [pipe.recv() for pipe in self._pipes]
-        return np.stack(obs)
+        results = [pipe.recv() for pipe in self._pipes]
+        obs, infos = zip(*results)
+        if isinstance(obs[0], tuple):
+            n = len(obs[0])
+            obs = tuple(np.stack([ob[c] for ob in obs]) for c in xrange(n))
+        else:
+            obs = np.stack(obs)
+        return obs, infos
 
     def _close(self):
         for pipe in self._pipes:
