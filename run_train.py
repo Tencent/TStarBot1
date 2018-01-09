@@ -19,6 +19,11 @@ flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_model_freq", "10000", "Model saving frequency.")
+flags.DEFINE_enum("agent_race", None, ['P', 'Z', 'R', 'T'], "Agent's race.")
+flags.DEFINE_enum("bot_race", None, ['P', 'Z', 'R', 'T'], "Bot's race.")
+flags.DEFINE_enum("difficulty", None,
+                  ['1', 'A', '3', '2', '5', '4', '7', '6', '9', '8'],
+                  "Bot's strength.")
 flags.mark_flag_as_required("map")
 
 
@@ -28,6 +33,9 @@ def train():
     envs = ParallelEnvWrapper([lambda: SC2Env(
         map_name=FLAGS.map,
         step_mul=FLAGS.step_mul,
+        agent_race=FLAGS.agent_race,
+        bot_race=FLAGS.bot_race,
+        difficulty=FLAGS.difficulty,
         screen_size_px=(FLAGS.resolution, FLAGS.resolution),
         action_filter=[],
         observation_filter=[]) for _ in range(FLAGS.n_envs)])
