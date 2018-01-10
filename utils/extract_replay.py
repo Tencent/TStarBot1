@@ -19,6 +19,8 @@ from __future__ import division
 from __future__ import print_function
 
 import cPickle as pickle
+import StringIO
+import tarfile
 import gzip
 import base64
 import json
@@ -45,13 +47,14 @@ from absl import app
 from absl import flags
 from absl import logging
 
-
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("parallel", 16, "How many instances to run in parallel.")
 flags.DEFINE_integer("step_mul", 8, "How many game steps per observation.")
 flags.DEFINE_integer("resolution", 64, "Resolution for observation map.")
 flags.DEFINE_string("replays", None, "Path to a directory of replays.")
 flags.DEFINE_string("output_dir", None, "Path to a write replay data to.")
+flags.DEFINE_enum("format", 'tar_of_gzip', ['tar_of_gzip', 'gzip'],
+                  "Output format.")
 flags.mark_flag_as_required("replays")
 flags.mark_flag_as_required("output_dir")
 
@@ -75,39 +78,42 @@ def valid_replay(info, ping):
 class ReplayProcessor(multiprocessing.Process):
     """A Process that pulls replays and processes them."""
 
-    def __init__(self, proc_id, run_config, replay_queue, output_dir):
+    def __init__(self, proc_id, run_config, replay_queue, resolution,
+                 output_dir, output_format='tar_of_gzip'):
         super(ReplayProcessor, self).__init__()
-        self.run_config = run_config
-        self.replay_queue = replay_queue
+        self._run_config = run_config
+        self._replay_queue = replay_queue
         self._output_dir = output_dir
-        size = point.Point(FLAGS.resolution, FLAGS.resolution)
-        self.interface = sc_pb.InterfaceOptions(
+        self._output_format = output_format
+
+        size = point.Point(resolution, resolution)
+        self._interface = sc_pb.InterfaceOptions(
                 raw=True, score=False,
                 feature_layer=sc_pb.SpatialCameraSetup(width=24))
-        size.assign_to(self.interface.feature_layer.resolution)
-        size.assign_to(self.interface.feature_layer.minimap_resolution)
+        size.assign_to(self._interface.feature_layer.resolution)
+        size.assign_to(self._interface.feature_layer.minimap_resolution)
 
     def run(self):
         signal.signal(signal.SIGTERM, lambda a, b: sys.exit())
         while True:
             print("Starting up a new SC2 instance.")
             try:
-                with self.run_config.start() as controller:
+                with self._run_config.start() as controller:
                     ping = controller.ping()
                     for _ in range(300):
                         try:
-                            replay_path = self.replay_queue.get()
+                            replay_path = self._replay_queue.get()
                         except queue.Empty:
                             return
                         try:
                             replay_name = os.path.basename(replay_path)
-                            replay_data = self.run_config.replay_data(
+                            replay_data = self._run_config.replay_data(
                                 replay_path)
                             info = controller.replay_info(replay_data)
                             if valid_replay(info, ping):
                                 map_data = None
                                 if info.local_map_path:
-                                    map_data = self.run_config.map_data(
+                                    map_data = self._run_config.map_data(
                                         info.local_map_path)
                                 for player_id in [1, 2]:
                                     print("Starting %s from player %s's "
@@ -121,7 +127,7 @@ class ReplayProcessor(multiprocessing.Process):
                             else:
                                 print("Replay %s is invalid." % replay_name[:10])
                         finally:
-                            self.replay_queue.task_done()
+                            self._replay_queue.task_done()
             except (protocol.ConnectionError, protocol.ProtocolError,
                     remote_controller.RequestError):
                 print("Replay crashed.")
@@ -134,7 +140,7 @@ class ReplayProcessor(multiprocessing.Process):
         controller.start_replay(sc_pb.RequestStartReplay(
                 replay_data=replay_data,
                 map_data=map_data,
-                options=self.interface,
+                options=self._interface,
                 observed_player_id=player_id))
         feat = features.Features(controller.game_info())
         controller.step()
@@ -159,13 +165,36 @@ class ReplayProcessor(multiprocessing.Process):
             all_frames[i]['result'] = result
             all_frames[i]['replay_name'] = replay_name
             all_frames[i]['player_id'] = player_id
-        self._save_gzip(all_frames, "%s-%d.gz" % (replay_name[:10], player_id))
 
-    def _save_gzip(self, all_frames, filename):
+        if self._output_format == "gzip":
+            self._save_to_gzip(
+                all_frames,
+                "%s-%d-%d.gz" % (replay_name, player_id, len(all_frames)))
+        elif self._output_format == "tar_of_gzip":
+            self._save_to_tar_of_gzip(
+                all_frames,
+                "%s-%d-%d.tar" % (replay_name, player_id, len(all_frames)))
+        else:
+            raise NotImplementedError
+
+    def _save_to_gzip(self, all_frames, filename):
         filepath = os.path.join(self._output_dir, filename)
         with gzip.open(filepath, 'w') as file:
             for frame in all_frames:
                 file.write(base64.b64encode(pickle.dumps(frame)) + '\n')
+        print("Replay data saved in %s." % filepath)
+
+    def _save_to_tar_of_gzip(self, all_frames, filename):
+        filepath = os.path.join(self._output_dir, filename)
+        with tarfile.open(filepath, 'w') as tar:
+            for i, frame in enumerate(all_frames):
+                input_io = StringIO.StringIO()
+                with gzip.GzipFile(fileobj=input_io, mode="w") as gfile:
+                    gfile.write(pickle.dumps(frame))
+                compressed_io = StringIO.StringIO(input_io.getvalue())
+                info = tarfile.TarInfo(name=str(i))
+                info.size = len(compressed_io.buf)
+                tar.addfile(tarinfo=info, fileobj=compressed_io)
         print("Replay data saved in %s." % filepath)
 
 
@@ -199,7 +228,8 @@ def main(unused_argv):
         replay_queue_thread.start()
 
         for i in range(FLAGS.parallel):
-            p = ReplayProcessor(i, run_config, replay_queue, FLAGS.output_dir)
+            p = ReplayProcessor(i, run_config, replay_queue, FLAGS.resolution,
+                                FLAGS.output_dir, FLAGS.format)
             p.daemon = True
             p.start()
             time.sleep(1)    # Stagger startups, otherwise conflict somehow
@@ -210,4 +240,4 @@ def main(unused_argv):
 
 
 if __name__ == "__main__":
-        app.run(main)
+    app.run(main)
