@@ -68,17 +68,25 @@ class SLAgent(object):
     def train(self,
               dataset_train,
               dataset_dev,
-              learning_rate,
-              batch_size,
+              learning_rate=1e-4,
+              optimizer_type="adam",
+              batch_size=64,
               num_dataloader_worker=8,
               save_model_dir=None,
               save_model_freq=100000,
               print_freq=1000,
+              max_sampled_dev_ins=3200,
               max_epochs=10000):
-        optimizer = optim.RMSprop(self._actor_critic.parameters(),
-                                  lr=learning_rate,
-                                  eps=1e-5,
-                                  centered=False)
+        if optimizer_type == "adam":
+            optimizer = optim.Adam(self._actor_critic.parameters(),
+                                   lr=learning_rate)
+        elif optimizer_type == "rmsprop":
+            optimizer = optim.RMSprop(self._actor_critic.parameters(),
+                                      lr=learning_rate,
+                                      eps=1e-5,
+                                      centered=False)
+        else:
+            raise NotImplementedError
 
         dataloader_train = DataLoader(dataset_train,
                                       batch_size=batch_size,
@@ -131,7 +139,7 @@ class SLAgent(object):
                     total_loss = 0
                 if num_batches % save_model_freq == 0:
                     valid_loss, value_acc, action_acc, screen_acc = \
-                        self.evaluate(dataloader_dev)
+                        self.evaluate(dataloader_dev, max_sampled_dev_ins)
                     print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
                           "Action Accuracy: %f Screen Accuracy: %f"
                           % (num_epochs, valid_loss, value_acc, action_acc,
@@ -140,11 +148,13 @@ class SLAgent(object):
                         save_model_dir, 'agent.model-%d' % num_batches))
             num_epochs += 1
 
-    def evaluate(self, dataloader_dev):
+    def evaluate(self, dataloader_dev, max_instances=None):
         num_instances, total_loss = 0, 0
         correct_value = 0
         correct_action, correct_screen, correct_minimap = 0, 0, 0
         for batch in dataloader_dev:
+            if not max_instances and max_instances >= num_instances:
+                break
             screen_feature = batch["screen_feature"]
             minimap_feature = batch["minimap_feature"]
             action_available = batch["action_available"]
@@ -185,6 +195,7 @@ class SLAgent(object):
                 Variable(policy_label[:, l:r], volatile=True), 1)
             correct_screen += (predicted == label).sum().data[0]
             num_instances += value_label.size(0)
+
         return (total_loss / num_instances,
                 correct_value / float(num_instances),
                 correct_action / float(num_instances),
