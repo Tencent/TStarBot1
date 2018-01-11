@@ -62,6 +62,8 @@ class SLAgent(object):
             r = sum(self._action_dims[:arg_id+2])
             arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
             arguments.append(arg_val)
+        print("Function ID: %d, Arguments: %s, Winning Probability: %f"
+              % (function_id, arguments, victory_prob))
         return [function_id] + arguments
 
     def train(self,
@@ -215,7 +217,9 @@ class SLAgent(object):
             out_dims_nonspatial=action_dims[0:1] + action_dims[4:])
         model.apply(weights_init)
         if init_model_path:
-            self._load_model(init_model_path)
+            model.load_state_dict(
+                torch.load(init_model_path,
+                           map_location=lambda storage, loc: storage))
 
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
@@ -225,10 +229,6 @@ class SLAgent(object):
 
     def _save_model(self, model_path):
         torch.save(self._actor_critic.state_dict(), model_path)
-
-    def _load_model(self, model_path):
-        self._actor_critic.load_state_dict(
-            torch.load(model_path, map_location=lambda storage, loc: storage))
 
 
 def weights_init(m):
