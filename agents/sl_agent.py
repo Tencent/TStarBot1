@@ -60,7 +60,6 @@ class SLAgent(object):
             for arg_id in self._action_args_map[function_id]:
                 l = sum(self._action_dims[:arg_id+1])
                 r = sum(self._action_dims[:arg_id+2])
-                print(arg_id, l, r, policy_logprob.size())
                 arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
                 arguments.append(arg_val)
             return [function_id] + arguments
@@ -101,6 +100,8 @@ class SLAgent(object):
         num_batches, num_epochs, total_loss = 0, 0, 0
         last_time = time.time()
         while num_epochs < max_epochs:
+            torch.manual_seed(num_epochs)
+            if self._use_gpu: torch.cuda.manual_seed(num_epochs)
             for batch in dataloader_train:
                 screen_feature = batch["screen_feature"]
                 minimap_feature = batch["minimap_feature"]
@@ -149,11 +150,13 @@ class SLAgent(object):
             num_epochs += 1
 
     def evaluate(self, dataloader_dev, max_instances=None):
+        torch.manual_seed(0)
+        if self._use_gpu: torch.cuda.manual_seed(0)
         num_instances, total_loss = 0, 0
         correct_value = 0
         correct_action, correct_screen, correct_minimap = 0, 0, 0
         for batch in dataloader_dev:
-            if not max_instances and max_instances >= num_instances:
+            if max_instances and max_instances <= num_instances:
                 break
             screen_feature = batch["screen_feature"]
             minimap_feature = batch["minimap_feature"]
