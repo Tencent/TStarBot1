@@ -63,7 +63,7 @@ class SLAgent(object):
                                       num_workers=num_dataloader_worker)
         dataloader_dev = DataLoader(dataset_dev,
                                     batch_size=self._batch_size,
-                                    shuffle=False,
+                                    shuffle=True,
                                     pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
         num_batches, num_epochs, total_loss = 0, 0, 0
@@ -99,22 +99,27 @@ class SLAgent(object):
 
                 num_batches += 1
                 if num_batches % print_freq == 0:
-                    print("Training Epochs: %d  Batches: %d Avg Train Loss: %f"
-                          " Speed: %.2f s/batch"
+                    print("Epochs: %d Batches: %d Avg Train Loss: %f "
+                          "Speed: %.2f s/batch"
                           % (num_epochs, num_batches, total_loss / print_freq,
                              (time.time() - last_time) / print_freq))
                     last_time = time.time()
                     total_loss = 0
                 if num_batches % save_model_freq == 0:
-                    valid_loss = self.evaluate(dataloader_dev)
-                    print("Training Epochs: %d  Avg Valid Loss: %f"
-                          % (num_epochs, valid_loss))
+                    valid_loss, value_acc, action_acc, screen_acc = \
+                        self.evaluate(dataloader_dev)
+                    print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
+                          "Action Accuracy: %f Screen Accuracy: %f"
+                          % (num_epochs, valid_loss, value_acc, action_acc,
+                             screen_acc))
                     self._save_model(os.path.join(
                         save_model_dir, 'agent.model-%d' % num_batches))
             num_epochs += 1
 
     def evaluate(self, dataloader_dev):
-        num_batches, total_loss = 0, 0
+        num_instances, total_loss = 0, 0
+        correct_value = 0
+        correct_action, correct_screen, correct_minimap = 0, 0, 0
         for batch in dataloader_dev:
             screen_feature = batch["screen_feature"]
             minimap_feature = batch["minimap_feature"]
@@ -128,20 +133,38 @@ class SLAgent(object):
                 policy_label = policy_label.cuda()
                 value_label = value_label.cuda()
 
-            policy_logprob, value_logit = self._actor_critic(
+            policy_logprob, value = self._actor_critic(
                 screen=Variable(screen_feature, volatile=True),
                 minimap=Variable(minimap_feature, volatile=True),
                 mask=Variable(action_available, volatile=True))
+            # loss
             policy_cross_ent = -policy_logprob * Variable(policy_label,
                                                           volatile=True)
             policy_loss = policy_cross_ent.sum(1).mean()
-            value_loss = F.binary_cross_entropy_with_logits(
-                value_logit.squeeze(1), Variable(value_label.float(),
-                                                 volatile=True))
+            value_loss = F.binary_cross_entropy(
+                value.squeeze(1), Variable(value_label.float(), volatile=True))
             loss = policy_loss + value_loss
             total_loss += loss[0]
-            num_batches += 1
-        return total_loss / num_batches
+            # value accuracy
+            correct_value += ((value.squeeze(1) > 0.5).long() == Variable(
+                value_label, volatile=True)).sum().data[0]
+            # action accuracy
+            l, r = 0, self._action_dims[0]
+            _, predicted = torch.max(policy_logprob[:, l:r], 1)
+            _, label = torch.max(
+                Variable(policy_label[:, l:r], volatile=True), 1)
+            correct_action += (predicted == label).sum().data[0]
+            # screen accuracy
+            l, r = sum(self._action_dims[0:1]), sum(self._action_dims[0:2])
+            _, predicted = torch.max(policy_logprob[:, l:r], 1)
+            _, label = torch.max(
+                Variable(policy_label[:, l:r], volatile=True), 1)
+            correct_screen += (predicted == label).sum().data[0]
+            num_instances += value_label.size(0)
+        return (total_loss / num_instances,
+                correct_value / float(num_instances),
+                correct_action / float(num_instances),
+                correct_screen / float(num_instances))
 
     def _create_model(self, action_dims, in_channels_screen,
                       in_channels_minimap, resolution, init_model_path,
@@ -230,7 +253,7 @@ class FullyConvNet(nn.Module):
         spatial_policy = spatial_policy.view(spatial_policy.size(0), -1)
         nonspatial_policy = self.nonspatial_policy_fc(state)
 
-        value_logit = self.value_fc(state)
+        value = F.sigmoid(self.value_fc(state))
         first_dim = self._action_dims[0] 
         policy_logit = torch.cat([nonspatial_policy[:, :first_dim] - mask,
                                   spatial_policy,
@@ -238,7 +261,7 @@ class FullyConvNet(nn.Module):
                                  dim=1)
         policy_logprob = self._group_log_softmax(
             policy_logit, self._action_dims)
-        return policy_logprob, value_logit
+        return policy_logprob, value
 
     def _group_log_softmax(self, x, group_dims):
         idx = 0
