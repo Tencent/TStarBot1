@@ -48,7 +48,7 @@ class SCReplayDataset(Dataset):
         data = self._load_data(self._filelist[file_id], frame_id)
         obs_screen, obs_minimap, action_available = self._transform_observation(
             data["observation"])
-        policy_label = self._transform_actions(data["actions"])
+        policy_label = self._transform_actions(data["actions"], action_available)
         value_label = 1 if data["result"] == 1 else 0
         sample = {'screen_feature': obs_screen,
                   'minimap_feature': obs_minimap,
@@ -68,24 +68,29 @@ class SCReplayDataset(Dataset):
                                  if filename.endswith(".tar")]
         self._total_num_frames = sum(self._num_frames_list)
 
-    def _transform_actions(self, actions):
+    def _transform_actions(self, actions, action_available):
         label = np.zeros(self._action_total_dim, dtype=np.float32)
         if len(actions) > 0:
             action = actions[0]
-            label[action.function] = 1
-            for arg_id, arg_val in zip(self._action_args_map[action.function],
-                                       action.arguments):
-                if len(arg_val) == 1:
-                    arg_val = arg_val[0]
-                    assert arg_val < self._action_head_dims[arg_id + 1]
-                    label[self._action_args_offset[arg_id] + arg_val] = 1
-                elif len(arg_val) == 2:
-                    arg_val = arg_val[1] * self._resolution + arg_val[0]
-                    assert arg_val < self._action_head_dims[arg_id + 1]
-                    label[self._action_args_offset[arg_id] + arg_val] = 1
-                else:
-                    raise NotImplementedError
-        else:
+        has_valid_action = False
+        for action in actions:
+            if action_available[action.function] == 0: # 0 valid, 1e30 invalid
+                label[action.function] = 1
+                for arg_id, arg_val in zip(self._action_args_map[action.function],
+                                           action.arguments):
+                    if len(arg_val) == 1:
+                        arg_val = arg_val[0]
+                        assert arg_val < self._action_head_dims[arg_id + 1]
+                        label[self._action_args_offset[arg_id] + arg_val] = 1
+                    elif len(arg_val) == 2:
+                        arg_val = arg_val[1] * self._resolution + arg_val[0]
+                        assert arg_val < self._action_head_dims[arg_id + 1]
+                        label[self._action_args_offset[arg_id] + arg_val] = 1
+                    else:
+                        raise NotImplementedError
+                has_valid_action = True
+                break
+        if not has_valid_action:
             label[0] = 1
         return label
 
@@ -123,8 +128,8 @@ class SCReplayDataset(Dataset):
         obs_minimap = self._transform_spatial_features(
             observation["minimap"], MINIMAP_FEATURES)
         num_actions =  self._action_head_dims[0]
-        action_available = np.zeros(num_actions, dtype=np.float32)
-        action_available[observation["available_actions"]] = 1
+        action_available = np.ones(num_actions, dtype=np.float32) * 1e30
+        action_available[observation["available_actions"]] = 0
         assert obs_screen.shape[1] == self._resolution
         assert obs_screen.shape[2] == self._resolution
         assert obs_minimap.shape[1] == self._resolution

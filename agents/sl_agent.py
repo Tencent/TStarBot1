@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import time
 import numpy as np
 
 import torch
@@ -66,6 +67,7 @@ class SLAgent(object):
                                     pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
         num_batches, num_epochs, total_loss = 0, 0, 0
+        last_time = time.time()
         while num_epochs < max_epochs:
             for batch in dataloader_train:
                 screen_feature = batch["screen_feature"]
@@ -98,7 +100,10 @@ class SLAgent(object):
                 num_batches += 1
                 if num_batches % print_freq == 0:
                     print("Training Epochs: %d  Batches: %d Avg Train Loss: %f"
-                          % (num_epochs, num_batches, total_loss / print_freq))
+                          " Speed: %.2f s/batch"
+                          % (num_epochs, num_batches, total_loss / print_freq,
+                             (time.time() - last_time) / print_freq))
+                    last_time = time.time()
                     total_loss = 0
                 if num_batches % save_model_freq == 0:
                     valid_loss = self.evaluate(dataloader_dev)
@@ -227,7 +232,7 @@ class FullyConvNet(nn.Module):
 
         value_logit = self.value_fc(state)
         first_dim = self._action_dims[0] 
-        policy_logit = torch.cat([nonspatial_policy[:, :first_dim] * mask,
+        policy_logit = torch.cat([nonspatial_policy[:, :first_dim] - mask,
                                   spatial_policy,
                                   nonspatial_policy[:, first_dim:]],
                                  dim=1)

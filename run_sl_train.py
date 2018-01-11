@@ -17,7 +17,7 @@ flags.DEFINE_float("learning_rate", 3e-4, "Learning rate for RMSProp.")
 flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_integer("save_model_freq", "20", "Frequency to save model.")
+flags.DEFINE_integer("save_model_freq", "200", "Frequency to save model.")
 flags.mark_flag_as_required("train_data_dir")
 flags.mark_flag_as_required("dev_data_dir")
 
