@@ -46,23 +46,23 @@ class SLAgent(object):
             screen_feature = screen_feature.cuda()
             minimap_feature = minimap_feature.cuda()
             mask = mask.cuda()
-            policy_logprob, value = self._actor_critic(
-                screen=Variable(screen_feature, volatile=True),
-                minimap=Variable(minimap_feature, volatile=True),
-                mask=Variable(mask, volatile=True))
-            # value
-            victory_prob = value.data[0, 0]
-            # control - function id
-            function_id = torch.max(
-                policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
-            # control - function arguments
-            arguments = []
-            for arg_id in self._action_args_map[function_id]:
-                l = sum(self._action_dims[:arg_id+1])
-                r = sum(self._action_dims[:arg_id+2])
-                arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
-                arguments.append(arg_val)
-            return [function_id] + arguments
+        policy_logprob, value = self._actor_critic(
+            screen=Variable(screen_feature, volatile=True),
+            minimap=Variable(minimap_feature, volatile=True),
+            mask=Variable(mask, volatile=True))
+        # value
+        victory_prob = value.data[0, 0]
+        # control - function id
+        function_id = torch.max(
+            policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+        # control - function arguments
+        arguments = []
+        for arg_id in self._action_args_map[function_id]:
+            l = sum(self._action_dims[:arg_id+1])
+            r = sum(self._action_dims[:arg_id+2])
+            arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+            arguments.append(arg_val)
+        return [function_id] + arguments
 
     def train(self,
               dataset_train,
