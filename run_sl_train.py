@@ -32,7 +32,6 @@ def train():
     agent = SLAgent(
         observation_spec=dataset_train.observation_spec,
         action_spec=dataset_train.action_spec,
-        batch_size=FLAGS.batch_size,
         use_gpu=FLAGS.use_gpu,
         init_model_path=FLAGS.init_model_path)
 
@@ -40,6 +39,7 @@ def train():
         agent.train(dataset_train=dataset_train,
                     dataset_dev=dataset_dev,
                     learning_rate=FLAGS.learning_rate,
+                    batch_size=FLAGS.batch_size,
                     num_dataloader_worker=FLAGS.num_dataloader_worker,
                     save_model_dir=FLAGS.save_model_dir,
                     save_model_freq=FLAGS.save_model_freq,

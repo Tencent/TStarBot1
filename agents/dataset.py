@@ -32,7 +32,8 @@ class SCReplayDataset(Dataset):
 
     @property
     def action_spec(self):
-        return (self._action_head_dims, )
+        return (self._action_head_dims,
+                self._action_args_map)
 
     @property
     def observation_spec(self):

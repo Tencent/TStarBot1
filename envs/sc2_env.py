@@ -42,11 +42,15 @@ class SC2Env(gym.Env):
     
     @property
     def action_spec(self):
-        return self._get_action_spec()
+        # TODO: to be refactor
+        num_actions, action_dims, action_args_map = self._get_action_spec()
+        return ([num_actions] + action_dims, action_args_map)
 
     @property
     def observation_spec(self):
-        return self._get_observation_spec()
+        # TODO: to be refactor
+        num_channels_screen, num_channels_minimap = self._get_observation_spec()
+        return (num_channels_screen, num_channels_minimap, self._screen_size_px[0])
 
     def _step(self, action):
         function_id = self._valid_action_ids[action[0]]

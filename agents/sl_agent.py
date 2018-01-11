@@ -22,12 +22,10 @@ class SLAgent(object):
     def __init__(self,
                  observation_spec,
                  action_spec,
-                 batch_size=64,
                  use_gpu=True,
                  init_model_path=None,
                  seed=0):
-        self._batch_size = batch_size
-        self._action_dims, = action_spec
+        self._action_dims, self._action_args_map = action_spec
         self._use_gpu = use_gpu
 
         torch.manual_seed(seed)
@@ -38,14 +36,40 @@ class SLAgent(object):
             self._action_dims, in_channels_screen, in_channels_minimap,
             resolution, init_model_path, use_gpu)
         
-
-    def step(self, ob):
-        raise NotImplementedError
+    def step(self, ob, info):
+        screen_feature = torch.from_numpy(np.expand_dims(ob[0], 0))
+        minimap_feature = torch.from_numpy(np.expand_dims(ob[1], 0))
+        mask = np.ones((1, self._action_dims[0]), dtype=np.float32) * 1e30
+        mask[0, info] = 0
+        mask = torch.from_numpy(mask)
+        if self._use_gpu:
+            screen_feature = screen_feature.cuda()
+            minimap_feature = minimap_feature.cuda()
+            mask = mask.cuda()
+            policy_logprob, value = self._actor_critic(
+                screen=Variable(screen_feature, volatile=True),
+                minimap=Variable(minimap_feature, volatile=True),
+                mask=Variable(mask, volatile=True))
+            # value
+            victory_prob = value.data[0, 0]
+            # control - function id
+            function_id = torch.max(
+                policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+            # control - function arguments
+            arguments = []
+            for arg_id in self._action_args_map[function_id]:
+                l = sum(self._action_dims[:arg_id+1])
+                r = sum(self._action_dims[:arg_id+2])
+                print(arg_id, l, r, policy_logprob.size())
+                arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+                arguments.append(arg_val)
+            return [function_id] + arguments
 
     def train(self,
               dataset_train,
               dataset_dev,
               learning_rate,
+              batch_size,
               num_dataloader_worker=8,
               save_model_dir=None,
               save_model_freq=100000,
@@ -57,12 +81,12 @@ class SLAgent(object):
                                   centered=False)
 
         dataloader_train = DataLoader(dataset_train,
-                                      batch_size=self._batch_size,
+                                      batch_size=batch_size,
                                       shuffle=True,
                                       pin_memory=self._use_gpu,
                                       num_workers=num_dataloader_worker)
         dataloader_dev = DataLoader(dataset_dev,
-                                    batch_size=self._batch_size,
+                                    batch_size=batch_size,
                                     shuffle=True,
                                     pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
