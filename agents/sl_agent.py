@@ -22,21 +22,12 @@ class SLAgent(object):
                  observation_spec,
                  action_spec,
                  batch_size=64,
-                 num_dataloader_worker=8,
-                 rmsprop_lr=1e-4,
-                 rmsprop_eps=1e-8,
                  use_gpu=True,
                  init_model_path=None,
-                 save_model_dir=None,
-                 save_model_freq=10000,
                  seed=0):
         self._batch_size = batch_size
-        self._num_dataloader_worker = num_dataloader_worker
         self._action_dims, = action_spec
         self._use_gpu = use_gpu
-        self._save_model_dir = save_model_dir
-        self._save_model_freq = save_model_freq
-        self._steps_count = 0
 
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
@@ -46,29 +37,36 @@ class SLAgent(object):
             self._action_dims, in_channels_screen, in_channels_minimap,
             resolution, init_model_path, use_gpu)
         
-        self._optimizer = optim.RMSprop(
-            self._actor_critic.parameters(), lr=rmsprop_lr,
-            eps=rmsprop_eps, centered=False)
-
-        if init_model_path:
-            self._steps_count = int(init_model_path[
-                init_model_path.rfind('-')+1:])
 
     def step(self, ob):
         raise NotImplementedError
 
-    def train(self, dataset_train, dataset_dev):
+    def train(self,
+              dataset_train,
+              dataset_dev,
+              learning_rate,
+              num_dataloader_worker=8,
+              save_model_dir=None,
+              save_model_freq=100000,
+              print_freq=1000,
+              max_epochs=10000):
+        optimizer = optim.RMSprop(self._actor_critic.parameters(),
+                                  lr=learning_rate,
+                                  eps=1e-5,
+                                  centered=False)
+
         dataloader_train = DataLoader(dataset_train,
                                       batch_size=self._batch_size,
                                       shuffle=True,
                                       pin_memory=self._use_gpu,
-                                      num_workers=self._num_dataloader_worker)
+                                      num_workers=num_dataloader_worker)
         dataloader_dev = DataLoader(dataset_dev,
                                     batch_size=self._batch_size,
                                     shuffle=False,
                                     pin_memory=self._use_gpu,
-                                    num_workers=self._num_dataloader_worker)
-        while True:
+                                    num_workers=num_dataloader_worker)
+        num_batches, num_epochs, total_loss = 0, 0, 0
+        while num_epochs < max_epochs:
             for batch in dataloader_train:
                 screen_feature = batch["screen_feature"]
                 minimap_feature = batch["minimap_feature"]
@@ -86,22 +84,59 @@ class SLAgent(object):
                     screen=Variable(screen_feature),
                     minimap=Variable(minimap_feature),
                     mask=Variable(action_available))
-                print(policy_logprob.size(), value_logit.size())
-                policy_cross_ent = (-log_policy * Variable(policy_label)).sum(1)
-                policy_loss = policy_cross_ent.mean()
+                policy_cross_ent = -policy_logprob * Variable(policy_label)
+                policy_loss = policy_cross_ent.sum(1).mean()
                 value_loss = F.binary_cross_entropy_with_logits(
-                    value_logit, Variable(value_label))
+                    value_logit.squeeze(1), Variable(value_label.float()))
                 loss = policy_loss + value_loss
+                total_loss += loss[0]
 
-                self._optimizer.zero_grad()
+                optimizer.zero_grad()
                 loss.backward()
-                self._optimizer.step()
+                optimizer.step()
 
-                self._steps_count += 1
-                if self._steps_count % self._save_model_freq == 0:
+                num_batches += 1
+                if num_batches % print_freq == 0:
+                    print("Training Epochs: %d  Batches: %d Avg Train Loss: %f"
+                          % (num_epochs, num_batches, total_loss / print_freq))
+                    total_loss = 0
+                if num_batches % save_model_freq == 0:
+                    valid_loss = self.evaluate(dataloader_dev)
+                    print("Training Epochs: %d  Avg Valid Loss: %f"
+                          % (num_epochs, valid_loss))
                     self._save_model(os.path.join(
-                        self._save_model_dir,
-                        'agent.model-%d' % self._steps_count))
+                        save_model_dir, 'agent.model-%d' % num_batches))
+            num_epochs += 1
+
+    def evaluate(self, dataloader_dev):
+        num_batches, total_loss = 0, 0
+        for batch in dataloader_dev:
+            screen_feature = batch["screen_feature"]
+            minimap_feature = batch["minimap_feature"]
+            action_available = batch["action_available"]
+            policy_label = batch["policy_label"]
+            value_label = batch["value_label"]
+            if self._use_gpu:
+                screen_feature = screen_feature.cuda()
+                minimap_feature = minimap_feature.cuda()
+                action_available = action_available.cuda()
+                policy_label = policy_label.cuda()
+                value_label = value_label.cuda()
+
+            policy_logprob, value_logit = self._actor_critic(
+                screen=Variable(screen_feature, volatile=True),
+                minimap=Variable(minimap_feature, volatile=True),
+                mask=Variable(action_available, volatile=True))
+            policy_cross_ent = -policy_logprob * Variable(policy_label,
+                                                          volatile=True)
+            policy_loss = policy_cross_ent.sum(1).mean()
+            value_loss = F.binary_cross_entropy_with_logits(
+                value_logit.squeeze(1), Variable(value_label.float(),
+                                                 volatile=True))
+            loss = policy_loss + value_loss
+            total_loss += loss[0]
+            num_batches += 1
+        return total_loss / num_batches
 
     def _create_model(self, action_dims, in_channels_screen,
                       in_channels_minimap, resolution, init_model_path,
@@ -174,7 +209,8 @@ class FullyConvNet(nn.Module):
         self.state_fc = nn.Linear(64 * (resolution ** 2), 256)
         self.value_fc = nn.Linear(256, 1)
         self.nonspatial_policy_fc = nn.Linear(256, sum(out_dims_nonspatial))
-        self._out_dims_nonspatial = out_dims_nonspatial
+        self._action_dims = out_dims_nonspatial[0:1] + [resolution ** 2] * 3 \
+                            + out_dims_nonspatial[1:]
 
     def forward(self, screen, minimap, mask):
         screen = F.relu(self.screen_conv1(screen))
@@ -186,28 +222,23 @@ class FullyConvNet(nn.Module):
             screen_minimap.view(screen_minimap.size(0), -1)))
 
         spatial_policy = self.spatial_policy_conv(screen_minimap)
-        spatial_policy1 = spatial_policy.view(spatial_policy.size(0), -1)
-        spatial_policy = torch.cat(
-            [chunk.contiguous().view(chunk.size(0), -1)
-             for chunk in spatial_policy.chunk(spatial_policy.size(1), dim=1)],
-            dim=1)
-        print((spatial_policy - spatial_policy1).pow(2).mean())
+        spatial_policy = spatial_policy.view(spatial_policy.size(0), -1)
         nonspatial_policy = self.nonspatial_policy_fc(state)
 
         value_logit = self.value_fc(state)
-        first_dim = self._out_dims_nonspatial[0] 
-        print(nonspatial_policy.size(), first_dim, nonspatial_policy[:, :first_dim].size())
+        first_dim = self._action_dims[0] 
         policy_logit = torch.cat([nonspatial_policy[:, :first_dim] * mask,
                                   spatial_policy,
-                                  nonspatial_policy[first_dim:]],
-                                 dim=0)
+                                  nonspatial_policy[:, first_dim:]],
+                                 dim=1)
         policy_logprob = self._group_log_softmax(
-            policy_logit, self._out_dims_nonspatial)
+            policy_logit, self._action_dims)
         return policy_logprob, value_logit
 
-    def _group_log_softmax(x, group_dims):
+    def _group_log_softmax(self, x, group_dims):
         idx = 0
+        output = []
         for dim in group_dims:
-            x[idx:idx+dim] = F.log_softmax(x[idx:idx+dim], dim=1)
+            output.append(F.log_softmax(x[:, idx:idx+dim], dim=1))
             idx += dim
-        return x
+        return torch.cat(output, dim=1)
