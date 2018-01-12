@@ -22,9 +22,11 @@ from pysc2.lib.features import FeatureType
 class SCReplayDataset(Dataset):
     """StarCraftII replay dataset."""
 
-    def __init__(self, root_dir, resolution, transform=None):
+    def __init__(self, root_dir, resolution, observation_filter=[],
+                 transform=None):
         self._transform = transform
         self._resolution = resolution
+        self._observation_filter = set(observation_filter)
         self._init_filelist(root_dir)
         self._init_id_mapper()
         self._init_action_spec()
@@ -115,6 +117,8 @@ class SCReplayDataset(Dataset):
         def get_spatial_channels(specs):
             num_channels = 0
             for spec in specs:
+                if spec.name in self._observation_filter:
+                    continue
                 if spec.type == FeatureType.CATEGORICAL:
                     num_channels += spec.scale - 1
                 else:
@@ -140,6 +144,8 @@ class SCReplayDataset(Dataset):
     def _transform_spatial_features(self, obs, specs):
         features = []
         for ob, spec in zip(obs, specs):
+            if spec.name in self._observation_filter:
+                continue
             if spec.type == FeatureType.CATEGORICAL: features.append(
                     np.eye(spec.scale, dtype=np.float32)[ob][:, :, 1:])
             else:

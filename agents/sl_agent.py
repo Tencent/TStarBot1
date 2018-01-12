@@ -117,14 +117,14 @@ class SLAgent(object):
                     policy_label = policy_label.cuda()
                     value_label = value_label.cuda()
 
-                policy_logprob, value_logit = self._actor_critic(
+                policy_logprob, value = self._actor_critic(
                     screen=Variable(screen_feature),
                     minimap=Variable(minimap_feature),
                     mask=Variable(action_available))
                 policy_cross_ent = -policy_logprob * Variable(policy_label)
                 policy_loss = policy_cross_ent.sum(1).mean()
-                value_loss = F.binary_cross_entropy_with_logits(
-                    value_logit.squeeze(1), Variable(value_label.float()))
+                value_loss = F.binary_cross_entropy(
+                    value.squeeze(1), Variable(value_label.float()))
                 loss = policy_loss + value_loss
                 total_loss += loss[0]
 

@@ -24,6 +24,7 @@ flags.DEFINE_enum("bot_race", None, ['P', 'Z', 'R', 'T'], "Bot's race.")
 flags.DEFINE_enum("difficulty", None,
                   ['1', 'A', '3', '2', '5', '4', '7', '6', '9', '8'],
                   "Bot's strength.")
+flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
 flags.mark_flag_as_required("map")
 
 
@@ -38,7 +39,8 @@ def train():
         difficulty=FLAGS.difficulty,
         screen_size_px=(FLAGS.resolution, FLAGS.resolution),
         action_filter=[],
-        observation_filter=[]) for _ in range(FLAGS.n_envs)])
+        observation_filter=FLAGS.observation_filter.split(","))
+        for _ in range(FLAGS.n_envs)])
     agent = A2CAgent(
         dims=FLAGS.resolution,
         observation_spec=envs.observation_spec,
