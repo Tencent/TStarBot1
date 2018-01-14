@@ -27,6 +27,10 @@ class SCReplayDataset(Dataset):
         self._transform = transform
         self._resolution = resolution
         self._observation_filter = set(observation_filter)
+        self._cur_filepath = None
+        self._cur_tar = None
+        self._cur_tarinfos = None
+
         self._init_filelist(root_dir)
         self._init_id_mapper()
         self._init_action_spec()
@@ -132,7 +136,7 @@ class SCReplayDataset(Dataset):
             observation["screen"], SCREEN_FEATURES)
         obs_minimap = self._transform_spatial_features(
             observation["minimap"], MINIMAP_FEATURES)
-        num_actions =  self._action_head_dims[0]
+        num_actions = self._action_head_dims[0]
         action_available = np.ones(num_actions, dtype=np.float32) * 1e30
         action_available[observation["available_actions"]] = 0
         assert obs_screen.shape[1] == self._resolution
@@ -154,12 +158,17 @@ class SCReplayDataset(Dataset):
         return np.transpose(np.concatenate(features, axis=2), (2, 0, 1))
 
     def _load_data(self, filepath, frame_id):
-        with tarfile.open(filepath, 'r') as tar:
-            tarinfo = tar.getmembers()[frame_id]
-            f = tar.extractfile(tarinfo)
-            content = f.read()
-            gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
-            data = pickle.loads(gfile.read())
+        if filepath != self._cur_filepath:
+            if self._cur_tar:
+                self._cur_tar.close()
+            self._cur_tar = tarfile.open(filepath, 'r')
+            self._cur_tarinfos = self._cur_tar.getmembers()
+            self._cur_filepath = filepath
+        tarinfo = self._cur_tarinfos[frame_id]
+        f = self._cur_tar.extractfile(tarinfo)
+        content = f.read()
+        gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
+        data = pickle.loads(gfile.read())
         return data
 
     def _init_id_mapper(self):
