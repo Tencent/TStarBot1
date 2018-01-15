@@ -140,19 +140,19 @@ class SLAgent(object):
                     last_time = time.time()
                     total_loss = 0
                 if num_batches % save_model_freq == 0:
-                    valid_loss, value_acc, action_acc = self.evaluate(
-                        dataloader_dev, max_sampled_dev_ins)
+                    valid_loss, value_acc, action_acc, screen_acc = \
+                        self.evaluate(dataloader_dev, max_sampled_dev_ins)
                     print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
-                          "Action Accuracy: %f"
-                          % (num_epochs, valid_loss, value_acc, action_acc))
+                          "Action Accuracy: %f Screen Accuracy: %f"
+                          % (num_epochs, valid_loss, value_acc, action_acc,
+                             screen_acc))
                     self._save_model(os.path.join(
                         save_model_dir, 'agent.model-%d' % num_batches))
             num_epochs += 1
 
     def evaluate(self, dataloader_dev, max_instances=None):
-        num_instances, total_loss = 0, 0
-        correct_value = 0
-        correct_action, correct_screen, correct_minimap = 0, 0, 0
+        num_instances, num_screen_valid_instances, total_loss = 0, 0, 0
+        correct_value, correct_action, correct_screen = 0, 0, 0
         for batch in dataloader_dev:
             if max_instances and max_instances <= num_instances:
                 break
@@ -189,11 +189,20 @@ class SLAgent(object):
             _, label = torch.max(
                 Variable(policy_label[:, l:r], volatile=True), 1)
             correct_action += (predicted == label).sum().data[0]
+            # screen accuracy
+            l, r = sum(self._action_dims[0:1]), sum(self._action_dims[0:2])
+            _, predicted = torch.max(policy_logprob[:, l:r], 1)
+            isvalid, label = torch.max(
+                Variable(policy_label[:, l:r], volatile=True), 1)
+            correct_screen += ((predicted == label).float() * \
+                                isvalid).sum().data[0]
+            num_screen_valid_instances += isvalid.sum().data[0]
             num_instances += value_label.size(0)
 
         return (total_loss / num_instances,
                 correct_value / float(num_instances),
-                correct_action / float(num_instances))
+                correct_action / float(num_instances),
+                correct_screen / float(num_screen_valid_instances))
 
     def _create_model(self, action_dims, in_channels_screen,
                       in_channels_minimap, resolution, init_model_path,
