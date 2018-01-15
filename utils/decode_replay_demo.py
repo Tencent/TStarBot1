@@ -1,3 +1,4 @@
+import sys
 import cPickle as pickle
 import StringIO
 import tarfile
@@ -11,15 +12,24 @@ def parse_gzip(filepath):
             data = pickle.loads(base64.b64decode(line))
             print_data(data)
 
-def parse_tar_of_gzip(filepath, frame_id):
+def parse_tar_of_gzip(filepath):
     """Format tar_of_gzip supports fast random access."""
     with tarfile.open(filepath, 'r') as tar:
-        tarinfo = tar.getmembers()[frame_id]
-        f = tar.extractfile(tarinfo)
-        content = f.read()
-        gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
-        data = pickle.loads(gfile.read())
-        print_data(data)
+        for tarinfo in tar.getmembers():
+            f = tar.extractfile(tarinfo)
+            content = f.read()
+            gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
+            data = pickle.loads(gfile.read())
+            print_data(data)
+
+def parse_txt_of_gzip(filepath):
+    """Format tar_of_gzip supports fast random access."""
+    with open(filepath, 'r') as f:
+        for line in f:
+            content = base64.b64decode(line)
+            gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
+            data = pickle.loads(gfile.read())
+            print_data(data)
 
 def print_data(data):
     obs = data["observation"]
@@ -33,4 +43,14 @@ def print_data(data):
     print("Player View ID : %d" % player_id)
     print("Result (1-Victory, 2-Defeat) : %d" % result)
 
-parse_tar_of_gzip('tmp/0000e057beefc9b1e9da959ed921b24b9f0a31c63fedb8d94a1db78b58cf92c5.SC2Replay-1-2608.tar', 999)
+
+if __name__ == "__main__":
+    filepath = sys.argv[1]
+    if filepath.endswith('.frame'):
+        parse_txt_of_gzip(filepath)
+    elif filepath.endswith('.gz'):
+        parse_gzip(filepath)
+    elif filepath.endswith('.tar'):
+        parse_tar_of_gzip(filepath)
+    else:
+        raise NotImplementedError

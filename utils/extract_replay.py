@@ -51,11 +51,12 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer("parallel", 16, "How many instances to run in parallel.")
 flags.DEFINE_integer("step_mul", 8, "How many game steps per observation.")
 flags.DEFINE_integer("resolution", 64, "Resolution for observation map.")
-flags.DEFINE_string("replays", None, "Path to a directory of replays.")
+flags.DEFINE_string("filelist", None, "Replay filelist to extract from.")
 flags.DEFINE_string("output_dir", None, "Path to a write replay data to.")
-flags.DEFINE_enum("format", 'tar_of_gzip', ['tar_of_gzip', 'gzip'],
-                  "Output format.")
-flags.mark_flag_as_required("replays")
+flags.DEFINE_boolean("filter_empty_action", True, "Filter frame with no action.")
+flags.DEFINE_enum("format", 'txt_of_gzip',
+                  ['txt_of_gzip', 'tar_of_gzip', 'gzip'], "Output format.")
+flags.mark_flag_as_required("filelist")
 flags.mark_flag_as_required("output_dir")
 
 
@@ -79,12 +80,14 @@ class ReplayProcessor(multiprocessing.Process):
     """A Process that pulls replays and processes them."""
 
     def __init__(self, proc_id, run_config, replay_queue, resolution,
-                 output_dir, output_format='tar_of_gzip'):
+                 output_dir, output_format='txt_of_gzip',
+                 filter_empty_action=True):
         super(ReplayProcessor, self).__init__()
         self._run_config = run_config
         self._replay_queue = replay_queue
         self._output_dir = output_dir
         self._output_format = output_format
+        self._filter_empty_action = filter_empty_action
 
         size = point.Point(resolution, resolution)
         self._interface = sc_pb.InterfaceOptions(
@@ -145,31 +148,38 @@ class ReplayProcessor(multiprocessing.Process):
         feat = features.Features(controller.game_info())
         controller.step()
         all_frames = []
-        while True:
+        done = False
+        while not done:
             cur_frame = {}
             obs = controller.observe()
-            cur_frame['observation'] = feat.transform_obs(obs.observation)
+            if obs.player_result:
+                assert obs.player_result[player_id - 1].player_id == player_id
+                result = obs.player_result[player_id - 1].result
+                done = True
             cur_frame['actions'] = []
             for action in obs.actions:
                 try:
                     cur_frame['actions'].append(feat.reverse_action(action))
                 except ValueError:
                     pass
-            all_frames.append(cur_frame)
-            if obs.player_result:
-                assert obs.player_result[player_id - 1].player_id == player_id
-                result = obs.player_result[player_id - 1].result
-                break
-            controller.step(FLAGS.step_mul)
+            if len(cur_frame['actions']) > 0 or not self._filter_empty_action:
+                cur_frame['observation'] = feat.transform_obs(obs.observation)
+                all_frames.append(cur_frame)
+            if not done:
+                controller.step(FLAGS.step_mul)
         for i in range(len(all_frames)):
             all_frames[i]['result'] = result
             all_frames[i]['replay_name'] = replay_name
             all_frames[i]['player_id'] = player_id
 
-        if self._output_format == "gzip":
+        if self._output_format == "txt_of_gzip":
+            self._save_to_txt_of_gzip(
+                all_frames,
+                "%s-%d.frame" % (replay_name, player_id))
+        elif self._output_format == "gzip":
             self._save_to_gzip(
                 all_frames,
-                "%s-%d-%d.gz" % (replay_name, player_id, len(all_frames)))
+                "%s-%d-%d.gzip" % (replay_name, player_id, len(all_frames)))
         elif self._output_format == "tar_of_gzip":
             self._save_to_tar_of_gzip(
                 all_frames,
@@ -182,6 +192,16 @@ class ReplayProcessor(multiprocessing.Process):
         with gzip.open(filepath, 'w') as file:
             for frame in all_frames:
                 file.write(base64.b64encode(pickle.dumps(frame)) + '\n')
+        print("Replay data saved in %s." % filepath)
+
+    def _save_to_txt_of_gzip(self, all_frames, filename):
+        filepath = os.path.join(self._output_dir, filename)
+        with open(filepath, 'w') as file:
+            for frame in all_frames:
+                input_io = StringIO.StringIO()
+                with gzip.GzipFile(fileobj=input_io, mode="w") as gfile:
+                    gfile.write(pickle.dumps(frame))
+                file.write(base64.b64encode(input_io.getvalue()) + '\n')
         print("Replay data saved in %s." % filepath)
 
     def _save_to_tar_of_gzip(self, all_frames, filename):
@@ -209,17 +229,13 @@ def main(unused_argv):
     logging.set_verbosity(logging.ERROR)
     run_config = run_configs.get()
 
-    if not gfile.Exists(FLAGS.replays):
-        sys.exit("{} doesn't exist.".format(FLAGS.replays))
-
     try:
         # For some reason buffering everything into a JoinableQueue makes the
         # program not exit, so save it into a list then slowly fill it into the
         # queue in a separate thread. Grab the list synchronously so we know there
         # is work in the queue before the SC2 processes actually run, otherwise
         # The replay_queue.join below succeeds without doing any work, and exits.
-        print("Getting replay list:", FLAGS.replays)
-        replay_list = sorted(run_config.replay_paths(FLAGS.replays))
+        replay_list = [line.rstrip() for line in open(FLAGS.filelist)]
         print(len(replay_list), "replays found.\n")
         replay_queue = multiprocessing.JoinableQueue(FLAGS.parallel * 10)
         replay_queue_thread = threading.Thread(target=replay_queue_filler,
@@ -229,7 +245,8 @@ def main(unused_argv):
 
         for i in range(FLAGS.parallel):
             p = ReplayProcessor(i, run_config, replay_queue, FLAGS.resolution,
-                                FLAGS.output_dir, FLAGS.format)
+                                FLAGS.output_dir, FLAGS.format,
+                                FLAGS.filter_empty_action)
             p.daemon = True
             p.start()
             time.sleep(1)    # Stagger startups, otherwise conflict somehow
