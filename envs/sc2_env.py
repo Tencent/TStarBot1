@@ -24,6 +24,7 @@ class SC2Env(gym.Env):
                  game_steps_per_episode=0,
                  screen_size_px=(64, 64),
                  action_filter=[],
+                 unittype_whitelist=None,
                  observation_filter=[]):
         self._screen_size_px = screen_size_px
         self._num_steps = 0
@@ -38,6 +39,11 @@ class SC2Env(gym.Env):
             minimap_size_px=screen_size_px,
             visualize=False)
         self._valid_action_ids = list(set(range(524)) - set(action_filter))
+
+        self._unittype_map = None
+        if unittype_whitelist:
+            self._unittype_map = {v : i
+                                  for i, v in enumerate(unittype_whitelist)}
         self._observation_filter = set(observation_filter) 
     
     @property
@@ -90,9 +96,12 @@ class SC2Env(gym.Env):
         for ob, spec in zip(obs, specs):
             if spec.name in self._observation_filter:
                 continue
+            scale = spec.scale
+            if spec.name == "unit_type" and self._unittype_map:
+                ob = np.vectorize(lambda k: self._unittype_map.get(k, 0))(ob)
+                scale = len(self._unittype_map)
             if spec.type == FeatureType.CATEGORICAL:
-                features.append(
-                    np.eye(spec.scale, dtype=np.float32)[ob][:, :, 1:])
+                features.append(np.eye(scale, dtype=np.float32)[ob][:, :, 1:])
             else:
                 features.append(
                     np.expand_dims(np.log(ob + 1, dtype=np.float32), axis=2))
@@ -118,6 +127,9 @@ class SC2Env(gym.Env):
             num_channels = 0
             for spec in specs:
                 if spec.name in self._observation_filter:
+                    continue
+                if spec.name == "unit_type" and self._unittype_map:
+                    num_channels += len(self._unittype_map) - 1
                     continue
                 if spec.type == FeatureType.CATEGORICAL:
                     num_channels += spec.scale - 1

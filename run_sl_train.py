@@ -24,16 +24,27 @@ flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
 flags.mark_flag_as_required("train_data_dir")
 flags.mark_flag_as_required("dev_data_dir")
 
+unittype_whitelist=[0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
+                    24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+                    34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+                    44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                    54, 55, 56, 57, 130, 132, 134, 268, 341, 342,
+                    472, 483, 484, 498, 500, 638, 641, 689, 691, 692,
+                    734, 830]
 
 def train():
     if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
         os.mkdir(FLAGS.save_model_dir)
 
     dataset_train = SCReplayDataset(
-        FLAGS.train_data_dir, resolution=64,
+        FLAGS.train_data_dir,
+        resolution=64,
+        unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
     dataset_dev = SCReplayDataset(
-        FLAGS.train_data_dir, resolution=64,
+        FLAGS.train_data_dir,
+        resolution=64,
+        unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
 
     agent = SLAgent(

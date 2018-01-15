@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 from pysc2.lib import actions
 from pysc2.lib import features
 
-from agents.fast_dataloader import FastDataLoaderWrapper
 
 class SLAgent(object):
 
@@ -93,11 +92,12 @@ class SLAgent(object):
         dataloader_train = DataLoader(dataset_train,
                                       batch_size=batch_size,
                                       shuffle=False,
+                                      pin_memory=self._use_gpu,
                                       num_workers=num_dataloader_worker)
-        dataloader_train = FastDataLoaderWrapper(dataloader_train, queue_size=64)
         dataloader_dev = DataLoader(dataset_dev,
                                     batch_size=batch_size,
                                     shuffle=False,
+                                    pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
 
         num_batches, num_epochs, total_loss = 0, 0, 0
@@ -107,7 +107,7 @@ class SLAgent(object):
             if self._use_gpu: torch.cuda.manual_seed(num_epochs)
             t = time.time()
             for batch in dataloader_train:
-                print("Time for preparing batch: %f" % (time.time() - t))
+                #print("Time for preparing batch: %f" % (time.time() - t))
                 t = time.time()
                 screen_feature = batch["screen_feature"]
                 minimap_feature = batch["minimap_feature"]
@@ -131,13 +131,13 @@ class SLAgent(object):
                     value.squeeze(1), Variable(value_label.float()))
                 loss = policy_loss + value_loss
                 total_loss += loss[0]
-                print("Time for forward: %f" % (time.time() - t))
+                #print("Time for forward: %f" % (time.time() - t))
                 t = time.time()
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                print("Time for backward: %f" % (time.time() - t))
+                #print("Time for backward: %f" % (time.time() - t))
 
                 num_batches += 1
                 if num_batches % print_freq == 0:

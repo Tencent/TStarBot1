@@ -19,6 +19,13 @@ flags.DEFINE_enum("difficulty", '1',
                   "Bot's strength.")
 flags.mark_flag_as_required("map")
 
+unittype_whitelist=[0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
+                    24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+                    34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+                    44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                    54, 55, 56, 57, 130, 132, 134, 268, 341, 342,
+                    472, 483, 484, 498, 500, 638, 641, 689, 691, 692,
+                    734, 830]
 
 def train():
     env = SC2Env(map_name=FLAGS.map,
@@ -28,6 +35,7 @@ def train():
                  difficulty=FLAGS.difficulty,
                  screen_size_px=(FLAGS.resolution, FLAGS.resolution),
                  action_filter=[],
+                 unittype_whitelist=unittype_whitelist,
                  observation_filter=[])
 
     agent = SLAgent(
