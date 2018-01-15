@@ -5,8 +5,8 @@ from __future__ import print_function
 import os
 import time
 import StringIO
-import tarfile
 import gzip
+import base64
 import cPickle as pickle
 
 import numpy as np
@@ -22,7 +22,7 @@ from pysc2.lib.features import FeatureType
 class SCReplayDataset(Dataset):
     """StarCraftII replay dataset."""
 
-    def __init__(self, root_dir, resolution, unittype_whitelist=None,
+    def __init__(self, filelist_path, resolution, unittype_whitelist=None,
                  observation_filter=[], transform=None):
         self._transform = transform
         self._resolution = resolution
@@ -35,7 +35,7 @@ class SCReplayDataset(Dataset):
         self._cur_tar = None
         self._cur_tarinfos = None
 
-        self._init_filelist(root_dir)
+        self._init_filelist(filelist_path)
         self._init_id_mapper()
         self._init_action_spec()
         self._init_observation_spec()
@@ -70,13 +70,14 @@ class SCReplayDataset(Dataset):
             sample = self._transform(sample)
         return sample
 
-    def _init_filelist(self, root_dir):
-        self._filelist = [os.path.join(root_dir, filename)
-                          for filename in os.listdir(root_dir)
-                          if filename.endswith(".tar")]
-        self._num_frames_list = [int(filename[filename.rfind('-')+1:-4])
-                                 for filename in self._filelist
-                                 if filename.endswith(".tar")]
+    def _init_filelist(self, filelist_path):
+        self._filelist = []
+        self._num_frames_list = []
+        with open(filelist_path) as f:
+            for line in f:
+                filepath, num_frames = line.strip().split('\t')
+                self._filelist.append(filepath)
+                self._num_frames_list.append(int(num_frames))
         self._total_num_frames = sum(self._num_frames_list)
 
     def _transform_actions(self, actions, action_available):
@@ -170,14 +171,10 @@ class SCReplayDataset(Dataset):
 
     def _load_data(self, filepath, frame_id):
         if filepath != self._cur_filepath:
-            if self._cur_tar:
-                self._cur_tar.close()
-            self._cur_tar = tarfile.open(filepath, 'r')
-            self._cur_tarinfos = self._cur_tar.getmembers()
+            self._cur_lines = [line for line in open(filepath)]
             self._cur_filepath = filepath
-        tarinfo = self._cur_tarinfos[frame_id]
-        f = self._cur_tar.extractfile(tarinfo)
-        content = f.read()
+        line = self._cur_lines[frame_id]
+        content = base64.b64decode(line)
         gfile = gzip.GzipFile(fileobj=StringIO.StringIO(content))
         data = pickle.loads(gfile.read())
         return data

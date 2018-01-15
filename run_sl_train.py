@@ -7,8 +7,8 @@ from agents.sl_agent import SLAgent
 from agents.dataset import SCReplayDataset
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("train_data_dir", None, "Directory for training data.")
-flags.DEFINE_string("dev_data_dir", None, "Directory for validation data.")
+flags.DEFINE_string("train_filelist", None, "Training filelist.")
+flags.DEFINE_string("dev_filelist", None, "Validation filelist.")
 flags.DEFINE_integer("num_dataloader_worker", 16, "Processes # for dataloader.")
 flags.DEFINE_integer("batch_size", 64, "Batch size.")
 flags.DEFINE_integer("print_freq", 50, "Frequency to print train loss.")
@@ -21,8 +21,8 @@ flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_model_freq", 1000, "Frequency to save model.")
 flags.DEFINE_integer("max_sampled_dev_ins", 3200, "Sampled dev instances.")
 flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
-flags.mark_flag_as_required("train_data_dir")
-flags.mark_flag_as_required("dev_data_dir")
+flags.mark_flag_as_required("train_filelist")
+flags.mark_flag_as_required("dev_filelist")
 
 unittype_whitelist=[0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
                     24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
@@ -37,12 +37,12 @@ def train():
         os.mkdir(FLAGS.save_model_dir)
 
     dataset_train = SCReplayDataset(
-        FLAGS.train_data_dir,
+        FLAGS.train_filelist,
         resolution=64,
         unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
     dataset_dev = SCReplayDataset(
-        FLAGS.train_data_dir,
+        FLAGS.train_filelist,
         resolution=64,
         unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
