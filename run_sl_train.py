@@ -42,7 +42,7 @@ def train():
         unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
     dataset_dev = SCReplayDataset(
-        FLAGS.train_filelist,
+        FLAGS.dev_filelist,
         resolution=64,
         unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","))
