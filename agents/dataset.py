@@ -102,8 +102,6 @@ class SCReplayDataset(Dataset):
                         raise NotImplementedError
                 has_valid_action = True
                 break
-        if not has_valid_action:
-            label[0] = 1
         return label
 
     def _init_action_spec(self):
