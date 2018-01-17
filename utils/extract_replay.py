@@ -135,6 +135,7 @@ class ReplayProcessor(multiprocessing.Process):
         controller.step()
         all_frames = []
         done = False
+        last_obs = None
         while not done:
             cur_frame = {}
             obs = controller.observe()
@@ -142,6 +143,11 @@ class ReplayProcessor(multiprocessing.Process):
                 assert obs.player_result[player_id - 1].player_id == player_id
                 result = obs.player_result[player_id - 1].result
                 done = True
+            if last_obs is None:
+                if not done:
+                    controller.step(FLAGS.step_mul)
+                last_obs = obs
+                continue
             cur_frame['actions'] = []
             for action in obs.actions:
                 try:
@@ -149,10 +155,12 @@ class ReplayProcessor(multiprocessing.Process):
                 except ValueError:
                     pass
             if len(cur_frame['actions']) > 0 or not self._filter_empty_action:
-                cur_frame['observation'] = feat.transform_obs(obs.observation)
+                cur_frame['observation'] = feat.transform_obs(
+                    last_obs.observation)
                 all_frames.append(cur_frame)
             if not done:
                 controller.step(FLAGS.step_mul)
+            last_obs = obs
         for i in range(len(all_frames)):
             all_frames[i]['result'] = result
             all_frames[i]['replay_name'] = replay_name
