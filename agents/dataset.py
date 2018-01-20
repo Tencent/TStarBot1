@@ -57,12 +57,13 @@ class SCReplayDataset(Dataset):
     def __getitem__(self, idx):
         file_id, frame_id = self._map_global_id_to_local(idx)
         data = self._load_data(self._filelist[file_id], frame_id)
-        obs_screen, obs_minimap, action_available = self._transform_observation(
-            data["observation"])
+        obs_screen, obs_minimap, obs_player, action_available = \
+            self._transform_observation(data["observation"])
         policy_label = self._transform_actions(data["actions"], action_available)
         value_label = 1 if data["result"] == 1 else 0
         sample = {'screen_feature': obs_screen,
                   'minimap_feature': obs_minimap,
+                  'player_feature': obs_player,
                   'action_available': action_available,
                   'policy_label': policy_label,
                   'value_label': value_label}
@@ -142,6 +143,7 @@ class SCReplayDataset(Dataset):
             observation["screen"], SCREEN_FEATURES)
         obs_minimap = self._transform_spatial_features(
             observation["minimap"], MINIMAP_FEATURES)
+        obs_player = self._transform_player_feature(observation["player"])
         num_actions = self._action_head_dims[0]
         action_available = np.ones(num_actions, dtype=np.float32) * 1e30
         action_available[observation["available_actions"]] = 0
@@ -149,7 +151,7 @@ class SCReplayDataset(Dataset):
         assert obs_screen.shape[2] == self._resolution
         assert obs_minimap.shape[1] == self._resolution
         assert obs_minimap.shape[2] == self._resolution
-        return obs_screen, obs_minimap, action_available
+        return obs_screen, obs_minimap, obs_player, action_available
 
     def _transform_spatial_features(self, obs, specs):
         features = []
@@ -166,6 +168,9 @@ class SCReplayDataset(Dataset):
                 features.append(
                     np.expand_dims(np.log(ob + 1, dtype=np.float32), axis=2))
         return np.transpose(np.concatenate(features, axis=2), (2, 0, 1))
+
+    def _transform_player_feature(self, obs):
+        return np.log(obs.astype(np.float32) + 1)
 
     def _load_data(self, filepath, frame_id):
         if filepath != self._cur_filepath:

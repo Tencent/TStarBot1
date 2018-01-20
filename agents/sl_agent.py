@@ -106,12 +106,14 @@ class SLAgent(object):
             for batch in dataloader_train:
                 screen_feature = batch["screen_feature"]
                 minimap_feature = batch["minimap_feature"]
+                player_feature = batch["player_feature"]
                 action_available = batch["action_available"]
                 policy_label = batch["policy_label"]
                 value_label = batch["value_label"]
                 if self._use_gpu:
                     screen_feature = screen_feature.cuda()
                     minimap_feature = minimap_feature.cuda()
+                    player_feature = player_feature.cuda()
                     action_available = action_available.cuda()
                     policy_label = policy_label.cuda()
                     value_label = value_label.cuda()
@@ -119,6 +121,7 @@ class SLAgent(object):
                 policy_logprob, value = self._actor_critic(
                     screen=Variable(screen_feature),
                     minimap=Variable(minimap_feature),
+                    player=Variable(player_feature),
                     mask=Variable(action_available))
                 policy_cross_ent = -policy_logprob * Variable(policy_label)
                 policy_loss = policy_cross_ent.sum(1).mean()
@@ -158,12 +161,14 @@ class SLAgent(object):
                 break
             screen_feature = batch["screen_feature"]
             minimap_feature = batch["minimap_feature"]
+            player_feature = batch["player_feature"]
             action_available = batch["action_available"]
             policy_label = batch["policy_label"]
             value_label = batch["value_label"]
             if self._use_gpu:
                 screen_feature = screen_feature.cuda()
                 minimap_feature = minimap_feature.cuda()
+                player_feature = player_feature.cuda()
                 action_available = action_available.cuda()
                 policy_label = policy_label.cuda()
                 value_label = value_label.cuda()
@@ -171,6 +176,7 @@ class SLAgent(object):
             policy_logprob, value = self._actor_critic(
                 screen=Variable(screen_feature, volatile=True),
                 minimap=Variable(minimap_feature, volatile=True),
+                player=Variable(player_feature, volatile=True),
                 mask=Variable(action_available, volatile=True))
             # loss
             policy_cross_ent = -policy_logprob * Variable(policy_label,
@@ -265,23 +271,25 @@ class FullyConvNet(nn.Module):
                                        kernel_size=3,
                                        stride=1,
                                        padding=1)
-        self.spatial_policy_conv = nn.Conv2d(in_channels=64,
+        self.spatial_policy_conv = nn.Conv2d(in_channels=75,
                                              out_channels=out_channels_spatial,
                                              kernel_size=1,
                                              stride=1,
                                              padding=0)
-        self.state_fc = nn.Linear(64 * (resolution ** 2), 256)
+        self.state_fc = nn.Linear(75 * (resolution ** 2), 256)
         self.value_fc = nn.Linear(256, 1)
         self.nonspatial_policy_fc = nn.Linear(256, sum(out_dims_nonspatial))
         self._action_dims = out_dims_nonspatial[0:1] + [resolution ** 2] * 3 \
                             + out_dims_nonspatial[1:]
 
-    def forward(self, screen, minimap, mask):
+    def forward(self, screen, minimap, player, mask):
+        player = player.repeat(
+            screen.size(2), screen.size(3), 1, 1).permute(2, 3, 0, 1)
         screen = F.relu(self.screen_conv1(screen))
         screen = F.relu(self.screen_conv2(screen))
         minimap = F.relu(self.minimap_conv1(minimap))
         minimap = F.relu(self.minimap_conv2(minimap))
-        screen_minimap = torch.cat((screen, minimap), 1)
+        screen_minimap = torch.cat((screen, minimap, player), 1)
         state = F.relu(self.state_fc(
             screen_minimap.view(screen_minimap.size(0), -1)))
 
