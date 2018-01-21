@@ -166,11 +166,11 @@ class SCReplayDataset(Dataset):
                 features.append(np.eye(scale, dtype=np.float32)[ob][:, :, 1:])
             else:
                 features.append(
-                    np.expand_dims(np.log(ob + 1, dtype=np.float32), axis=2))
+                    np.expand_dims(np.log10(ob + 1, dtype=np.float32), axis=2))
         return np.transpose(np.concatenate(features, axis=2), (2, 0, 1))
 
     def _transform_player_feature(self, obs):
-        return np.log(obs.astype(np.float32) + 1)
+        return np.log10(obs[1:].astype(np.float32) + 1)
 
     def _load_data(self, filepath, frame_id):
         if filepath != self._cur_filepath:

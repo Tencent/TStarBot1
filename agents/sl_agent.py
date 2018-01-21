@@ -24,6 +24,7 @@ class SLAgent(object):
                  action_spec,
                  use_gpu=True,
                  init_model_path=None,
+                 enable_batchnorm=False,
                  seed=0):
         self._action_dims, self._action_args_map = action_spec
         self._use_gpu = use_gpu
@@ -34,21 +35,25 @@ class SLAgent(object):
         in_channels_screen, in_channels_minimap, resolution = observation_spec
         self._actor_critic = self._create_model(
             self._action_dims, in_channels_screen, in_channels_minimap,
-            resolution, init_model_path, use_gpu)
+            resolution, init_model_path, use_gpu, enable_batchnorm)
         
     def step(self, ob, info):
+        self._actor_critic.eval()
         screen_feature = torch.from_numpy(np.expand_dims(ob[0], 0))
         minimap_feature = torch.from_numpy(np.expand_dims(ob[1], 0))
+        player_feature = torch.from_numpy(np.expand_dims(ob[2], 0))
         mask = np.ones((1, self._action_dims[0]), dtype=np.float32) * 1e30
         mask[0, info] = 0
         mask = torch.from_numpy(mask)
         if self._use_gpu:
             screen_feature = screen_feature.cuda()
             minimap_feature = minimap_feature.cuda()
+            player_feature = player_feature.cuda()
             mask = mask.cuda()
         policy_logprob, value = self._actor_critic(
             screen=Variable(screen_feature, volatile=True),
             minimap=Variable(minimap_feature, volatile=True),
+            player=Variable(player_feature, volatile=True),
             mask=Variable(mask, volatile=True))
         # value
         victory_prob = value.data[0, 0]
@@ -72,12 +77,14 @@ class SLAgent(object):
               learning_rate=1e-4,
               optimizer_type="adam",
               batch_size=64,
+              value_coef=1.0,
               num_dataloader_worker=8,
               save_model_dir=None,
               save_model_freq=100000,
               print_freq=1000,
               max_sampled_dev_ins=3200,
               max_epochs=10000):
+        self._actor_critic.train()
         if optimizer_type == "adam":
             optimizer = optim.Adam(self._actor_critic.parameters(),
                                    lr=learning_rate)
@@ -125,9 +132,11 @@ class SLAgent(object):
                     mask=Variable(action_available))
                 policy_cross_ent = -policy_logprob * Variable(policy_label)
                 policy_loss = policy_cross_ent.sum(1).mean()
-                value_loss = F.binary_cross_entropy(
-                    value.squeeze(1), Variable(value_label.float()))
-                loss = policy_loss + value_loss
+                loss = policy_loss
+                if value_coef > 0:
+                    value_loss = F.binary_cross_entropy(
+                        value.squeeze(1), Variable(value_label.float()))
+                    loss = loss + value_loss
                 total_loss += loss[0]
 
                 optimizer.zero_grad()
@@ -145,6 +154,7 @@ class SLAgent(object):
                 if num_batches % save_model_freq == 0:
                     valid_loss, value_acc, action_acc, screen_acc = \
                         self.evaluate(dataloader_dev, max_sampled_dev_ins)
+                    self._actor_critic.train()
                     print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
                           "Action Accuracy: %f Screen Accuracy: %f"
                           % (num_epochs, valid_loss, value_acc, action_acc,
@@ -154,6 +164,7 @@ class SLAgent(object):
             num_epochs += 1
 
     def evaluate(self, dataloader_dev, max_instances=None):
+        self._actor_critic.eval()
         num_instances, num_screen_valid_instances, total_loss = 0, 0, 0
         correct_value, correct_action, correct_screen = 0, 0, 0
         for batch in dataloader_dev:
@@ -212,13 +223,14 @@ class SLAgent(object):
 
     def _create_model(self, action_dims, in_channels_screen,
                       in_channels_minimap, resolution, init_model_path,
-                      use_gpu):
+                      use_gpu, enable_batchnorm):
         model = FullyConvNet(
             resolution=resolution,
             in_channels_screen=in_channels_screen,
             in_channels_minimap=in_channels_minimap,
             out_channels_spatial=3,
-            out_dims_nonspatial=action_dims[0:1] + action_dims[4:])
+            out_dims_nonspatial=action_dims[0:1] + action_dims[4:],
+            enable_batchnorm=enable_batchnorm)
         model.apply(weights_init)
         if init_model_path:
             model.load_state_dict(
@@ -249,7 +261,8 @@ class FullyConvNet(nn.Module):
                  in_channels_screen,
                  in_channels_minimap,
                  out_channels_spatial,
-                 out_dims_nonspatial):
+                 out_dims_nonspatial,
+                 enable_batchnorm=False):
         super(FullyConvNet, self).__init__()
         self.screen_conv1 = nn.Conv2d(in_channels=in_channels_screen,
                                       out_channels=16,
@@ -271,27 +284,47 @@ class FullyConvNet(nn.Module):
                                        kernel_size=3,
                                        stride=1,
                                        padding=1)
-        self.spatial_policy_conv = nn.Conv2d(in_channels=75,
+        self.spatial_policy_conv = nn.Conv2d(in_channels=74,
                                              out_channels=out_channels_spatial,
                                              kernel_size=1,
                                              stride=1,
                                              padding=0)
-        self.state_fc = nn.Linear(75 * (resolution ** 2), 256)
+        if enable_batchnorm:
+            self.screen_bn1 = nn.BatchNorm2d(16)
+            self.screen_bn2 = nn.BatchNorm2d(32)
+            self.minimap_bn1 = nn.BatchNorm2d(16)
+            self.minimap_bn2 = nn.BatchNorm2d(32)
+            self.player_bn = nn.BatchNorm2d(10)
+            self.state_bn = nn.BatchNorm1d(256)
+        self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
         self.value_fc = nn.Linear(256, 1)
         self.nonspatial_policy_fc = nn.Linear(256, sum(out_dims_nonspatial))
+
+        self._enable_batchnorm = enable_batchnorm
         self._action_dims = out_dims_nonspatial[0:1] + [resolution ** 2] * 3 \
                             + out_dims_nonspatial[1:]
 
     def forward(self, screen, minimap, player, mask):
         player = player.repeat(
             screen.size(2), screen.size(3), 1, 1).permute(2, 3, 0, 1)
-        screen = F.relu(self.screen_conv1(screen))
-        screen = F.relu(self.screen_conv2(screen))
-        minimap = F.relu(self.minimap_conv1(minimap))
-        minimap = F.relu(self.minimap_conv2(minimap))
+        if self._enable_batchnorm:
+            screen = F.leaky_relu(self.screen_bn1(self.screen_conv1(screen)))
+            screen = F.leaky_relu(self.screen_bn2(self.screen_conv2(screen)))
+            minimap = F.leaky_relu(self.minimap_bn1(self.minimap_conv1(minimap)))
+            minimap = F.leaky_relu(self.minimap_bn2(self.minimap_conv2(minimap)))
+            player = self.player_bn(player.contiguous())
+        else:
+            screen = F.leaky_relu(self.screen_conv1(screen))
+            screen = F.leaky_relu(self.screen_conv2(screen))
+            minimap = F.leaky_relu(self.minimap_conv1(minimap))
+            minimap = F.leaky_relu(self.minimap_conv2(minimap))
         screen_minimap = torch.cat((screen, minimap, player), 1)
-        state = F.relu(self.state_fc(
-            screen_minimap.view(screen_minimap.size(0), -1)))
+        if self._enable_batchnorm:
+            state = F.leaky_relu(self.state_bn(self.state_fc(
+                screen_minimap.view(screen_minimap.size(0), -1))))
+        else:
+            state = F.leaky_relu(self.state_fc(
+                screen_minimap.view(screen_minimap.size(0), -1)))
 
         spatial_policy = self.spatial_policy_conv(screen_minimap)
         spatial_policy = spatial_policy.view(spatial_policy.size(0), -1)

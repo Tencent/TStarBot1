@@ -84,12 +84,16 @@ class SC2Env(gym.Env):
             timestep.observation["screen"], SCREEN_FEATURES)
         obs_minimap = self._transform_spatial_features(
             timestep.observation["minimap"], MINIMAP_FEATURES)
-        obs = (obs_screen, obs_minimap)
+        obs_player = self._transform_player_feature(observation["player"])
+        obs = (obs_screen, obs_minimap, obs_player)
         done = timestep.last()
         info = timestep.observation["available_actions"]
         info = [self._valid_action_ids.index(fid)
                 for fid in info if fid in self._valid_action_ids]
         return obs, timestep.reward, done, info
+
+    def _transform_player_feature(self, obs):
+        return np.log10(obs[1:].astype(np.float32) + 1)
 
     def _transform_spatial_features(self, obs, specs):
         features = []
@@ -104,7 +108,7 @@ class SC2Env(gym.Env):
                 features.append(np.eye(scale, dtype=np.float32)[ob][:, :, 1:])
             else:
                 features.append(
-                    np.expand_dims(np.log(ob + 1, dtype=np.float32), axis=2))
+                    np.expand_dims(np.log10(ob + 1, dtype=np.float32), axis=2))
         return np.transpose(np.concatenate(features, axis=2), (2, 0, 1))
 
     def _get_action_spec(self):
