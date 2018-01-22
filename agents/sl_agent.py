@@ -116,7 +116,7 @@ class SLAgent(object):
                                     pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
 
-        num_batches, num_epochs, total_loss = 0, 0, 0
+        num_batches, num_epochs, total_loss, num_instances = 0, 0, 0, 0
         last_time = time.time()
         while num_epochs < max_epochs:
             for batch in dataloader_train:
@@ -145,8 +145,9 @@ class SLAgent(object):
                 if value_coef > 0:
                     value_loss = F.binary_cross_entropy(
                         value.squeeze(1), Variable(value_label.float()))
-                    loss = loss + value_loss
+                    loss = loss + value_loss * value_coef
                 total_loss += loss[0]
+                num_instances += value_label.size(0)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -156,13 +157,15 @@ class SLAgent(object):
                 if num_batches % print_freq == 0:
                     print("Epochs: %d Batches: %d Avg Train Loss: %f "
                           "Speed: %.2f s/batch"
-                          % (num_epochs, num_batches, total_loss / print_freq,
+                          % (num_epochs, num_batches, total_loss / num_instances,
                              (time.time() - last_time) / print_freq))
                     last_time = time.time()
                     total_loss = 0
+                    num_instances = 0
                 if num_batches % save_model_freq == 0:
                     valid_loss, value_acc, action_acc, screen_acc = \
-                        self.evaluate(dataloader_dev, max_sampled_dev_ins)
+                        self.evaluate(dataloader_dev, value_coef,
+                                      max_sampled_dev_ins)
                     self._actor_critic.train()
                     print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
                           "Action Accuracy: %f Screen Accuracy: %f"
@@ -172,7 +175,7 @@ class SLAgent(object):
                         save_model_dir, 'agent.model-%d' % num_batches))
             num_epochs += 1
 
-    def evaluate(self, dataloader_dev, max_instances=None):
+    def evaluate(self, dataloader_dev, value_coef, max_instances=None):
         self._actor_critic.eval()
         num_instances, num_screen_valid_instances, total_loss = 0, 0, 0
         correct_value, correct_action, correct_screen = 0, 0, 0
@@ -202,9 +205,11 @@ class SLAgent(object):
             policy_cross_ent = -policy_logprob * Variable(policy_label,
                                                           volatile=True)
             policy_loss = policy_cross_ent.sum(1).mean()
-            value_loss = F.binary_cross_entropy(
-                value.squeeze(1), Variable(value_label.float(), volatile=True))
-            loss = policy_loss + value_loss
+            loss = policy_loss
+            if value_coef > 0:
+                value_loss = F.binary_cross_entropy(
+                    value.squeeze(1), Variable(value_label.float(), volatile=True))
+                loss = loss + value_loss * value_coef
             total_loss += loss[0]
             # value accuracy
             correct_value += ((value.squeeze(1) > 0.5).long() == Variable(
