@@ -37,7 +37,7 @@ class SC2Env(gym.Env):
             game_steps_per_episode=game_steps_per_episode,
             screen_size_px=screen_size_px,
             minimap_size_px=screen_size_px,
-            visualize=False)
+            visualize=True)
         self._valid_action_ids = list(set(range(524)) - set(action_filter))
 
         self._unittype_map = None
@@ -84,7 +84,8 @@ class SC2Env(gym.Env):
             timestep.observation["screen"], SCREEN_FEATURES)
         obs_minimap = self._transform_spatial_features(
             timestep.observation["minimap"], MINIMAP_FEATURES)
-        obs_player = self._transform_player_feature(observation["player"])
+        obs_player = self._transform_player_feature(
+            timestep.observation["player"])
         obs = (obs_screen, obs_minimap, obs_player)
         done = timestep.last()
         info = timestep.observation["available_actions"]

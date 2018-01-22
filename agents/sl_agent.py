@@ -37,8 +37,9 @@ class SLAgent(object):
             self._action_dims, in_channels_screen, in_channels_minimap,
             resolution, init_model_path, use_gpu, enable_batchnorm)
         
-    def step(self, ob, info):
+    def step(self, ob, info, greedy=False):
         self._actor_critic.eval()
+        info.remove(0) # remove no_op action
         screen_feature = torch.from_numpy(np.expand_dims(ob[0], 0))
         minimap_feature = torch.from_numpy(np.expand_dims(ob[1], 0))
         player_feature = torch.from_numpy(np.expand_dims(ob[2], 0))
@@ -58,14 +59,22 @@ class SLAgent(object):
         # value
         victory_prob = value.data[0, 0]
         # control - function id
-        function_id = torch.max(
-            policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+        if greedy:
+            function_id = torch.max(
+                policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+        else:
+            function_id = torch.exp(policy_logprob[:, :self._action_dims[0]])\
+                .multinomial(1).data[0, 0]
         # control - function arguments
         arguments = []
         for arg_id in self._action_args_map[function_id]:
             l = sum(self._action_dims[:arg_id+1])
             r = sum(self._action_dims[:arg_id+2])
-            arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+            if greedy:
+                arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+            else:
+                arg_val = torch.exp(
+                    policy_logprob[:, l:r]).multinomial(1).data[0, 0]
             arguments.append(arg_val)
         print("Function ID: %d, Arguments: %s, Winning Probability: %f"
               % (function_id, arguments, victory_prob))
@@ -305,7 +314,7 @@ class FullyConvNet(nn.Module):
                             + out_dims_nonspatial[1:]
 
     def forward(self, screen, minimap, player, mask):
-        player = player.repeat(
+        player = player.clone().repeat(
             screen.size(2), screen.size(3), 1, 1).permute(2, 3, 0, 1)
         if self._enable_batchnorm:
             screen = F.leaky_relu(self.screen_bn1(self.screen_conv1(screen)))

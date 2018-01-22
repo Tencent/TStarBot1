@@ -11,12 +11,14 @@ flags.DEFINE_string("map", None, "Name of a map to use.")
 flags.DEFINE_integer("step_mul", 8, "Game steps per agent step.")
 flags.DEFINE_integer("resolution", 64, "Resolution for screen and minimap.")
 flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
+flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_enum("agent_race", 'T', ['P', 'Z', 'R', 'T'], "Agent's race.")
 flags.DEFINE_enum("bot_race", 'T', ['P', 'Z', 'R', 'T'], "Bot's race.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', 'A', '3', '2', '5', '4', '7', '6', '9', '8'],
                   "Bot's strength.")
+flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
 flags.mark_flag_as_required("map")
 
 unittype_whitelist=[0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
@@ -36,13 +38,14 @@ def train():
                  screen_size_px=(FLAGS.resolution, FLAGS.resolution),
                  action_filter=[],
                  unittype_whitelist=unittype_whitelist,
-                 observation_filter=[])
+                 observation_filter=FLAGS.observation_filter.split(","))
 
     agent = SLAgent(
         observation_spec=env.observation_spec,
         action_spec=env.action_spec,
         use_gpu=FLAGS.use_gpu,
-        init_model_path=FLAGS.init_model_path)
+        init_model_path=FLAGS.init_model_path,
+        enable_batchnorm=FLAGS.use_batchnorm)
     try:
         ob, info = env.reset()
         done = False
