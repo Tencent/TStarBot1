@@ -37,8 +37,9 @@ class SLAgent(object):
             self._action_dims, in_channels_screen, in_channels_minimap,
             resolution, init_model_path, use_gpu, enable_batchnorm)
         
-    def step(self, ob, info):
+    def step(self, ob, info, greedy=False):
         self._actor_critic.eval()
+        info.remove(0) # remove no_op action
         screen_feature = torch.from_numpy(np.expand_dims(ob[0], 0))
         minimap_feature = torch.from_numpy(np.expand_dims(ob[1], 0))
         player_feature = torch.from_numpy(np.expand_dims(ob[2], 0))
@@ -58,14 +59,22 @@ class SLAgent(object):
         # value
         victory_prob = value.data[0, 0]
         # control - function id
-        function_id = torch.max(
-            policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+        if greedy:
+            function_id = torch.max(
+                policy_logprob[:, :self._action_dims[0]], 1)[1].data[0]
+        else:
+            function_id = torch.exp(policy_logprob[:, :self._action_dims[0]])\
+                .multinomial(1).data[0, 0]
         # control - function arguments
         arguments = []
         for arg_id in self._action_args_map[function_id]:
             l = sum(self._action_dims[:arg_id+1])
             r = sum(self._action_dims[:arg_id+2])
-            arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+            if greedy:
+                arg_val = torch.max(policy_logprob[:, l:r], 1)[1].data[0]
+            else:
+                arg_val = torch.exp(
+                    policy_logprob[:, l:r]).multinomial(1).data[0, 0]
             arguments.append(arg_val)
         print("Function ID: %d, Arguments: %s, Winning Probability: %f"
               % (function_id, arguments, victory_prob))
@@ -107,7 +116,7 @@ class SLAgent(object):
                                     pin_memory=self._use_gpu,
                                     num_workers=num_dataloader_worker)
 
-        num_batches, num_epochs, total_loss = 0, 0, 0
+        num_batches, num_epochs, total_loss, num_instances = 0, 0, 0, 0
         last_time = time.time()
         while num_epochs < max_epochs:
             for batch in dataloader_train:
@@ -136,8 +145,9 @@ class SLAgent(object):
                 if value_coef > 0:
                     value_loss = F.binary_cross_entropy(
                         value.squeeze(1), Variable(value_label.float()))
-                    loss = loss + value_loss
+                    loss = loss + value_loss * value_coef
                 total_loss += loss[0]
+                num_instances += value_label.size(0)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -147,13 +157,15 @@ class SLAgent(object):
                 if num_batches % print_freq == 0:
                     print("Epochs: %d Batches: %d Avg Train Loss: %f "
                           "Speed: %.2f s/batch"
-                          % (num_epochs, num_batches, total_loss / print_freq,
+                          % (num_epochs, num_batches, total_loss / num_instances,
                              (time.time() - last_time) / print_freq))
                     last_time = time.time()
                     total_loss = 0
+                    num_instances = 0
                 if num_batches % save_model_freq == 0:
                     valid_loss, value_acc, action_acc, screen_acc = \
-                        self.evaluate(dataloader_dev, max_sampled_dev_ins)
+                        self.evaluate(dataloader_dev, value_coef,
+                                      max_sampled_dev_ins)
                     self._actor_critic.train()
                     print("Epochs: %d Validation Loss: %f Value Accuracy: %f "
                           "Action Accuracy: %f Screen Accuracy: %f"
@@ -163,7 +175,7 @@ class SLAgent(object):
                         save_model_dir, 'agent.model-%d' % num_batches))
             num_epochs += 1
 
-    def evaluate(self, dataloader_dev, max_instances=None):
+    def evaluate(self, dataloader_dev, value_coef, max_instances=None):
         self._actor_critic.eval()
         num_instances, num_screen_valid_instances, total_loss = 0, 0, 0
         correct_value, correct_action, correct_screen = 0, 0, 0
@@ -193,9 +205,11 @@ class SLAgent(object):
             policy_cross_ent = -policy_logprob * Variable(policy_label,
                                                           volatile=True)
             policy_loss = policy_cross_ent.sum(1).mean()
-            value_loss = F.binary_cross_entropy(
-                value.squeeze(1), Variable(value_label.float(), volatile=True))
-            loss = policy_loss + value_loss
+            loss = policy_loss
+            if value_coef > 0:
+                value_loss = F.binary_cross_entropy(
+                    value.squeeze(1), Variable(value_label.float(), volatile=True))
+                loss = loss + value_loss * value_coef
             total_loss += loss[0]
             # value accuracy
             correct_value += ((value.squeeze(1) > 0.5).long() == Variable(
@@ -305,7 +319,7 @@ class FullyConvNet(nn.Module):
                             + out_dims_nonspatial[1:]
 
     def forward(self, screen, minimap, player, mask):
-        player = player.repeat(
+        player = player.clone().repeat(
             screen.size(2), screen.size(3), 1, 1).permute(2, 3, 0, 1)
         if self._enable_batchnorm:
             screen = F.leaky_relu(self.screen_bn1(self.screen_conv1(screen)))
