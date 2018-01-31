@@ -24,7 +24,8 @@ class A2CScriptedAgent(object):
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
                  discount=0.999,
-                 ent_coef=1e-2,
+                 ent_coef=0.005,
+                 ent_coef_decay=0.9999,
                  val_coef=0.5,
                  use_gpu=True,
                  init_model_path=None,
@@ -35,6 +36,7 @@ class A2CScriptedAgent(object):
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
+        self._ent_coef_decay = ent_coef_decay
         self._val_coef = val_coef
         self._use_gpu = use_gpu
         self._save_model_dir = save_model_dir
@@ -117,10 +119,10 @@ class A2CScriptedAgent(object):
         policy_loss = - (log_prob.gather(1, action) *
                          Variable(advantage.data)).mean()
         entropy_loss = - entropy.mean()
-        #print(policy_loss, value_loss, entropy_loss)
+        self._ent_coef *= self._ent_coef_decay
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
-        #print(entropy_loss)
+        print("coef: %f loss: %f" % (self._ent_coef, entropy_loss))
 
         self._optimizer.zero_grad()
         loss.backward()

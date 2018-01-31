@@ -25,9 +25,10 @@ class SC2ScriptedEnv(gym.Env):
                  bot_race=None,
                  difficulty=None,
                  game_steps_per_episode=0,
-                 resolution=64,
+                 resolution=32,
                  unittype_whitelist=None,
                  observation_filter=[]):
+        assert resolution == 32
         self._resolution = resolution
         self._num_steps = 0
         self._sc2_env = PySC2Env(
@@ -145,8 +146,6 @@ class SC2ScriptedEnv(gym.Env):
         return num_channels_screen, num_channels_minimap
 
     def _is_available(self, obs, func_id):
-        #if not func_id in obs.observation["available_actions"]:
-            #print(func_id, obs.observation["available_actions"])
         return func_id in obs.observation["available_actions"]
 
     def _cmds_train_scv(self, obs):
@@ -225,7 +224,7 @@ class SC2ScriptedEnv(gym.Env):
         return np.any(player_relative == 4)
 
     def _build_barrack(self, obs):
-        xy = self._find_vacant_location(obs, 13)
+        xy = self._find_vacant_location(obs, 7)
         if xy is None:
             return -1, []
         function_id = actions.FUNCTIONS.Build_Barracks_screen.id
@@ -233,7 +232,7 @@ class SC2ScriptedEnv(gym.Env):
         return function_id, function_args
 
     def _build_supply_depot(self, obs):
-        xy = self._find_vacant_location(obs, 9)
+        xy = self._find_vacant_location(obs, 5)
         if xy is None:
             return -1, []
         function_id = actions.FUNCTIONS.Build_SupplyDepot_screen.id
@@ -254,7 +253,7 @@ class SC2ScriptedEnv(gym.Env):
 
     def _find_enemy_location(self, obs):
         player_relative = obs.observation["screen"][5]
-        candidate_xy = np.transpose(np.nonzero(player_relative == 5)).tolist()
+        candidate_xy = np.transpose(np.nonzero(player_relative == 4)).tolist()
         if len(candidate_xy) == 0:
             return None
         xy = random.choice(candidate_xy)
@@ -292,7 +291,7 @@ class SC2ScriptedEnv(gym.Env):
 
     def _select_barack(self, obs):
         unittype = obs.observation["screen"][6]
-        barrack_map = ndimage.grey_erosion(unittype == 21, size=(7, 7))
+        barrack_map = ndimage.grey_erosion(unittype == 21, size=(3, 3))
         candidate_xy = np.transpose(np.nonzero(barrack_map)).tolist()
         if len(candidate_xy) == 0:
             return -1, []
@@ -347,32 +346,16 @@ class SC2ScriptedEnv(gym.Env):
         function_id = actions.FUNCTIONS.move_camera.id
         if self._base_xy[0] < self._resolution / 2:
              offset = [2, 2]
-             random_offset = np.random.randint(0, 1, size=2)
         elif self._base_xy[0] > self._resolution / 2:
-             offset = [-2, 0]
-             random_offset = np.random.randint(-1, 0, size=2)
+             offset = [0, 0]
         function_args = [self._base_xy[::-1] + offset]
         return function_id, function_args
 
     def _move_camera_to_enemy_base(self, obs):
         function_id = actions.FUNCTIONS.move_camera.id
         if self._base_xy[0] < self._resolution / 2:
-            offset = [-2, 1]
-            random_offset = np.random.randint(-1, 0, size=2)
+            offset = [0, 0]
         elif self._base_xy[0] > self._resolution / 2:
-            offset = [0, 2]
-            random_offset = np.random.randint(0, 1, size=2)
+            offset = [0, 1]
         function_args = [self._resolution - self._base_xy[::-1] + offset]
-        return function_id, function_args
-
-    def _move_camera_to_selected(self, obs):
-        camera = obs.observation["minimap"][3]
-        selected = obs.observation["screen"][5]
-        current_xy = np.mean(
-            np.transpose(np.nonzero(camera == 1)), 0).astype(int)
-        target_xy = current_xy - (selected.mean() -
-            [self._resolution / 2, self._resolution / 2]) / 5
-        target_xy = target_xy.astype(np.int32)
-        function_id = actions.FUNCTIONS.move_camera.id
-        function_args = [target_xy[::-1]]
         return function_id, function_args
