@@ -102,7 +102,7 @@ class A2CSimpleAgent(object):
         value_loss = advantage.pow(2).mean() * 0.5
         policy_loss = - (log_prob.gather(1, action) *
                          Variable(advantage.data)).mean()
-        entropy_loss = entropy.mean()
+        entropy_loss = - entropy.mean()
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
 

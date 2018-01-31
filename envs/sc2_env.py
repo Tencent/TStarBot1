@@ -69,12 +69,13 @@ class SC2Env(gym.Env):
                 function_args.append([arg_val])
         op = actions.FunctionCall(function_id, function_args)
         timestep = self._sc2_env.step([op])[0]
-        return self._transform_observation(timestep)
+        return (self._transform_observation(timestep), timestep)
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
         return (self._transform_observation(timestep)[0],
-                self._transform_observation(timestep)[3])
+                self._transform_observation(timestep)[3],
+                timestep)
 
     def _close(self):
         self._sc2_env.close()
