@@ -79,24 +79,33 @@ class SC2ScriptedEnv(gym.Env):
         obs = self._last_obs
         self._locate_base(obs)
         step_taken = False
+        reward = 0
         for func in self._action_to_cmds[action](obs):
             func_id, func_args = func(obs)
             if not self._is_available(obs, func_id):
                 break
             op =  actions.FunctionCall(func_id, func_args)
             obs = self._sc2_env.step([op])[0]
+            reward += obs.reward
             step_taken = True
+            if obs.last():
+                break
         if not step_taken:
             op =  actions.FunctionCall(actions.FUNCTIONS.no_op.id, [])
             obs = self._sc2_env.step([op])[0]
+            reward += obs.reward
         self._last_obs = obs
-        return self._transform_observation(obs)
+        transformed_obs = self._transform_observation(obs)
+        done = obs.last()
+        info = None
+        if done:
+            transformed_obs, info = self._reset()
+        return transformed_obs, reward, done, info
 
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
         self._last_obs = timestep
-        return (self._transform_observation(timestep)[0],
-                self._transform_observation(timestep)[3])
+        return (self._transform_observation(timestep), None)
 
     def _close(self):
         self._sc2_env.close()
@@ -108,9 +117,7 @@ class SC2ScriptedEnv(gym.Env):
             timestep.observation["minimap"], MINIMAP_FEATURES)
         obs_player = self._transform_player_feature(
             timestep.observation["player"])
-        obs = (obs_screen, obs_minimap, obs_player)
-        done = timestep.last()
-        return obs, timestep.reward, done, None
+        return (obs_screen, obs_minimap, obs_player)
 
     def _transform_player_feature(self, obs):
         return np.log10(obs[1:].astype(np.float32) + 1)

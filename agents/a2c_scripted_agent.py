@@ -23,7 +23,7 @@ class A2CScriptedAgent(object):
                  rmsprop_lr=1e-4,
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
-                 discount=0.999,
+                 discount=1.0,
                  ent_coef=0.001,
                  ent_coef_decay=0.99995,
                  val_coef=0.5,
@@ -122,14 +122,14 @@ class A2CScriptedAgent(object):
         if self._ent_coef > 1e-3:
             self._ent_coef *= self._ent_coef_decay
         loss = policy_loss + self._val_coef * value_loss + \
-               self._ent_coef * entropy_loss
+            self._ent_coef * entropy_loss
         print(value.mean(), torch.cat(target_value_mb).mean())
-        print("value loss: %f entropy_loss: %f entropy loss: %f" % 
-              (value_loss, policy_loss, entropy_loss))
+        print("value loss: %f policy_loss: %f entropy loss: %f entropy coef: %f" % 
+              (value_loss, policy_loss, entropy_loss, self._ent_coef))
 
         self._optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
+        #torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 100)
         self._optimizer.step()
 
     def _boostrap(self, reward_mb, done_mb, last_obs):
@@ -139,7 +139,7 @@ class A2CScriptedAgent(object):
         target_value = []
         r = last_value.data.squeeze() * (1 - done_mb[-1])
         for reward, done in reversed(zip(reward_mb, done_mb)):
-            r *= (1 - done)
+            r = r * (1 - done)
             r = self._discount * r + reward
             target_value.append(r.unsqueeze(1))
         return target_value[::-1]
@@ -173,6 +173,30 @@ def weights_init(m):
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
         m.bias.data.fill_(0)
+
+
+class FullyConvNetDebug(nn.Module):
+    def __init__(self,
+                 resolution,
+                 in_channels_screen,
+                 in_channels_minimap,
+                 out_dims,
+                 enable_batchnorm=False):
+        super(FullyConvNetDebug, self).__init__()
+        self.value_fc = nn.Linear(10, 1024)
+        self.value_fc2 = nn.Linear(1024, 256)
+        self.value_fc3 = nn.Linear(256, 1)
+        self.policy_fc = nn.Linear(10, 1024)
+        self.policy_fc2 = nn.Linear(1024, 256)
+        self.policy_fc3 = nn.Linear(256, out_dims)
+
+    def forward(self, x):
+        screen, minimap, player = x
+        value = self.value_fc3(F.leaky_relu(self.value_fc2(
+            F.leaky_relu(self.value_fc(player)))))
+        policy_logit = self.policy_fc3(F.leaky_relu(self.policy_fc2(
+            F.leaky_relu(self.policy_fc(player)))))
+        return policy_logit, value
 
 
 class FullyConvNet(nn.Module):
@@ -211,8 +235,10 @@ class FullyConvNet(nn.Module):
             self.player_bn = nn.BatchNorm2d(10)
             self.state_bn = nn.BatchNorm1d(256)
         self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
-        self.value_fc = nn.Linear(256, 1)
-        self.policy_fc = nn.Linear(256, out_dims)
+        self.value_fc = nn.Linear(256, 64)
+        self.value_fc2 = nn.Linear(64, 1)
+        self.policy_fc = nn.Linear(256, 64)
+        self.policy_fc2 = nn.Linear(64, out_dims)
         self._enable_batchnorm = enable_batchnorm
 
     def forward(self, x):
@@ -237,6 +263,6 @@ class FullyConvNet(nn.Module):
         else:
             state = F.leaky_relu(self.state_fc(
                 screen_minimap.view(screen_minimap.size(0), -1)))
-        value = self.value_fc(state)
-        policy_logit = self.policy_fc(state)
+        value = self.value_fc2(F.leaky_relu(self.value_fc(state)))
+        policy_logit = self.policy_fc2(F.leaky_relu(self.policy_fc(state)))
         return policy_logit, value
