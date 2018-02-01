@@ -27,7 +27,8 @@ class SC2ScriptedEnv(gym.Env):
                  game_steps_per_episode=0,
                  resolution=32,
                  unittype_whitelist=None,
-                 observation_filter=[]):
+                 observation_filter=[],
+                 score_index=None):
         assert resolution == 32
         self._resolution = resolution
         self._num_steps = 0
@@ -40,7 +41,8 @@ class SC2ScriptedEnv(gym.Env):
             game_steps_per_episode=game_steps_per_episode,
             screen_size_px=(resolution, resolution),
             minimap_size_px=(resolution, resolution),
-            visualize=False)
+            visualize=False,
+            score_index=score_index)
 
         self._unittype_map = None
         if unittype_whitelist:

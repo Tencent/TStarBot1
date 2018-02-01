@@ -123,14 +123,13 @@ class A2CScriptedAgent(object):
             self._ent_coef *= self._ent_coef_decay
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
-        #print("coef: %f loss: %f" % (self._ent_coef, entropy_loss))
         print(value.mean(), torch.cat(target_value_mb).mean())
         print("value loss: %f entropy_loss: %f entropy loss: %f" % 
               (value_loss, policy_loss, entropy_loss))
 
         self._optimizer.zero_grad()
         loss.backward()
-        #torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
+        torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 40)
         self._optimizer.step()
 
     def _boostrap(self, reward_mb, done_mb, last_obs):

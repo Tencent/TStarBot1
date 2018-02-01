@@ -14,9 +14,12 @@ flags.DEFINE_integer("n_envs", 32, "Number of environments to run in parallel.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
 flags.DEFINE_float("rmsprop_lr", 1e-5, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
+flags.DEFINE_float("entropy_coef", 1e-3, "Entropy loss coefficient.")
+flags.DEFINE_float("value_coef", 0.5, "Entropy loss coefficient.")
 flags.DEFINE_integer("rollout_num_steps", 20, "Rollout steps for A2C.")
 flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
+flags.DEFINE_boolean("use_blizzard_score", False, "Use blizzard score or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_model_freq", 500, "Model saving frequency.")
@@ -48,7 +51,8 @@ def train():
         difficulty=FLAGS.difficulty,
         resolution=FLAGS.resolution,
         unittype_whitelist=unittype_whitelist,
-        observation_filter=FLAGS.observation_filter.split(","))
+        observation_filter=FLAGS.observation_filter.split(","),
+        score_index=0 if FLAGS.use_blizzard_score else None)
         for _ in range(FLAGS.n_envs)])
     agent = A2CScriptedAgent(
         observation_spec=envs.observation_spec,
@@ -57,6 +61,8 @@ def train():
         rmsprop_eps=FLAGS.rmsprop_eps,
         rollout_num_steps=FLAGS.rollout_num_steps,
         use_gpu=FLAGS.use_gpu,
+        ent_coef=FLAGS.entropy_coef,
+        val_coef=FLAGS.value_coef,
         init_model_path=FLAGS.init_model_path,
         save_model_dir=FLAGS.save_model_dir,
         save_model_freq=FLAGS.save_model_freq,
