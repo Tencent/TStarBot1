@@ -24,7 +24,7 @@ class A2CScriptedAgent(object):
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
                  discount=0.999,
-                 ent_coef=0.002,
+                 ent_coef=0.001,
                  ent_coef_decay=0.99995,
                  val_coef=0.5,
                  use_gpu=True,
@@ -123,7 +123,10 @@ class A2CScriptedAgent(object):
             self._ent_coef *= self._ent_coef_decay
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
-        print("coef: %f loss: %f" % (self._ent_coef, entropy_loss))
+        #print("coef: %f loss: %f" % (self._ent_coef, entropy_loss))
+        print(value.mean(), torch.cat(target_value_mb).mean())
+        print("value loss: %f entropy_loss: %f entropy loss: %f" % 
+              (value_loss, policy_loss, entropy_loss))
 
         self._optimizer.zero_grad()
         loss.backward()
@@ -137,7 +140,7 @@ class A2CScriptedAgent(object):
         target_value = []
         r = last_value.data.squeeze() * (1 - done_mb[-1])
         for reward, done in reversed(zip(reward_mb, done_mb)):
-            r *= 1 - done 
+            r *= (1 - done)
             r = self._discount * r + reward
             target_value.append(r.unsqueeze(1))
         return target_value[::-1]

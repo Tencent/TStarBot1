@@ -9,12 +9,12 @@ from agents.a2c_scripted_agent import A2CScriptedAgent
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string("map", 'AbyssalReef', "Name of a map to use.")
-flags.DEFINE_integer("step_mul", 8, "Game steps per agent step.")
+flags.DEFINE_integer("step_mul", 16, "Game steps per agent step.")
 flags.DEFINE_integer("n_envs", 32, "Number of environments to run in parallel.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
-flags.DEFINE_float("rmsprop_lr", 5e-5, "Learning rate for RMSProp.")
+flags.DEFINE_float("rmsprop_lr", 1e-5, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
-flags.DEFINE_integer("rollout_num_steps", 10, "Rollout steps for A2C.")
+flags.DEFINE_integer("rollout_num_steps", 20, "Rollout steps for A2C.")
 flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
