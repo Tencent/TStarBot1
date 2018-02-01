@@ -46,7 +46,7 @@ class SC2ScriptedEnv(gym.Env):
         if unittype_whitelist:
             self._unittype_map = {v : i
                                   for i, v in enumerate(unittype_whitelist)}
-        self._observation_filter = set(observation_filter) 
+        self._observation_filter = set(observation_filter)
 
         self._last_raw_obs = None
         self._func_queue = []
@@ -58,8 +58,10 @@ class SC2ScriptedEnv(gym.Env):
                                 self._cmds_train_marine,
                                 self._cmds_move_camera_to_base,
                                 self._cmds_all_defence,
-                                self._cmds_all_attack]
-    
+                                self._cmds_all_attack_base,
+                                self._cmds_all_attack_any,
+                                self._cmds_all_idle_workers_collect_minerals]
+
     @property
     def action_spec(self):
         return (len(self._action_to_cmds),)
@@ -161,6 +163,10 @@ class SC2ScriptedEnv(gym.Env):
         functions.append(self._move_camera_to_base)
         functions.append(self._select_barack)
         functions.append(self._train_marine)
+        functions.append(self._train_marine)
+        functions.append(self._train_marine)
+        functions.append(self._train_marine)
+        functions.append(self._train_marine)
         return functions
 
     def _cmds_build_barrack(self, obs):
@@ -199,7 +205,7 @@ class SC2ScriptedEnv(gym.Env):
         functions.append(lambda obs: (actions.FUNCTIONS.no_op.id, []))
         return functions
 
-    def _cmds_all_attack(self, obs):
+    def _cmds_all_attack_base(self, obs):
         functions = []
         if not self._has_enemy_in_screen(obs):
             functions.append(self._move_camera_to_enemy_base)
@@ -208,6 +214,20 @@ class SC2ScriptedEnv(gym.Env):
         else:
             functions.append(self._select_army)
             functions.append(self._attack_in_screen)
+        return functions
+
+    def _cmds_all_attack_any(self, obs):
+        functions = []
+        functions.append(self._move_camera_to_any_enemy)
+        functions.append(self._select_army)
+        functions.append(self._attack_in_screen)
+        return functions
+
+    def _cmds_all_idle_workers_collect_minerals(self, obs):
+        functions = []
+        functions.append(self._move_camera_to_base)
+        functions.append(self._select_all_idle_workers)
+        functions.append(self._towards_minerals)
         return functions
 
     def _is_command_center_selected(self, obs):
@@ -251,7 +271,7 @@ class SC2ScriptedEnv(gym.Env):
         xy = random.choice(candidate_xy)
         return xy
 
-    def _find_enemy_location(self, obs):
+    def _find_enemy_screen(self, obs):
         player_relative = obs.observation["screen"][5]
         candidate_xy = np.transpose(np.nonzero(player_relative == 4)).tolist()
         if len(candidate_xy) == 0:
@@ -259,8 +279,25 @@ class SC2ScriptedEnv(gym.Env):
         xy = random.choice(candidate_xy)
         return xy
 
+    def _find_enemy_minimap(self, obs):
+        player_relative = obs.observation["minimap"][5]
+        candidate_xy = np.transpose(np.nonzero(player_relative == 4)).tolist()
+        if len(candidate_xy) == 0:
+            return None
+        xy = random.choice(candidate_xy)
+        return xy
+
+    def _find_minerals_screen(self, obs):
+        unittype = obs.observation["screen"][6]
+        minerals = ndimage.grey_erosion(unittype == 483, size=(3, 3))
+        candidate_xy = np.transpose(np.nonzero(minerals)).tolist()
+        if len(candidate_xy) == 0:
+            return None
+        xy = random.choice(candidate_xy)
+        return xy
+
     def _attack_in_screen(self, obs):
-        xy = self._find_enemy_location(obs)
+        xy = self._find_enemy_screen(obs)
         if xy is None:
             return -1, []
         function_id = actions.FUNCTIONS.Attack_screen.id
@@ -276,6 +313,14 @@ class SC2ScriptedEnv(gym.Env):
     def _attack_enemy_base(self, obs):
         xy = self._resolution - self._base_xy
         function_id = actions.FUNCTIONS.Attack_minimap.id
+        function_args = [[0], xy[::-1]]
+        return function_id, function_args
+
+    def _towards_minerals(self, obs):
+        xy = self._find_minerals_screen(obs)
+        if xy is None:
+            return -1, []
+        function_id = actions.FUNCTIONS.Smart_screen.id
         function_args = [[0], xy[::-1]]
         return function_id, function_args
 
@@ -301,9 +346,10 @@ class SC2ScriptedEnv(gym.Env):
         return function_id, function_args
 
     def _select_worker(self, obs):
-        function_id = actions.FUNCTIONS.select_idle_worker.id
-        function_args = [[0]]
-        if function_id not in obs.observation["available_actions"]:
+        if obs.observation["player"][7] > 0:
+            function_id = actions.FUNCTIONS.select_idle_worker.id
+            function_args = [[0]]
+        else:
             unittype = obs.observation["screen"][6]
             candidate_xy = np.transpose(np.nonzero(unittype == 45)).tolist()
             if len(candidate_xy) == 0:
@@ -311,6 +357,13 @@ class SC2ScriptedEnv(gym.Env):
             xy = random.choice(candidate_xy)
             function_id = actions.FUNCTIONS.select_point.id
             function_args = [[0], xy[::-1]]
+        return function_id, function_args
+
+    def _select_all_idle_workers(self, obs):
+        if obs.observation["player"][7] == 0:
+            return -1, []
+        function_id = actions.FUNCTIONS.select_idle_worker.id
+        function_args = [[2]]
         return function_id, function_args
 
     def _select_army(self, obs):
@@ -334,10 +387,10 @@ class SC2ScriptedEnv(gym.Env):
             self._base_xy = np.median(
                 np.transpose(np.nonzero(camera == 1)), 0).astype(int)
 
-    def _move_camera_to_self_random(self, obs):
-        player_relative = obs.observation["minimap"][5]
-        xy = random.choice(
-            np.transpose(np.nonzero(player_relative == 1)).tolist())
+    def _move_camera_to_any_enemy(self, obs):
+        xy = self._find_enemy_minimap(obs)
+        if xy is None:
+            return -1, []
         function_id = actions.FUNCTIONS.move_camera.id
         function_args = [xy[::-1]]
         return actions.FunctionCall(function_id, function_args)
