@@ -75,6 +75,7 @@ class SC2ScriptedEnv(gym.Env):
         return (num_channels_screen, num_channels_minimap, self._resolution)
 
     def _step(self, action):
+        self._num_steps += 1
         action = action[0]
         obs = self._last_obs
         self._locate_base(obs)
@@ -105,6 +106,7 @@ class SC2ScriptedEnv(gym.Env):
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
         self._last_obs = timestep
+        self._num_steps = 0
         return (self._transform_observation(timestep), None)
 
     def _close(self):

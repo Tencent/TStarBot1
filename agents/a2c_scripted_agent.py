@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import random
 
 import torch
 import torch.nn as nn
@@ -21,11 +22,10 @@ class A2CScriptedAgent(object):
                  observation_spec,
                  action_spec,
                  rmsprop_lr=1e-4,
-                 rmsprop_eps=1e-8,
+                 rmsprop_eps=1e-5,
                  rollout_num_steps=5,
-                 discount=1.0,
+                 discount=0.99,
                  ent_coef=0.001,
-                 ent_coef_decay=0.99995,
                  val_coef=0.5,
                  use_gpu=True,
                  init_model_path=None,
@@ -36,12 +36,12 @@ class A2CScriptedAgent(object):
         self._rollout_num_steps = rollout_num_steps
         self._discount = discount
         self._ent_coef = ent_coef
-        self._ent_coef_decay = ent_coef_decay
         self._val_coef = val_coef
         self._use_gpu = use_gpu
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
         self._steps_count = 0
+        self._action_spec = action_spec
 
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
@@ -103,6 +103,8 @@ class A2CScriptedAgent(object):
             done_mb.append(torch.Tensor(done.tolist()) if not self._use_gpu
                            else torch.cuda.FloatTensor(done.tolist()))
         target_value_mb = self._boostrap(reward_mb, done_mb, obs)
+        #np.set_printoptions(threshold=np.nan)
+        #print(torch.cat(target_value_mb, 1).cpu().numpy())
         return obs_mb, action_mb, target_value_mb, obs
 
     def _update(self, obs_mb, action_mb, target_value_mb):
@@ -119,17 +121,24 @@ class A2CScriptedAgent(object):
         policy_loss = - (log_prob.gather(1, action) *
                          Variable(advantage.data)).mean()
         entropy_loss = - entropy.mean()
-        if self._ent_coef > 1e-3:
-            self._ent_coef *= self._ent_coef_decay
+        #self._optimizer.zero_grad()
+        #loss = policy_loss * 10000000.0
+        #loss.backward()
+        #for param in self._actor_critic.parameters():
+            #if param.grad is not None and param.grad.size() == (256L, 75776L):
+                #print("mean grad: %f mean weight: %f" % 
+                      #(param.grad.mean(), param.data.abs().mean()))
+        
         loss = policy_loss + self._val_coef * value_loss + \
             self._ent_coef * entropy_loss
-        print(value.mean(), torch.cat(target_value_mb).mean())
-        print("value loss: %f policy_loss: %f entropy loss: %f entropy coef: %f" % 
-              (value_loss, policy_loss, entropy_loss, self._ent_coef))
+        print("value_mean: %f, target_mean: %f, value loss: %f policy_loss: %f "
+              "entropy loss: %f" % 
+              (value.mean().data.cpu().numpy()[0],
+               torch.cat(target_value_mb).mean(),
+               value_loss, policy_loss, entropy_loss))
 
         self._optimizer.zero_grad()
         loss.backward()
-        #torch.nn.utils.clip_grad_norm(self._actor_critic.parameters(), 100)
         self._optimizer.step()
 
     def _boostrap(self, reward_mb, done_mb, last_obs):
@@ -157,7 +166,11 @@ class A2CScriptedAgent(object):
                 return torch.from_numpy(arrays)
 
     def _sample_action(self, logit):
-        return F.softmax(Variable(logit), 1).multinomial(1).data
+        sampled = F.softmax(Variable(logit), 1).multinomial(1).data
+        for i in xrange(sampled.size(0)):
+            if random.uniform(0, 1) < 0.1:
+                sampled[i] = random.randint(0, self._action_spec[0] - 1)
+        return sampled
 
     def _save_model(self, model_path):
         torch.save(self._actor_critic.state_dict(), model_path)
@@ -196,7 +209,7 @@ class FullyConvNetDebug(nn.Module):
             F.leaky_relu(self.value_fc(player)))))
         policy_logit = self.policy_fc3(F.leaky_relu(self.policy_fc2(
             F.leaky_relu(self.policy_fc(player)))))
-        return policy_logit, value
+        return policy_logit * 0.1, value
 
 
 class FullyConvNet(nn.Module):
@@ -265,4 +278,4 @@ class FullyConvNet(nn.Module):
                 screen_minimap.view(screen_minimap.size(0), -1)))
         value = self.value_fc2(F.leaky_relu(self.value_fc(state)))
         policy_logit = self.policy_fc2(F.leaky_relu(self.policy_fc(state)))
-        return policy_logit, value
+        return policy_logit * 0.1, value

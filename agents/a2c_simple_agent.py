@@ -23,7 +23,7 @@ class A2CSimpleAgent(object):
                  rmsprop_eps=1e-8,
                  rollout_num_steps=5,
                  discount=0.99,
-                 ent_coef=1e-3,
+                 ent_coef=0,
                  val_coef=1.0,
                  use_gpu=True,
                  init_model_path=None,
@@ -105,6 +105,7 @@ class A2CSimpleAgent(object):
         entropy_loss = - entropy.mean()
         loss = policy_loss + self._val_coef * value_loss + \
                self._ent_coef * entropy_loss
+        print(value_loss, policy_loss, entropy_loss)
 
         self._optimizer.zero_grad()
         loss.backward()
