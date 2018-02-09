@@ -1,5 +1,6 @@
 import os
-import copy
+import time
+from copy import deepcopy
 import random
 import numpy as np
 import gym
@@ -23,7 +24,13 @@ class DQNAgent(object):
                  rmsprop_eps=1e-5,
                  batch_size=128,
                  discount=1.0,
-                 epsilon=0.05,
+                 epsilon_max=1.0,
+                 epsilon_min=0.1,
+                 epsilon_decrease_steps=1000000,
+                 memory_size=1000000,
+                 update_freq=4,
+                 target_freq=10000,
+                 use_tiny_net=False,
                  use_gpu=True,
                  init_model_path=None,
                  save_model_dir=None,
@@ -32,21 +39,35 @@ class DQNAgent(object):
                  seed=0):
         self._batch_size = batch_size
         self._discount = discount
-        self._epsilon = epsilon
+        self._epsilon = epsilon_max
+        self._epsilon_min = epsilon_min
+        self._epsilon_decrease = (epsilon_max - epsilon_min) \
+            / epsilon_decrease_steps
         self._action_spec = action_spec
         self._use_gpu = use_gpu
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
+        self._update_freq = update_freq
+        self._target_freq = target_freq
+        self._steps = 0
         
         torch.manual_seed(seed)
         if use_gpu: torch.cuda.manual_seed(seed)
 
-        self._q_network = FullyConvNetTiny(
-            resolution=observation_spec[2],
-            in_channels_screen=observation_spec[0],
-            in_channels_minimap=observation_spec[1],
-            out_dims=action_spec[0],
-            enable_batchnorm=enable_batchnorm)
+        if use_tiny_net:
+            self._q_network = FullyConvNetTiny(
+                resolution=observation_spec[2],
+                in_channels_screen=observation_spec[0],
+                in_channels_minimap=observation_spec[1],
+                out_dims=action_spec[0],
+                enable_batchnorm=enable_batchnorm)
+        else:
+            self._q_network = FullyConvNet(
+                resolution=observation_spec[2],
+                in_channels_screen=observation_spec[0],
+                in_channels_minimap=observation_spec[1],
+                out_dims=action_spec[0],
+                enable_batchnorm=enable_batchnorm)
         self._q_network.apply(weights_init)
         if init_model_path:
             self._load_model(init_model_path)
@@ -55,30 +76,32 @@ class DQNAgent(object):
         if torch.cuda.device_count() > 1:
             self._q_network = nn.DataParallel(self._q_network)
         if use_gpu:
-            self._q_network.cuda() # check this
-
+            self._q_network.cuda()
         self._optimizer = optim.RMSprop(
             self._q_network.parameters(), lr=rmsprop_lr,
             eps=rmsprop_eps, centered=False)
+        self._target_q_network = deepcopy(self._q_network)
 
-        self._memory = ReplayMemory(20000)
+        self._memory = ReplayMemory(memory_size)
 
-    def step(self, ob, greedy=False):
-        ob = tuple(torch.from_numpy(np.expand_dims(array, 0)) for array in ob)
-        if self._use_gpu:
-            ob = tuple(tensor.cuda() for tensor in ob)
-        q_value = self._q_network(
-            tuple(Variable(tensor, volatile=True) for tensor in ob))
-        _, action = q_value[0].data.max(0)
-        greedy_action = action[0]
+    def step(self, observation, greedy=False):
+        if self._epsilon > self._epsilon_min:
+            self._epsilon -= self._epsilon_decrease
         if greedy or random.uniform(0, 1) >= self._epsilon:
-            action = greedy_action
+            observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
+                                for array in observation)
+            if self._use_gpu:
+                observation = tuple(tensor.cuda() for tensor in observation)
+            q_value = self._q_network(
+                tuple(Variable(tensor, volatile=True) for tensor in observation))
+            _, action = q_value[0].data.max(0)
+            return [action[0]]
         else:
-            action = random.randint(0, self._action_spec[0] - 1)
-        return [action]
+            return [random.randint(0, self._action_spec[0] - 1)]
 
-    def train(self, env):
-        for episode in xrange(1000000):
+    def train(self, env, num_episodes=100000000):
+        t = time.time()
+        for episode in xrange(num_episodes):
             cum_return = 0.0
             observation, _ = env.reset()
             done = False
@@ -87,16 +110,23 @@ class DQNAgent(object):
                 next_observation, reward, done, _ = env.step(action)
                 self._memory.push(observation, action, reward,
                                   next_observation, done)
-                self._update()
+                if self._steps % self._target_freq == 0:
+                    self._target_q_network = deepcopy(self._q_network)
+                if (self._steps > self._batch_size * 10 and
+                    self._steps % self._update_freq == 0):
+                    self._update()
                 observation = next_observation
                 cum_return += reward
+                self._steps += 1
             if episode % self._save_model_freq == 0:
                 self._save_model(os.path.join(
                     self._save_model_dir, 'agent.model-%d' % episode))
-            print("Episode %d Return: %f." % (episode + 1, cum_return))
+            print("Episode %d Steps: %d Time: %f Return: %f." %
+                  (episode + 1, self._steps, time.time() - t, cum_return))
+            t = time.time()
 
     def _update(self):
-        if len(self._memory) < self._batch_size * 20:
+        if len(self._memory) < self._batch_size:
             return
         transitions = self._memory.sample(self._batch_size)
         (next_observation_batch, observation_batch, reward_batch,
@@ -111,15 +141,20 @@ class DQNAgent(object):
         done_batch = Variable(done_batch)
         # compute max-q target
         q_values_next = self._q_network(next_observation_batch)
-        futures = q_values_next.max(dim=1)[0] * (1 - done_batch)
+        q_values_target = self._target_q_network(next_observation_batch)
+        futures = q_values_next.gather(
+            1, q_values_target.max(dim=1)[1].view(-1, 1)).squeeze()
+        futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
         target_q.volatile = False
         # compute gradient
         q_values = self._q_network(observation_batch)
+        """
         print(torch.cat([q_values.gather(1, action_batch.view(-1, 1)),
-                        target_q.unsqueeze(1),
-                        action_batch.float(),
-                        done_batch.unsqueeze(1)],1))
+                         target_q.unsqueeze(1),
+                         action_batch.float(),
+                         done_batch.unsqueeze(1)],1))
+        """
         loss_fn = torch.nn.MSELoss()
         loss = loss_fn(q_values.gather(1, action_batch.view(-1, 1)), target_q)
         self._optimizer.zero_grad()
@@ -176,7 +211,6 @@ class FullyConvNetTiny(nn.Module):
 
     def forward(self, x):
         screen, minimap, player = x
-        print(player)
         x = self.fc3(F.leaky_relu(self.fc2(F.leaky_relu(self.fc(player)))))
         return x
 
@@ -217,10 +251,7 @@ class FullyConvNet(nn.Module):
             self.player_bn = nn.BatchNorm2d(10)
             self.state_bn = nn.BatchNorm1d(256)
         self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
-        #self.value_fc = nn.Linear(256, 64)
-        #self.value_fc2 = nn.Linear(64, 1)
-        self.policy_fc = nn.Linear(256, 64)
-        self.policy_fc2 = nn.Linear(64, out_dims)
+        self.q_fc = nn.Linear(256, out_dims)
         self._enable_batchnorm = enable_batchnorm
 
     def forward(self, x):
@@ -245,6 +276,5 @@ class FullyConvNet(nn.Module):
         else:
             state = F.leaky_relu(self.state_fc(
                 screen_minimap.view(screen_minimap.size(0), -1)))
-        #value = self.value_fc2(F.leaky_relu(self.value_fc(state)))
-        policy_logit = self.policy_fc2(F.leaky_relu(self.policy_fc(state)))
-        return policy_logit
+        q = self.q_fc(state)
+        return q

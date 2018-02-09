@@ -11,11 +11,18 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("map", 'AbyssalReef', "Name of a map to use.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
-flags.DEFINE_float("rmsprop_lr", 1e-4, "Learning rate for RMSProp.")
+flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
+flags.DEFINE_integer("update_freq", 4, "Network update frequency.")
+flags.DEFINE_integer("target_freq", 10000, "Target Network update frequency.")
+flags.DEFINE_float("epsilon_max", 1.0, "Max greedy epsilon for exploration.")
+flags.DEFINE_float("epsilon_min", 0.1, "Min greedy epsilon for exploration.")
+flags.DEFINE_integer("epsilon_decrease_steps", 1000000,
+                     "Epsilon decrease over steps.")
+flags.DEFINE_float("rmsprop_lr", 3e-4, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
-flags.DEFINE_integer("batch_size", 128, "Batch size.")
+flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_float("discount", 0.99, "Discount.")
-flags.DEFINE_float("explore_epsilon", 0.3, "Greedy epsilon for exploration.")
+flags.DEFINE_boolean("use_tiny_net", False, "Use tiny net or not.")
 flags.DEFINE_boolean("use_gpu", True, "Use gpu or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("use_blizzard_score", False, "Use blizzard score or not.")
@@ -51,7 +58,8 @@ def train():
         resolution=FLAGS.resolution,
         unittype_whitelist=unittype_whitelist,
         observation_filter=FLAGS.observation_filter.split(","),
-        score_index=0 if FLAGS.use_blizzard_score else None)
+        score_index=0 if FLAGS.use_blizzard_score else None,
+        auto_reset=False)
     agent = DQNAgent(
         observation_spec=env.observation_spec,
         action_spec=env.action_spec,
@@ -59,7 +67,13 @@ def train():
         rmsprop_eps=FLAGS.rmsprop_eps,
         batch_size=FLAGS.batch_size,
         discount=FLAGS.discount,
-        epsilon=FLAGS.explore_epsilon,
+        epsilon_max=FLAGS.epsilon_max,
+        epsilon_min=FLAGS.epsilon_min,
+        epsilon_decrease_steps=FLAGS.epsilon_decrease_steps,
+        memory_size=FLAGS.memory_size,
+        update_freq=FLAGS.update_freq,
+        target_freq=FLAGS.target_freq,
+        use_tiny_net=FLAGS.use_tiny_net,
         use_gpu=FLAGS.use_gpu,
         init_model_path=FLAGS.init_model_path,
         save_model_dir=FLAGS.save_model_dir,

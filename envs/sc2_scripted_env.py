@@ -28,10 +28,12 @@ class SC2ScriptedEnv(gym.Env):
                  resolution=32,
                  unittype_whitelist=None,
                  observation_filter=[],
-                 score_index=None):
+                 score_index=None,
+                 auto_reset=True):
         assert resolution == 32
         self._resolution = resolution
         self._num_steps = 0
+        self._auto_reset = auto_reset
         self._sc2_env = PySC2Env(
             map_name=map_name,
             step_mul=step_mul,
@@ -99,7 +101,7 @@ class SC2ScriptedEnv(gym.Env):
         transformed_obs = self._transform_observation(obs)
         done = obs.last()
         info = None
-        if done:
+        if self._auto_reset and done:
             transformed_obs, info = self._reset()
         return transformed_obs, reward, done, info
 
