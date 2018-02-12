@@ -11,14 +11,14 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("map", 'AbyssalReef', "Name of a map to use.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
-flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
+flags.DEFINE_integer("memory_size", 200000, "Experience replay size.")
 flags.DEFINE_integer("update_freq", 4, "Network update frequency.")
-flags.DEFINE_integer("target_freq", 10000, "Target Network update frequency.")
+flags.DEFINE_integer("target_freq", 20000, "Target Network update frequency.")
 flags.DEFINE_float("epsilon_max", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("epsilon_min", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("epsilon_decrease_steps", 1000000,
+flags.DEFINE_integer("epsilon_decrease_steps", 500000,
                      "Epsilon decrease over steps.")
-flags.DEFINE_float("rmsprop_lr", 3e-4, "Learning rate for RMSProp.")
+flags.DEFINE_float("rmsprop_lr", 3e-5, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_float("discount", 0.99, "Discount.")

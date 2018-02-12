@@ -102,6 +102,7 @@ class DQNAgent(object):
     def train(self, env, num_episodes=100000000):
         t = time.time()
         for episode in xrange(num_episodes):
+            loss_sum, loss_count = 0.0, 1e-20
             cum_return = 0.0
             observation, _ = env.reset()
             done = False
@@ -112,17 +113,19 @@ class DQNAgent(object):
                                   next_observation, done)
                 if self._steps % self._target_freq == 0:
                     self._target_q_network = deepcopy(self._q_network)
-                if (self._steps > self._batch_size * 10 and
+                if (self._steps > self._batch_size * 500 and
                     self._steps % self._update_freq == 0):
-                    self._update()
+                    loss_sum += self._update()
+                    loss_count += 1
                 observation = next_observation
                 cum_return += reward
                 self._steps += 1
             if episode % self._save_model_freq == 0:
                 self._save_model(os.path.join(
                     self._save_model_dir, 'agent.model-%d' % episode))
-            print("Episode %d Steps: %d Time: %f Return: %f." %
-                  (episode + 1, self._steps, time.time() - t, cum_return))
+            print("Episode %d Steps: %d Time: %f Epsilon: %f Loss %f Return: %f." %
+                  (episode + 1, self._steps, time.time() - t, self._epsilon,
+                   loss_sum / loss_count, cum_return))
             t = time.time()
 
     def _update(self):
@@ -142,8 +145,8 @@ class DQNAgent(object):
         # compute max-q target
         q_values_next = self._q_network(next_observation_batch)
         q_values_target = self._target_q_network(next_observation_batch)
-        futures = q_values_next.gather(
-            1, q_values_target.max(dim=1)[1].view(-1, 1)).squeeze()
+        futures = q_values_target.gather(
+            1, q_values_next.max(dim=1)[1].view(-1, 1)).squeeze()
         futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
         target_q.volatile = False
@@ -161,6 +164,7 @@ class DQNAgent(object):
         loss.backward()
         # update q-network
         self._optimizer.step()
+        return loss.data[0]
 
     def _transitions_to_batch(self, transitions):
         batch = Transition(*zip(*transitions))
