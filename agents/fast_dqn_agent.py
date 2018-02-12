@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
-#import torch.multiprocessing as multiprocessing
+import queue
+import threading
 import multiprocessing
 from gym import wrappers
 from gym import spaces
@@ -104,17 +105,13 @@ class FastDQNAgent(object):
         t = time.time()
         loss_sum = 0.0
         while True:
-            while self._queue.qsize() > 0:
-                self._memory.push(*(self._queue.get()))
-            if len(self._memory) < self._batch_size * 10:
-                time.sleep(0.1)
-                continue
             if self._steps % self._target_update_freq == 0:
                 self._target_q_network = deepcopy(self._q_network)
             if self._epsilon > self._epsilon_min:
                 self._epsilon -= self._epsilon_decrease
 
-            loss_sum += self._update()
+            batch = self._batch_queue.get()
+            loss_sum += self._update(batch)
 
             if self._steps % self._save_model_freq == 0:
                 self._save_model(os.path.join(
@@ -127,14 +124,45 @@ class FastDQNAgent(object):
                 t = time.time()
 
     def _init_experience_collector(self, env_fn, num_processes):
-        #self._queue = multiprocessing.SimpleQueue()
         self._queue = multiprocessing.Queue(100)
-        self._processes = [multiprocessing.Process(target=self._collect_experience,
-                                                   args=(env_fn, process_id))
+        self._processes = [multiprocessing.Process(
+                               target=self._collect_experience,
+                               args=(env_fn, process_id))
                            for process_id in xrange(num_processes)]
+        self._batch_queue = queue.Queue(8)
+        self._batch_thread = [threading.Thread(target=self._prepare_batch)
+                              for _ in xrange(4)]
         for process in self._processes:
             process.daemon = True
             process.start()
+        for thread in self._batch_thread:
+            thread.daemon = True
+            thread.start()
+
+    def _prepare_batch(self):
+        while True:
+            while not self._queue.empty():
+                self._memory.push(*(self._queue.get()))
+            if len(self._memory) < self._batch_size * 10:
+                time.sleep(0.1)
+                continue
+
+            transitions = self._memory.sample(self._batch_size)
+            batch = Transition(*zip(*transitions))
+            next_observation_batch = [
+                torch.from_numpy(np.stack(feat)).pin_memory()
+                for feat in zip(*batch.next_observation)]
+            observation_batch = [
+                torch.from_numpy(np.stack(feat)).pin_memory()
+                for feat in zip(*batch.observation)]
+            reward_batch = torch.FloatTensor(batch.reward).pin_memory()
+            action_batch = torch.LongTensor(batch.action).pin_memory()
+            done_batch = torch.Tensor(batch.done).pin_memory()
+
+
+            batch = (next_observation_batch, observation_batch, reward_batch,
+                     action_batch, done_batch)
+            self._batch_queue.put(batch)
 
     def _collect_experience(self, env_create_func, process_id):
         env = env_create_func()
@@ -154,13 +182,19 @@ class FastDQNAgent(object):
             print("ProcessID %d Episode %d Return: %f." %
                   (process_id, episode, cum_return))
 
-    def _update(self):
-        if len(self._memory) < self._batch_size:
-            return
-        transitions = self._memory.sample(self._batch_size)
+    def _update(self, batch):
         (next_observation_batch, observation_batch, reward_batch,
-         action_batch, done_batch) = self._transitions_to_batch(transitions)
-        # convert to torch variable
+         action_batch, done_batch) = batch
+        # move to cuda
+        if self._use_gpu:
+            next_observation_batch = [tensor.cuda(async=True)
+                                      for tensor in next_observation_batch]
+            observation_batch = [tensor.cuda(async=True)
+                                 for tensor in observation_batch]
+            reward_batch = reward_batch.cuda(async=True)
+            action_batch = action_batch.cuda(async=True)
+            done_batch = done_batch.cuda(async=True)
+        # create Variable
         next_observation_batch = tuple(Variable(tensor, volatile=True)
                                        for tensor in next_observation_batch)
         observation_batch = tuple(Variable(tensor)
@@ -193,25 +227,6 @@ class FastDQNAgent(object):
         self._steps += 1
         return loss.data[0]
 
-    def _transitions_to_batch(self, transitions):
-        batch = Transition(*zip(*transitions))
-        next_observation_batch = [torch.from_numpy(np.stack(feat))
-                                  for feat in zip(*batch.next_observation)]
-        observation_batch = [torch.from_numpy(np.stack(feat))
-                             for feat in zip(*batch.observation)]
-        reward_batch = torch.FloatTensor(batch.reward)
-        action_batch = torch.LongTensor(batch.action)
-        done_batch = torch.Tensor(batch.done)
-        if self._use_gpu:
-            next_observation_batch = [tensor.cuda()
-                                      for tensor in next_observation_batch]
-            observation_batch = [tensor.cuda() for tensor in observation_batch]
-            reward_batch = reward_batch.cuda()
-            action_batch = action_batch.cuda()
-            done_batch = done_batch.cuda()
-        return (next_observation_batch, observation_batch, reward_batch,
-                action_batch, done_batch)
-                
     def _save_model(self, model_path):
         torch.save(self._q_network.state_dict(), model_path)
 

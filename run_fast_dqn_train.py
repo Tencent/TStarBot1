@@ -10,12 +10,13 @@ from agents.fast_dqn_agent import FastDQNAgent
 FLAGS = flags.FLAGS
 flags.DEFINE_string("map", 'AbyssalReef', "Name of a map to use.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
+flags.DEFINE_integer("n_envs", 8, "Parallel envs.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
 flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target update frequency.")
 flags.DEFINE_float("epsilon_max", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("epsilon_min", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("epsilon_decrease_steps", 500000,
+flags.DEFINE_integer("epsilon_decrease_steps", 1000000,
                      "Epsilon decrease over steps.")
 flags.DEFINE_float("rmsprop_lr", 3e-5, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
@@ -27,7 +28,7 @@ flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("use_blizzard_score", False, "Use blizzard score or not.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_integer("save_model_freq", 100000, "Model saving frequency.")
+flags.DEFINE_integer("save_model_freq", 200000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 1000, "Train info printing frequencey")
 flags.DEFINE_enum("agent_race", 'T', ['P', 'Z', 'R', 'T'], "Agent's race.")
 flags.DEFINE_enum("bot_race", 'T', ['P', 'Z', 'R', 'T'], "Bot's race.")
@@ -82,7 +83,7 @@ def train():
         enable_batchnorm=FLAGS.use_batchnorm)
 
     try:
-        agent.train(env, env_fn, 4)
+        agent.train(env, env_fn, FLAGS.n_envs)
     except KeyboardInterrupt:
         pass
     except:
