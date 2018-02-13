@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from copy import deepcopy
 import random
@@ -46,6 +47,7 @@ def collect_experience_worker(process_id, env_create_fn, q_network, epsilon,
         episode_id += 1
         print("Process-ID %d Episode %d Return: %f." %
               (process_id, episode_id, cum_return))
+        sys.stdout.flush()
 
 
 class FastDQNAgent(object):
