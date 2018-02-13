@@ -1,3 +1,4 @@
+import sys
 import torch
 import os
 import traceback
@@ -12,11 +13,12 @@ flags.DEFINE_string("map", 'AbyssalReef', "Name of a map to use.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("n_envs", 8, "Parallel envs.")
 flags.DEFINE_integer("resolution", 32, "Resolution for screen and minimap.")
-flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
+flags.DEFINE_integer("memory_size", 160000, "Experience replay size.")
+flags.DEFINE_integer("warmup_size", 10000, "Least experience number.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target update frequency.")
 flags.DEFINE_float("epsilon_max", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("epsilon_min", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("epsilon_decrease_steps", 1000000,
+flags.DEFINE_integer("epsilon_decrease_steps", 2000000,
                      "Epsilon decrease over steps.")
 flags.DEFINE_float("rmsprop_lr", 3e-5, "Learning rate for RMSProp.")
 flags.DEFINE_float("rmsprop_eps", 1e-5, "Epsilon for RMSProp.")
@@ -36,6 +38,7 @@ flags.DEFINE_enum("difficulty", '1',
                   ['1', 'A', '3', '2', '5', '4', '7', '6', '9', '8'],
                   "Bot's strength.")
 flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
+flags.FLAGS(sys.argv)
 
 unittype_whitelist = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
                       24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
@@ -47,10 +50,9 @@ unittype_whitelist = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
                       662, 665, 666, 689, 691, 692, 734, 830, 880, 1879,
                       1883]
 
-def train():
-    if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
-        os.mkdir(FLAGS.save_model_dir)
-    env_fn = lambda: SC2ScriptedEnv(
+
+def create_env():
+    return SC2ScriptedEnv(
         map_name=FLAGS.map,
         step_mul=FLAGS.step_mul,
         agent_race=FLAGS.agent_race,
@@ -61,7 +63,12 @@ def train():
         observation_filter=FLAGS.observation_filter.split(","),
         score_index=0 if FLAGS.use_blizzard_score else None,
         auto_reset=False)
-    env = env_fn()
+
+
+def train():
+    if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
+        os.mkdir(FLAGS.save_model_dir)
+    env = create_env()
     agent = FastDQNAgent(
         observation_spec=env.observation_spec,
         action_spec=env.action_spec,
@@ -73,6 +80,7 @@ def train():
         epsilon_min=FLAGS.epsilon_min,
         epsilon_decrease_steps=FLAGS.epsilon_decrease_steps,
         memory_size=FLAGS.memory_size,
+        warmup_size=FLAGS.warmup_size,
         target_update_freq=FLAGS.target_update_freq,
         use_tiny_net=FLAGS.use_tiny_net,
         use_gpu=FLAGS.use_gpu,
@@ -83,7 +91,7 @@ def train():
         enable_batchnorm=FLAGS.use_batchnorm)
 
     try:
-        agent.train(env, env_fn, FLAGS.n_envs)
+        agent.train(create_env_fn=create_env, n_envs=FLAGS.n_envs)
     except KeyboardInterrupt:
         pass
     except:

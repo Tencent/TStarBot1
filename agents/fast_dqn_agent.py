@@ -3,18 +3,49 @@ import time
 from copy import deepcopy
 import random
 import numpy as np
-import gym
+import queue
+import threading
+import multiprocessing
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
-import queue
-import threading
-import multiprocessing
-from gym import wrappers
-from gym import spaces
+
 from agents.memory import ReplayMemory, Transition
+
+
+def collect_experience_worker(process_id, env_create_fn, q_network, epsilon,
+                              action_space_size, out_queue):
+
+    def step(observation, epsilon):
+        if random.uniform(0, 1) >= epsilon:
+            observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
+                                for array in observation)
+            if next(q_network.parameters()).is_cuda:
+                observation = tuple(tensor.cuda() for tensor in observation)
+            q_value = q_network(tuple(Variable(tensor, volatile=True)
+                                      for tensor in observation))
+            _, action = q_value[0].data.max(0)
+            return [action[0]]
+        return [random.randint(0, action_space_size - 1)]
+
+    env = env_create_fn()
+    episode_id = 0
+    while True:
+        cum_return = 0.0
+        observation, _ = env.reset()
+        done = False
+        while not done:
+            action = step(observation, epsilon.value)
+            next_observation, reward, done, _ = env.step(action)
+            out_queue.put((observation, action, reward, next_observation, done))
+            observation = next_observation
+            cum_return += reward
+        episode_id += 1
+        print("Process-ID %d Episode %d Return: %f." %
+              (process_id, episode_id, cum_return))
 
 
 class FastDQNAgent(object):
@@ -31,6 +62,7 @@ class FastDQNAgent(object):
                  epsilon_min=0.1,
                  epsilon_decrease_steps=1000000,
                  memory_size=1000000,
+                 warmup_size=10000,
                  target_update_freq=10000,
                  use_tiny_net=False,
                  use_gpu=True,
@@ -40,9 +72,11 @@ class FastDQNAgent(object):
                  print_freq=1000,
                  enable_batchnorm=False,
                  seed=0):
+        multiprocessing.set_start_method('spawn')
+
         self._batch_size = batch_size
         self._discount = discount
-        self._epsilon = epsilon_max
+        self._epsilon = multiprocessing.Value('d', epsilon_max)
         self._epsilon_min = epsilon_min
         self._epsilon_decrease = (epsilon_max - epsilon_min) \
             / epsilon_decrease_steps
@@ -52,6 +86,7 @@ class FastDQNAgent(object):
         self._save_model_freq = save_model_freq
         self._print_freq = print_freq
         self._target_update_freq = target_update_freq
+        self._warmup_size = warmup_size
         self._steps = 0
         
         torch.manual_seed(seed)
@@ -84,31 +119,29 @@ class FastDQNAgent(object):
             self._q_network.parameters(), lr=rmsprop_lr,
             eps=rmsprop_eps, centered=False)
         self._target_q_network = deepcopy(self._q_network)
-
         self._memory = ReplayMemory(memory_size)
 
-    def step(self, observation, greedy=False):
-        if greedy or random.uniform(0, 1) >= self._epsilon:
+    def step(self, observation, epsilon=0):
+        if random.uniform(0, 1) >= epsilon:
             observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
                                 for array in observation)
             if self._use_gpu:
                 observation = tuple(tensor.cuda() for tensor in observation)
-            q_value = self._q_network(
-                tuple(Variable(tensor, volatile=True) for tensor in observation))
+            q_value = self._q_network(tuple(Variable(tensor, volatile=True)
+                                            for tensor in observation))
             _, action = q_value[0].data.max(0)
             return [action[0]]
-        else:
-            return [random.randint(0, self._action_spec[0] - 1)]
+        return [random.randint(0, self._action_spec[0] - 1)]
 
-    def train(self, env, env_fn, num_processes=16, num_episodes=100000000):
-        self._init_experience_collector(env_fn, num_processes)
+    def train(self, create_env_fn, n_envs):
+        self._init_experience_collectors(create_env_fn, n_envs)
         t = time.time()
         loss_sum = 0.0
         while True:
             if self._steps % self._target_update_freq == 0:
                 self._target_q_network = deepcopy(self._q_network)
-            if self._epsilon > self._epsilon_min:
-                self._epsilon -= self._epsilon_decrease
+            if self._epsilon.value > self._epsilon_min:
+                self._epsilon.value -= self._epsilon_decrease
 
             batch = self._batch_queue.get()
             loss_sum += self._update(batch)
@@ -118,20 +151,22 @@ class FastDQNAgent(object):
                     self._save_model_dir, 'agent.model-%d' % self._steps))
             if self._steps % self._print_freq == 0:
                 print("Steps: %d Time: %f Epsilon: %f Loss %f Experiences %d" %
-                      (self._steps, time.time() - t, self._epsilon,
+                      (self._steps, time.time() - t, self._epsilon.value,
                        loss_sum / self._print_freq, len(self._memory)))
                 loss_sum = 0.0
                 t = time.time()
 
-    def _init_experience_collector(self, env_fn, num_processes):
-        self._queue = multiprocessing.Queue(100)
-        self._processes = [multiprocessing.Process(
-                               target=self._collect_experience,
-                               args=(env_fn, process_id))
-                           for process_id in xrange(num_processes)]
+    def _init_experience_collectors(self, create_env_fn, num_processes):
+        self._instance_queue = multiprocessing.Queue(100)
+        self._processes = [
+            multiprocessing.Process(
+                target=collect_experience_worker,
+                args=(process_id, create_env_fn, self._q_network, self._epsilon,
+                      self._action_spec[0], self._instance_queue))
+            for process_id in range(num_processes)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch)
-                              for _ in xrange(4)]
+                              for _ in range(4)]
         for process in self._processes:
             process.daemon = True
             process.start()
@@ -141,9 +176,9 @@ class FastDQNAgent(object):
 
     def _prepare_batch(self):
         while True:
-            while not self._queue.empty():
-                self._memory.push(*(self._queue.get()))
-            if len(self._memory) < self._batch_size * 10:
+            while not self._instance_queue.empty():
+                self._memory.push(*(self._instance_queue.get()))
+            if len(self._memory) < self._warmup_size:
                 time.sleep(0.1)
                 continue
 
@@ -159,28 +194,9 @@ class FastDQNAgent(object):
             action_batch = torch.LongTensor(batch.action).pin_memory()
             done_batch = torch.Tensor(batch.done).pin_memory()
 
-
             batch = (next_observation_batch, observation_batch, reward_batch,
                      action_batch, done_batch)
             self._batch_queue.put(batch)
-
-    def _collect_experience(self, env_create_func, process_id):
-        env = env_create_func()
-        episode = 0
-        while True:
-            episode += 1
-            cum_return = 0.0
-            observation, _ = env.reset()
-            done = False
-            while not done:
-                action = self.step(observation)
-                next_observation, reward, done, _ = env.step(action)
-                self._queue.put((observation, action, reward,
-                                 next_observation, done))
-                observation = next_observation
-                cum_return += reward
-            print("ProcessID %d Episode %d Return: %f." %
-                  (process_id, episode, cum_return))
 
     def _update(self, batch):
         (next_observation_batch, observation_batch, reward_batch,
