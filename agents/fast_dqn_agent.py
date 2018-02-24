@@ -19,6 +19,7 @@ from agents.memory import ReplayMemory, Transition
 
 def collect_experience_worker(process_id, env_create_fn, q_network, epsilon,
                               action_space_size, out_queue):
+    #q_network.eval()
 
     def step(observation, epsilon):
         if random.uniform(0, 1) >= epsilon:
@@ -137,7 +138,7 @@ class FastDQNAgent(object):
 
     def train(self, create_env_fn, n_envs):
         self._init_experience_collectors(create_env_fn, n_envs)
-        t = time.time()
+        t = time.perf_counter()
         loss_sum = 0.0
         while True:
             if self._steps % self._target_update_freq == 0:
@@ -153,10 +154,10 @@ class FastDQNAgent(object):
                     self._save_model_dir, 'agent.model-%d' % self._steps))
             if self._steps % self._print_freq == 0:
                 print("Steps: %d Time: %f Epsilon: %f Loss %f Experiences %d" %
-                      (self._steps, time.time() - t, self._epsilon.value,
+                      (self._steps, time.perf_counter() - t, self._epsilon.value,
                        loss_sum / self._print_freq, len(self._memory)))
                 loss_sum = 0.0
-                t = time.time()
+                t = time.perf_counter()
 
     def _init_experience_collectors(self, create_env_fn, num_processes):
         self._instance_queue = multiprocessing.Queue(100)
@@ -168,7 +169,7 @@ class FastDQNAgent(object):
             for process_id in range(num_processes)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch)
-                              for _ in range(4)]
+                              for _ in range(8)]
         for process in self._processes:
             process.daemon = True
             process.start()
@@ -203,6 +204,7 @@ class FastDQNAgent(object):
     def _update(self, batch):
         (next_observation_batch, observation_batch, reward_batch,
          action_batch, done_batch) = batch
+        self._q_network.train()
         # move to cuda
         if self._use_gpu:
             next_observation_batch = [tensor.cuda(async=True)
