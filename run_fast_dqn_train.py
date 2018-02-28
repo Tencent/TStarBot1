@@ -37,7 +37,7 @@ flags.DEFINE_enum("bot_race", 'T', ['P', 'Z', 'R', 'T'], "Bot's race.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', 'A', '3', '2', '5', '4', '7', '6', '9', '8'],
                   "Bot's strength.")
-flags.DEFINE_string("observation_filter", "", "Observation field to ignore.")
+flags.DEFINE_string("observation_filter", "effects,player_id,creep", "Observation field to ignore.")
 flags.FLAGS(sys.argv)
 
 unittype_whitelist = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
@@ -50,6 +50,19 @@ unittype_whitelist = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
                       662, 665, 666, 689, 691, 692, 734, 830, 880, 1879,
                       1883]
 
+unittype_whitelist_small = [0, 132, 341, 21, 483, 20, 342, 18, 27, 19,
+                            45, 28, 638, 47, 48, 22, 32, 38, 23, 472,
+                            54, 39, 641, 33, 35, 130, 37, 29, 24, 42,
+                            57, 51, 134, 41, 692, 46, 36, 40, 53, 56,
+                            52, 268, 55, 49, 30, 5, 689, 44, 43, 6,
+                            484, 25, 500, 734, 31, 691, 26, 34, 498, 830,
+                            50, 11, 58]
+
+unittype_whitelist_tiny = [0, 132, 341, 21, 483, 20, 342, 18, 27, 19,
+                           45, 28, 638, 47, 48, 22, 32, 38, 23, 472,
+                           54, 39, 641, 33, 35, 130, 37, 29, 24, 42,
+                           57, 51, 134, 41, 692, 46, 36, 40, 53, 56,
+                           52, 268, 55, 49, 30, 5]
 
 def create_env():
     return SC2ScriptedEnv(
@@ -59,7 +72,7 @@ def create_env():
         bot_race=FLAGS.bot_race,
         difficulty=FLAGS.difficulty,
         resolution=FLAGS.resolution,
-        unittype_whitelist=unittype_whitelist,
+        unittype_whitelist=unittype_whitelist_tiny,
         observation_filter=FLAGS.observation_filter.split(","),
         score_index=0 if FLAGS.use_blizzard_score else None,
         auto_reset=False)

@@ -19,7 +19,7 @@ from agents.memory import ReplayMemory, Transition
 
 def collect_experience_worker(process_id, env_create_fn, q_network, epsilon,
                               action_space_size, out_queue):
-    #q_network.eval()
+    q_network.eval()
 
     def step(observation, epsilon):
         if random.uniform(0, 1) >= epsilon:
@@ -122,6 +122,7 @@ class FastDQNAgent(object):
             self._q_network.parameters(), lr=rmsprop_lr,
             eps=rmsprop_eps, centered=False)
         self._target_q_network = deepcopy(self._q_network)
+        self._target_q_network.eval()
         self._memory = ReplayMemory(memory_size)
 
     def step(self, observation, epsilon=0):
@@ -143,6 +144,7 @@ class FastDQNAgent(object):
         while True:
             if self._steps % self._target_update_freq == 0:
                 self._target_q_network = deepcopy(self._q_network)
+                self._target_q_network.eval()
             if self._epsilon.value > self._epsilon_min:
                 self._epsilon.value -= self._epsilon_decrease
 
@@ -169,7 +171,7 @@ class FastDQNAgent(object):
             for process_id in range(num_processes)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch)
-                              for _ in range(8)]
+                              for _ in range(16)]
         for process in self._processes:
             process.daemon = True
             process.start()
@@ -271,13 +273,28 @@ class FullyConvNetTiny(nn.Module):
                  out_dims,
                  enable_batchnorm=False):
         super(FullyConvNetTiny, self).__init__()
-        self.fc = nn.Linear(10, 1024)
-        self.fc2 = nn.Linear(1024, 256)
-        self.fc3 = nn.Linear(256, out_dims)
+        self.fc1 = nn.Linear(10, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, 256)
+        self.fc4 = nn.Linear(256, out_dims)
+        if enable_batchnorm:
+            self.bn1 = nn.BatchNorm1d(1024)
+            self.bn2 = nn.BatchNorm1d(512)
+            self.bn3 = nn.BatchNorm1d(256)
+        self._enable_batchnorm = enable_batchnorm
 
-    def forward(self, x):
-        screen, minimap, player = x
-        x = self.fc3(F.leaky_relu(self.fc2(F.leaky_relu(self.fc(player)))))
+    def forward(self, inputs):
+        _, _, x = inputs
+        if not self._enable_batchnorm:
+            x = F.leaky_relu(self.fc1(x))
+            x = F.leaky_relu(self.fc2(x))
+            x = F.leaky_relu(self.fc3(x))
+            x = F.leaky_relu(self.fc4(x))
+        else:
+            x = F.leaky_relu(self.bn1(self.fc1(x)))
+            x = F.leaky_relu(self.bn2(self.fc2(x)))
+            x = F.leaky_relu(self.bn3(self.fc3(x)))
+            x = F.leaky_relu(self.fc4(x))
         return x
 
 
@@ -290,22 +307,32 @@ class FullyConvNet(nn.Module):
                  enable_batchnorm=False):
         super(FullyConvNet, self).__init__()
         self.screen_conv1 = nn.Conv2d(in_channels=in_channels_screen,
-                                      out_channels=16,
+                                      out_channels=64,
                                       kernel_size=5,
                                       stride=1,
                                       padding=2)
-        self.screen_conv2 = nn.Conv2d(in_channels=16,
+        self.screen_conv2 = nn.Conv2d(in_channels=64,
                                       out_channels=32,
+                                      kernel_size=5,
+                                      stride=1,
+                                      padding=2)
+        self.screen_conv3 = nn.Conv2d(in_channels=32,
+                                      out_channels=16,
                                       kernel_size=3,
                                       stride=1,
                                       padding=1)
         self.minimap_conv1 = nn.Conv2d(in_channels=in_channels_minimap,
-                                       out_channels=16,
+                                       out_channels=64,
                                        kernel_size=5,
                                        stride=1,
                                        padding=2)
-        self.minimap_conv2 = nn.Conv2d(in_channels=16,
+        self.minimap_conv2 = nn.Conv2d(in_channels=64,
                                        out_channels=32,
+                                       kernel_size=5,
+                                       stride=1,
+                                       padding=2)
+        self.minimap_conv3 = nn.Conv2d(in_channels=32,
+                                       out_channels=16,
                                        kernel_size=3,
                                        stride=1,
                                        padding=1)
@@ -314,33 +341,32 @@ class FullyConvNet(nn.Module):
             self.screen_bn2 = nn.BatchNorm2d(32)
             self.minimap_bn1 = nn.BatchNorm2d(16)
             self.minimap_bn2 = nn.BatchNorm2d(32)
-            self.player_bn = nn.BatchNorm2d(10)
-            self.state_bn = nn.BatchNorm1d(256)
-        self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
-        self.q_fc = nn.Linear(256, out_dims)
+        self.player_fc1 = nn.Linear(10, 1024)
+        self.player_fc2 = nn.Linear(1024, 256)
+        self.state_fc = nn.Linear(32 * (resolution ** 2), 256)
+        self.q_fc1 = nn.Linear(512, 128)
+        self.q_fc2 = nn.Linear(128, out_dims)
         self._enable_batchnorm = enable_batchnorm
 
     def forward(self, x):
         screen, minimap, player = x
-        player = player.clone().repeat(
-            screen.size(2), screen.size(3), 1, 1).permute(2, 3, 0, 1)
         if self._enable_batchnorm:
             screen = F.leaky_relu(self.screen_bn1(self.screen_conv1(screen)))
             screen = F.leaky_relu(self.screen_bn2(self.screen_conv2(screen)))
             minimap = F.leaky_relu(self.minimap_bn1(self.minimap_conv1(minimap)))
             minimap = F.leaky_relu(self.minimap_bn2(self.minimap_conv2(minimap)))
-            player = self.player_bn(player.contiguous())
         else:
             screen = F.leaky_relu(self.screen_conv1(screen))
             screen = F.leaky_relu(self.screen_conv2(screen))
+            screen = F.leaky_relu(self.screen_conv3(screen))
             minimap = F.leaky_relu(self.minimap_conv1(minimap))
             minimap = F.leaky_relu(self.minimap_conv2(minimap))
-        screen_minimap = torch.cat((screen, minimap, player), 1)
-        if self._enable_batchnorm:
-            state = F.leaky_relu(self.state_bn(self.state_fc(
-                screen_minimap.view(screen_minimap.size(0), -1))))
-        else:
-            state = F.leaky_relu(self.state_fc(
-                screen_minimap.view(screen_minimap.size(0), -1)))
-        q = self.q_fc(state)
+            minimap = F.leaky_relu(self.minimap_conv3(minimap))
+        screen_minimap = torch.cat((screen, minimap), 1)
+        player = F.leaky_relu(
+            self.player_fc2(F.leaky_relu(self.player_fc1(player))))
+        state = F.leaky_relu(
+            self.state_fc(screen_minimap.view(screen_minimap.size(0), -1)))
+        concate_state = torch.cat((player, state), 1)
+        q = self.q_fc2(F.leaky_relu(self.q_fc1(concate_state)))
         return q
