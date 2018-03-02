@@ -54,7 +54,7 @@ class DQNAgent(object):
         self._action_space = action_space
         self._episode_idx = 0
 
-        self._q_network = Net(n = action_space.n)
+        self._q_network = Net(n=action_space.n)
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
