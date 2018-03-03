@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 
-from gym import Wrapper
+import gym
 from gym.spaces.box import Box
 
 import torch
@@ -13,7 +13,7 @@ resize = T.Compose([T.ToPILImage(),
                     T.ToTensor()])
 
 
-class CartPoleRescaleWrapper(Wrapper):
+class CartPoleRescaleWrapper(gym.Wrapper):
 
     def __init__(self, env):
         super(CartPoleRescaleWrapper, self).__init__(env)
