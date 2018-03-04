@@ -47,7 +47,7 @@ flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn'], "Algorithm.")
 flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
-flags.DEFINE_integer("save_model_freq", 10000, "Model saving frequency.")
+flags.DEFINE_integer("save_model_freq", 100, "Model saving frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.FLAGS(sys.argv)
 
