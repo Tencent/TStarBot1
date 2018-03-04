@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import scipy.ndimage as ndimage
 
 from pysc2.lib import actions
