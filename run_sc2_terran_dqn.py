@@ -12,6 +12,23 @@ from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from models.sc2_networks import SC2QNet
 
+UNIT_TYPE_WHITELIST = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
+                       24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+                       34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+                       44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                       54, 55, 56, 57, 58, 130, 132, 134, 146, 147,
+                       149, 268, 341, 342, 343, 365, 472, 473, 474, 483,
+                       484, 490, 498, 500, 561, 609, 638, 639, 640, 641,
+                       662, 665, 666, 689, 691, 692, 734, 830, 880, 1879,
+                       1883]
+
+UNIT_TYPE_WHITELIST_TINY = [0, 132, 341, 21, 483, 20, 342, 18, 27, 19,
+                            45, 28, 638, 47, 48, 22, 32, 38, 23, 472,
+                            54, 39, 641, 33, 35, 130, 37, 29, 24, 42,
+                            57, 51, 134, 41, 692, 46, 36, 40, 53, 56,
+                            52, 268, 55, 49, 30, 5]
+
+
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
@@ -47,7 +64,10 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     env = TerranActionWrapperV0(env)
-    env = SC2ObservationWrapper(env)
+    env = SC2ObservationWrapper(
+        env=env,
+        unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
+        observation_filter=FLAGS.observation_filter.split(','))
     return env
 
 

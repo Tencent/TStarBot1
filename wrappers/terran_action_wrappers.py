@@ -154,7 +154,7 @@ def macro_all_attack_enemy_base(observation):
         micros.append(micro_select_all_armies)
         micros.append(micro_attack_center_screen)
     else:
-        micros.append(micro_select_armies)
+        micros.append(micro_select_all_armies)
         micros.append(micro_attack_any_screen)
     return micros
 
