@@ -39,7 +39,7 @@ flags.DEFINE_string("observation_filter", "effects,player_id,creep",
 flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
 flags.DEFINE_float("eps_start", 0.9, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.05, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 200, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay", 2000, "Greedy epsilon decay step.")
 flags.DEFINE_float("learning_rate", 1e-2, "Learning rate.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
 flags.DEFINE_float("discount", 0.999, "Discount.")

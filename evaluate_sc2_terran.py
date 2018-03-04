@@ -82,7 +82,7 @@ def train():
             discount=0.999,
             eps_start=0,
             eps_end=0,
-            eps_decay=200,
+            eps_decay=2000,
             memory_size=10000,
             init_model_path=FLAGS.init_model_path)
     elif FLAGS.agent == 'double_dqn':
@@ -101,7 +101,7 @@ def train():
             discount=0.999,
             eps_start=0,
             eps_end=0,
-            eps_decay=200,
+            eps_decay=2000,
             memory_size=10000,
             target_update_freq=100,
             init_model_path=FLAGS.init_model_path)

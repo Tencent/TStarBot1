@@ -1,4 +1,4 @@
-# SC2LAB: StarCraftII Lab.
+# SC2LAB: StarCraftII Lab
 
 ## Installation
 ```bash
