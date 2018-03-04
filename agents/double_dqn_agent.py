@@ -30,7 +30,7 @@ def tuple_variable(tensors, volatile=False):
 
 
 class DoubleDQNAgent(object):
-    '''Deep Q-learning agent.'''
+    '''Double Deep Q-learning agent.'''
 
     def __init__(self,
                  observation_space,
