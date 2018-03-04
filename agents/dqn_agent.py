@@ -20,6 +20,7 @@ def tuple_cuda(tensors):
     else:
         return tensors.cuda()
 
+
 def tuple_variable(tensors, volatile=False):
     if isinstance(tensors, tuple):
         return tuple(Variable(tensor, volatile=volatile)
@@ -34,6 +35,7 @@ class DQNAgent(object):
     def __init__(self,
                  observation_space,
                  action_space,
+                 network,
                  learning_rate,
                  batch_size,
                  discount,
@@ -54,7 +56,7 @@ class DQNAgent(object):
         self._action_space = action_space
         self._episode_idx = 0
 
-        self._q_network = Net(n=action_space.n)
+        self._q_network = network
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
@@ -158,7 +160,7 @@ class DQNAgent(object):
 
         # move to cuda
         if torch.cuda.is_available():
-            nexst_obs_batch = tuple_cuda(next_obs_batch)
+            next_obs_batch = tuple_cuda(next_obs_batch)
             obs_batch = tuple_cuda(obs_batch)
             reward_batch = tuple_cuda(reward_batch)
             action_batch = tuple_cuda(action_batch)
@@ -185,22 +187,3 @@ class DQNAgent(object):
         eps = self._eps_end + (self._eps_start - self._eps_end) * \
             math.exp(-1. * steps / self._eps_decay)
         return eps
-
-
-class Net(nn.Module):
-
-    def __init__(self, n):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.head = nn.Linear(448, n)
-
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(0), -1))

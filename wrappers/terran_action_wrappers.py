@@ -94,7 +94,7 @@ def find_minerals_screen(observation):
 def macro_train_scv(observation):
     micros = []
     if not is_command_center_selected(observation):
-        micros.extend(macro_move_camera_to_base(observation))
+        micros.extend(macro_move_camera_to_self_base(observation))
         micros.append(micro_select_command_center)
     micros.append(micro_train_scv)
     return micros

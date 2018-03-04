@@ -4,14 +4,21 @@ import os
 import traceback
 from absl import app
 from absl import flags
-import gym
 
-from wrappers.cart_pole_wrappers import CartPoleRescaleWrapper
+from envs.sc2_env import StarCraftIIEnv
+from wrappers.terran_action_wrappers import TerranActionWrapperV0
+from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
-from models.cart_pole_networks import CartPoleQNet
+from models.sc2_networks import SC2QNet
 
 FLAGS = flags.FLAGS
+flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
+flags.DEFINE_enum("difficulty", '1',
+                  ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
+                  "Bot's strength.")
+flags.DEFINE_string("observation_filter", "effects,player_id,creep",
+                    "Observation field to ignore.")
 flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
 flags.DEFINE_float("eps_start", 0.9, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.05, "Min greedy epsilon for exploration.")
@@ -24,11 +31,23 @@ flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn'], "Algorithm.")
 flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 10000, "Model saving frequency.")
+flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.FLAGS(sys.argv)
 
+
 def create_env():
-    env = gym.make('CartPole-v0').unwrapped
-    env = CartPoleRescaleWrapper(env)
+    env = StarCraftIIEnv(
+        map_name='AbyssalReef',
+        step_mul=FLAGS.step_mul,
+        resolution=32,
+        agent_race='T',
+        bot_race='T',
+        difficulty=FLAGS.difficulty,
+        game_steps_per_episode=0,
+        visualize_feature_map=False,
+        score_index=None)
+    env = TerranActionWrapperV0(env)
+    env = SC2ObservationWrapper(env)
     return env
 
 
@@ -37,7 +56,12 @@ def train():
         os.mkdir(FLAGS.save_model_dir)
 
     env = create_env()
-    network = CartPoleQNet(n_out=env.action_space.n)
+    network = SC2QNet(
+        resolution=env.observation_space.spaces[0].shape[1],
+        n_channels_screen=env.observation_space.spaces[0].shape[0],
+        n_channels_minimap=env.observation_space.spaces[1].shape[0],
+        n_out=env.action_space.n,
+        batchnorm=FLAGS.use_batchnorm)
 
     if FLAGS.agent == 'dqn':
         agent = DQNAgent(

@@ -20,6 +20,7 @@ def tuple_cuda(tensors):
     else:
         return tensors.cuda()
 
+
 def tuple_variable(tensors, volatile=False):
     if isinstance(tensors, tuple):
         return tuple(Variable(tensor, volatile=volatile)
@@ -34,6 +35,7 @@ class DoubleDQNAgent(object):
     def __init__(self,
                  observation_space,
                  action_space,
+                 network,
                  learning_rate,
                  batch_size,
                  discount,
@@ -56,8 +58,8 @@ class DoubleDQNAgent(object):
         self._action_space = action_space
         self._episode_idx = 0
 
-        self._q_network = Net(n=action_space.n)
-        self._target_q_network = Net(n=action_space.n)
+        self._q_network = network
+        self._target_q_network = deepcopy(network)
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
@@ -171,7 +173,7 @@ class DoubleDQNAgent(object):
 
         # move to cuda
         if torch.cuda.is_available():
-            nexst_obs_batch = tuple_cuda(next_obs_batch)
+            next_obs_batch = tuple_cuda(next_obs_batch)
             obs_batch = tuple_cuda(obs_batch)
             reward_batch = tuple_cuda(reward_batch)
             action_batch = tuple_cuda(action_batch)
