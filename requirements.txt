@@ -1,0 +1,5 @@
+futures==3.1.1
+gym==0.9.4
+pysc2
+scipy
+http://download.pytorch.org/whl/cu80/torch-0.3.1-cp36-cp36m-linux_x86_64.whl
