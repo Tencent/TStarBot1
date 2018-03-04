@@ -9,6 +9,7 @@ from envs.sc2_env import StarCraftIIEnv
 from wrappers.terran_action_wrappers import TerranActionWrapperV0
 from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.random_agent import RandomAgent
+from agents.keyboard_agent import KeyboardAgent
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from models.sc2_networks import SC2QNet
@@ -39,7 +40,8 @@ flags.DEFINE_enum("difficulty", '1',
 flags.DEFINE_string("observation_filter", "effects,player_id,creep",
                     "Observation field to ignore.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn', 'random'], "Algorithm.")
+flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn', 'random', 'keyboard'],
+                  "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.FLAGS(sys.argv)
 
@@ -107,6 +109,8 @@ def train():
             init_model_path=FLAGS.init_model_path)
     elif FLAGS.agent == 'random':
         agent = RandomAgent(action_space=env.action_space)
+    elif FLAGS.agent == 'keyboard':
+        agent = KeyboardAgent(action_space=env.action_space)
     else:
         raise NotImplementedError
 

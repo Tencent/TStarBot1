@@ -47,6 +47,7 @@ class DoubleDQNAgent(object):
                  init_model_path=None,
                  save_model_dir=None,
                  save_model_freq=1000):
+        assert isinstance(action_space, spaces.Discrete)
         self._batch_size = batch_size
         self._discount = discount
         self._eps_start = eps_start
