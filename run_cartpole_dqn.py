@@ -6,7 +6,7 @@ from absl import app
 from absl import flags
 import gym
 
-from wrappers.cart_pole_rescale import CartPoleRescaleWrapper
+from wrappers.cart_pole_wrappers import CartPoleRescaleWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 
