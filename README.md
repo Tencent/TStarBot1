@@ -2,7 +2,7 @@
 
 ## Installation
 
-Python3.6 required.
+Python 3.6 required.
 
 ```bash
 pip3 install -r requirements.txt
