@@ -127,8 +127,6 @@ class DoubleDQNAgent(object):
                    self._get_current_eps(steps),
                    loss_sum / loss_count,
                    cum_return))
-            if self._episode_idx > 1000:
-                break
             t = time.time()
 
     def _optimize(self):
@@ -202,22 +200,3 @@ class DoubleDQNAgent(object):
         eps = self._eps_end + (self._eps_start - self._eps_end) * \
             math.exp(-1. * steps / self._eps_decay)
         return eps
-
-
-class Net(nn.Module):
-
-    def __init__(self, n):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.head = nn.Linear(448, n)
-
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(0), -1))
