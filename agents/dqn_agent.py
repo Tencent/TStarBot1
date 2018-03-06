@@ -38,6 +38,8 @@ class DQNAgent(object):
                  action_space,
                  network,
                  learning_rate,
+                 momentum,
+                 optimize_freq,
                  batch_size,
                  discount,
                  eps_start,
@@ -45,6 +47,9 @@ class DQNAgent(object):
                  eps_decay,
                  memory_size,
                  init_memory_size,
+                 gradient_clipping,
+                 allow_eval_mode=True,
+                 loss_type='mse',
                  init_model_path=None,
                  save_model_dir=None,
                  save_model_freq=1000):
@@ -58,6 +63,10 @@ class DQNAgent(object):
         self._save_model_freq = save_model_freq
         self._action_space = action_space
         self._init_memory_size = max(init_memory_size, batch_size)
+        self._gradient_clipping = gradient_clipping
+        self._allow_eval_mode = allow_eval_mode
+        self._loss_type = loss_type
+        self._optimize_freq = optimize_freq
         self._episode_idx = 0
 
         self._q_network = network
@@ -71,11 +80,14 @@ class DQNAgent(object):
             self._q_network.cuda()
 
         self._optimizer = optim.RMSprop(self._q_network.parameters(),
+                                        momentum=momentum,
                                         lr=learning_rate)
         self._memory = ReplayMemory(memory_size)
 
     def act(self, observation, eps=0):
         if random.uniform(0, 1) >= eps:
+            if self._allow_eval_mode:
+                self._q_network.eval()
             if isinstance(observation, tuple):
                 observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
                                     for array in observation)
@@ -91,7 +103,7 @@ class DQNAgent(object):
 
     def learn(self, env):
         t = time.time()
-        steps = 0
+        steps, frames = 0, 0
         while True:
             self._episode_idx += 1
             loss_sum, loss_count, cum_return = 0.0, 1e-20, 0.0
@@ -102,24 +114,25 @@ class DQNAgent(object):
                 next_observation, reward, done, _ = env.step(action)
                 self._memory.push(observation, action, reward,
                                   next_observation, done)
-                if len(self._memory) >= self._init_memory_size:
+                if (len(self._memory) >= self._init_memory_size and
+                    frames % self._optimize_freq == 0):
                     loss_sum += self._optimize()
                     loss_count += 1
                     steps += 1
                 observation = next_observation
                 cum_return += reward
+                frames += 1
 
             if (self._save_model_dir and
                 self._episode_idx % self._save_model_freq == 0):
                 self._save_model(os.path.join(
                     self._save_model_dir, 'agent.model-%d' % self._episode_idx))
-            print("Episode %d Steps: %d Time: %f Eps: %f Loss %f Return: %f." %
-                  (self._episode_idx,
-                   steps,
-                   time.time() - t,
-                   self._get_current_eps(steps),
-                   loss_sum / loss_count,
-                   cum_return))
+            print("Episode %d Frames %d Steps: %d Time: %f Eps: %f Loss %f "
+                  "Return: %f." % (self._episode_idx, frames, steps,
+                                   time.time() - t,
+                                   self._get_current_eps(steps),
+                                   loss_sum / loss_count,
+                                   cum_return))
             t = time.time()
 
     def _optimize(self):
@@ -133,15 +146,24 @@ class DQNAgent(object):
         futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
         target_q.volatile = False
-        # compute gradient
+        # define loss
+        if self._allow_eval_mode:
+            self._q_network.eval()
+        self._q_network.train()
         q = self._q_network(obs_batch).gather(
             1, action_batch.view(-1, 1))
-        loss = F.smooth_l1_loss(q, target_q)
+        if self._loss_type == "smooth_l1":
+            loss = F.smooth_l1_loss(q, target_q)
+        elif self._loss_type == "mse":
+            loss = F.mse_loss(q, target_q)
+        else:
+            raise NotImplementedError
+        # compute gradient and update parameters
         self._optimizer.zero_grad()
         loss.backward()
         for param in self._q_network.parameters():
-            param.grad.data.clamp_(-1, 1)
-        # update parameters
+            param.grad.data.clamp_(-self._gradient_clipping,
+                                   self._gradient_clipping)
         self._optimizer.step()
         return loss.data[0]
 

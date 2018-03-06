@@ -36,20 +36,26 @@ flags.DEFINE_enum("difficulty", '1',
                   "Bot's strength.")
 flags.DEFINE_string("observation_filter", "effects,player_id,creep",
                     "Observation field to ignore.")
-flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 1000, "Experience replay initial size.")
+flags.DEFINE_integer("memory_size", 50000, "Experience replay size.")
+flags.DEFINE_integer("init_memory_size", 2000, "Experience replay initial size.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
-flags.DEFINE_float("eps_end", 0.05, "Min greedy epsilon for exploration.")
+flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 2000, "Greedy epsilon decay step.")
-flags.DEFINE_float("learning_rate", 1e-2, "Learning rate.")
+flags.DEFINE_float("learning_rate", 1e-4, "Learning rate.")
+flags.DEFINE_float("momentum", 0.95, "Momentum.")
+flags.DEFINE_float("gradient_clipping", 1.0, "Gradient clipping threshold.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
 flags.DEFINE_float("discount", 0.999, "Discount.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn'], "Algorithm.")
+flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
+flags.DEFINE_integer("optimize_freq", 4, "Frames between two optimizations")
 flags.DEFINE_integer("save_model_freq", 100, "Model saving frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
+flags.DEFINE_boolean("allow_eval_mode", False,
+                     "Allow eval() during training, for batchnorm.")
 flags.FLAGS(sys.argv)
 
 
@@ -90,6 +96,8 @@ def train():
             action_space=env.action_space,
             network=network,
             learning_rate=FLAGS.learning_rate,
+            momentum=FLAGS.momentum,
+            optimize_freq=FALGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,
@@ -97,6 +105,9 @@ def train():
             eps_decay=FLAGS.eps_decay,
             memory_size=FLAGS.memory_size,
             init_memory_size=FLAGS.init_memory_size,
+            gradient_clipping=FLAGS.gradient_clipping,
+            allow_eval_mode=FLAGS.allow_eval_mode,
+            loss_type=FLAGS.loss_type,
             init_model_path=FLAGS.init_model_path,
             save_model_dir=FLAGS.save_model_dir,
             save_model_freq=FLAGS.save_model_freq)
@@ -106,6 +117,8 @@ def train():
             action_space=env.action_space,
             network=network,
             learning_rate=FLAGS.learning_rate,
+            momentum=FLAGS.momentum,
+            optimize_freq=FALGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,
@@ -113,7 +126,10 @@ def train():
             eps_decay=FLAGS.eps_decay,
             memory_size=FLAGS.memory_size,
             init_memory_size=FLAGS.init_memory_size,
+            gradient_clipping=FLAGS.gradient_clipping,
             target_update_freq=FLAGS.target_update_freq,
+            allow_eval_mode=FLAGS.allow_eval_mode,
+            loss_type=FLAGS.loss_type,
             init_model_path=FLAGS.init_model_path,
             save_model_dir=FLAGS.save_model_dir,
             save_model_freq=FLAGS.save_model_freq)
