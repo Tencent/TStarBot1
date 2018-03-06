@@ -52,7 +52,7 @@ flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn'], "Algorithm.")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
 flags.DEFINE_integer("optimize_freq", 4, "Frames between two optimizations")
-flags.DEFINE_integer("save_model_freq", 100, "Model saving frequency.")
+flags.DEFINE_integer("save_model_freq", 50, "Model saving frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("allow_eval_mode", False,
                      "Allow eval() during training, for batchnorm.")
@@ -97,7 +97,7 @@ def train():
             network=network,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
-            optimize_freq=FALGS.optimize_freq,
+            optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,
