@@ -44,6 +44,7 @@ class DoubleDQNAgent(object):
                  eps_end,
                  eps_decay,
                  memory_size,
+                 init_memory_size,
                  target_update_freq,
                  init_model_path=None,
                  save_model_dir=None,
@@ -58,6 +59,7 @@ class DoubleDQNAgent(object):
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
         self._action_space = action_space
+        self._init_memory_size = max(init_memory_size, batch_size)
         self._episode_idx = 0
 
         self._q_network = network
@@ -109,12 +111,12 @@ class DoubleDQNAgent(object):
                 if steps % self._target_update_freq == 0:
                     self._target_q_network.load_state_dict(
                         self._q_network.state_dict())
-                if len(self._memory) > self._batch_size:
+                if len(self._memory) >= self._init_memory_size:
                     loss_sum += self._optimize()
                     loss_count += 1
+                    steps += 1
                 observation = next_observation
                 cum_return += reward
-                steps += 1
 
             if (self._save_model_dir and
                 self._episode_idx % self._save_model_freq == 0):

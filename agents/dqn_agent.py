@@ -44,6 +44,7 @@ class DQNAgent(object):
                  eps_end,
                  eps_decay,
                  memory_size,
+                 init_memory_size,
                  init_model_path=None,
                  save_model_dir=None,
                  save_model_freq=1000):
@@ -56,6 +57,7 @@ class DQNAgent(object):
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
         self._action_space = action_space
+        self._init_memory_size = max(init_memory_size, batch_size)
         self._episode_idx = 0
 
         self._q_network = network
@@ -100,12 +102,12 @@ class DQNAgent(object):
                 next_observation, reward, done, _ = env.step(action)
                 self._memory.push(observation, action, reward,
                                   next_observation, done)
-                if len(self._memory) > self._batch_size:
+                if len(self._memory) >= self._init_memory_size:
                     loss_sum += self._optimize()
                     loss_count += 1
+                    steps += 1
                 observation = next_observation
                 cum_return += reward
-                steps += 1
 
             if (self._save_model_dir and
                 self._episode_idx % self._save_model_freq == 0):

@@ -38,7 +38,6 @@ class SC2QNet(nn.Module):
             self.minimap_bn1 = nn.BatchNorm2d(16)
             self.minimap_bn2 = nn.BatchNorm2d(32)
             self.player_bn = nn.BatchNorm2d(10)
-            self.state_bn = nn.BatchNorm1d(256)
         self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
         self.q_fc = nn.Linear(256, n_out)
         self._batchnorm = batchnorm
@@ -59,10 +58,6 @@ class SC2QNet(nn.Module):
             minimap = F.leaky_relu(self.minimap_conv1(minimap))
             minimap = F.leaky_relu(self.minimap_conv2(minimap))
         screen_minimap = torch.cat((screen, minimap, player), 1)
-        if self._batchnorm:
-            state = F.leaky_relu(self.state_bn(self.state_fc(
-                screen_minimap.view(screen_minimap.size(0), -1))))
-        else:
-            state = F.leaky_relu(self.state_fc(
-                screen_minimap.view(screen_minimap.size(0), -1)))
+        state = F.leaky_relu(self.state_fc(
+            screen_minimap.view(screen_minimap.size(0), -1)))
         return self.q_fc(state)
