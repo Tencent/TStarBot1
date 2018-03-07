@@ -38,9 +38,11 @@ flags.DEFINE_string("observation_filter", "effects,player_id,creep",
                     "Observation field to ignore.")
 flags.DEFINE_integer("memory_size", 50000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 2000, "Experience replay initial size.")
+flags.DEFINE_enum("eps_method", 'linear', ['eps', 'linear'],
+                  "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 2000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay", 100000, "Greedy epsilon decay step.")
 flags.DEFINE_float("learning_rate", 1e-4, "Learning rate.")
 flags.DEFINE_float("momentum", 0.95, "Momentum.")
 flags.DEFINE_float("gradient_clipping", 1.0, "Gradient clipping threshold.")

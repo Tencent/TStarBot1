@@ -14,6 +14,8 @@ from models.cart_pole_networks import CartPoleQNet
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 128, "Experience replay initial size.")
+flags.DEFINE_enum("eps_method", 'eps', ['eps', 'linear'],
+                  "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 0.9, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.05, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 200, "Greedy epsilon decay step.")
@@ -59,6 +61,7 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.method,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,
@@ -80,6 +83,8 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.method,
+            eps_start=FLAGS.eps_start,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,

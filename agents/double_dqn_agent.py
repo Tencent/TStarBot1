@@ -42,6 +42,7 @@ class DoubleDQNAgent(object):
                  optimize_freq,
                  batch_size,
                  discount,
+                 eps_method,
                  eps_start,
                  eps_end,
                  eps_decay,
@@ -57,6 +58,7 @@ class DoubleDQNAgent(object):
         assert isinstance(action_space, spaces.Discrete)
         self._batch_size = batch_size
         self._discount = discount
+        self._eps_method = eps_method
         self._eps_start = eps_start
         self._eps_end = eps_end
         self._eps_decay = eps_decay
@@ -224,6 +226,13 @@ class DoubleDQNAgent(object):
             torch.load(model_path, map_location=lambda storage, loc: storage))
 
     def _get_current_eps(self, steps):
-        eps = self._eps_end + (self._eps_start - self._eps_end) * \
-            math.exp(-1. * steps / self._eps_decay)
+        if self._eps_method == 'exp':
+            eps = self._eps_end + (self._eps_start - self._eps_end) * \
+                math.exp(-1. * steps / self._eps_decay)
+        elif self._eps_method == 'linear':
+            steps = min(self._eps_decay, steps)
+            eps = self._eps_start - (self._eps_start - self._eps_end) * \
+                steps / self._eps_decay
+        else:
+            raise NotImplementedError
         return eps
