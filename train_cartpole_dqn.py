@@ -34,6 +34,7 @@ flags.DEFINE_boolean("allow_eval_mode", False,
                      "Allow eval() during training, for batchnorm.")
 flags.FLAGS(sys.argv)
 
+
 def create_env():
     env = gym.make('CartPole-v0').unwrapped
     env = CartPoleRescaleWrapper(env)
@@ -55,7 +56,7 @@ def train():
             network=network,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
-            optimize_freq=FALGS.optimize_freq,
+            optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,
@@ -76,7 +77,7 @@ def train():
             network=network,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
-            optimize_freq=FALGS.optimize_freq,
+            optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,

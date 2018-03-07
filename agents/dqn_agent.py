@@ -141,6 +141,8 @@ class DQNAgent(object):
         (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch) = \
             self._transitions_to_batch(transitions)
         # compute max-q target
+        if self._allow_eval_mode:
+            self._q_network.eval()
         q_next = self._q_network(next_obs_batch)
         futures = q_next.max(dim=1)[0].view(-1, 1).squeeze()
         futures = futures * (1 - done_batch)

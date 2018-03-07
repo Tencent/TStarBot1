@@ -124,7 +124,8 @@ class DoubleDQNAgent(object):
                 if steps % self._target_update_freq == 0:
                     self._target_q_network.load_state_dict(
                         self._q_network.state_dict())
-                if len(self._memory) >= self._init_memory_size:
+                if (len(self._memory) >= self._init_memory_size and
+                    frames % self._optimize_freq == 0):
                     loss_sum += self._optimize()
                     loss_count += 1
                     steps += 1
@@ -160,6 +161,8 @@ class DoubleDQNAgent(object):
         target_q = reward_batch + self._discount * futures
         target_q.volatile = False
         # define loss
+        if self._allow_eval_mode:
+            self._q_network.eval()
         self._q_network.train()
         q = self._q_network(obs_batch).gather(
             1, action_batch.view(-1, 1))

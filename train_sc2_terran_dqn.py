@@ -118,7 +118,7 @@ def train():
             network=network,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
-            optimize_freq=FALGS.optimize_freq,
+            optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_start=FLAGS.eps_start,
