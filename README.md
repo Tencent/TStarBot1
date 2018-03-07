@@ -32,5 +32,5 @@ CUDA_VISIBLE_DEVICES=0 python3 -u evaluate_sc2_terran.py --agent dqn --difficult
 
 - Play StarCraftII with Keyboard, e.g.
 ```bash
-CUDA_VISIBLE_DEVICES= python3 -u evaluate_sc2_terran.py --agent keyboard --difficulty '1'
+CUDA_VISIBLE_DEVICES= python3 -u evaluate_sc2_terran.py --agent keyboard --race 'T' --difficulty '1'
 ```

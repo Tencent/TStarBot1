@@ -7,6 +7,7 @@ from absl import flags
 
 from envs.sc2_env import StarCraftIIEnv
 from wrappers.terran_action_wrappers import TerranActionWrapperV0
+from wrappers.zerg_action_wrappers import ZergActionWrapperV0
 from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
@@ -37,6 +38,7 @@ flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
+flags.DEFINE_enum("race", 'T', ['T', 'Z', 'P'], "Race (the same for 1v1).")
 flags.DEFINE_string("observation_filter", "effects,player_id,creep",
                     "Observation field to ignore.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
@@ -51,13 +53,19 @@ def create_env():
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
         resolution=32,
-        agent_race='T',
-        bot_race='T',
+        agent_race=FLAGS.race,
+        bot_race=FLAGS.race,
         difficulty=FLAGS.difficulty,
         game_steps_per_episode=0,
         visualize_feature_map=False,
         score_index=None)
-    env = TerranActionWrapperV0(env)
+    if FLAGS.race == 'T':
+        env = TerranActionWrapperV0(env)
+    elif FLAGS.race == 'Z':
+        env = ZergActionWrapperV0(env)
+    else:
+        raise NotImplementedError
+
     env = SC2ObservationWrapper(
         env=env,
         unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,

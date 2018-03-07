@@ -334,6 +334,9 @@ class TerranActionWrapperV0(gym.Wrapper):
         super(TerranActionWrapperV0, self).__init__(env)
         assert isinstance(env.action_space, PySC2ActionSpace)
         assert isinstance(env.observation_space, PySC2ObservationSpace)
+        shape_screen = self.env.observation_space.space_attr["screen"][1:]
+        shape_minimap = self.env.observation_space.space_attr["minimap"][1:]
+        assert shape_screen == (32, 32) and shape_minimap == (32, 32)
         self._macro_actions = [macro_do_nothing,
                                macro_build_supply_depot,
                                macro_build_barrack,
