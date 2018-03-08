@@ -82,7 +82,7 @@ def create_env():
 
 def train():
     if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
-        os.mkdir(FLAGS.save_model_dir)
+        os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
     network = SC2QNet(
