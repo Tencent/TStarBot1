@@ -20,6 +20,7 @@ UNIT_TYPE_ROACH_WARREN = 97
 UNIT_TYPE_VESPENE = 342
 UNIT_TYPE_MINERAL = 483
 UNIT_TYPE_EXTRACTOR = 88
+UNIT_TYPE_QUEEN = 126
 
 PLAYER_RELATIVE_ENEMY = 4
 PLAYERINFO_IDLE_WORKER_COUNT = 7
@@ -74,10 +75,10 @@ def find_enemy_minimap(observation):
     return random.choice(candidate_xy)
 
 
-def find_vacant_location(observation, erosion_size):
+def find_vacant_creep_location(observation, erosion_size):
     unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
-    height_map = observation["screen"][SCREEN_FEATURES.height_map.index]
-    vacant = (unit_type == UNIT_TYPE_BACKGROUND) & (height_map == 255)
+    creep = observation["screen"][SCREEN_FEATURES.creep.index]
+    vacant = (unit_type == UNIT_TYPE_BACKGROUND) & (creep == 1)
     vacant_erosed = ndimage.grey_erosion(
         vacant, size=(erosion_size, erosion_size))
     candidate_xy = np.transpose(np.nonzero(vacant_erosed)).tolist()
@@ -85,11 +86,10 @@ def find_vacant_location(observation, erosion_size):
     return random.choice(candidate_xy)
 
 
-def find_location_far_from_hatchery(observation, distance):
+def find_location_far_from_hatchery(observation, radius):
     unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
     hatchery = unit_type == UNIT_TYPE_HATCHERY
-    hatchery_dilated = ndimage.grey_dilation(
-        hatchery, size=(distance, distance))
+    hatchery_dilated = ndimage.grey_dilation(hatchery, size=(radius, radius))
     candidate_xy = np.transpose(np.nonzero(1 - hatchery_dilated)).tolist()
     if len(candidate_xy) == 0: return None
     return random.choice(candidate_xy)
@@ -97,8 +97,7 @@ def find_location_far_from_hatchery(observation, distance):
 
 def find_minerals_screen(observation):
     unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
-    minerals = ndimage.grey_erosion(unit_type == UNIT_TYPE_MINERAL,
-                                    size=(2, 2))
+    minerals = unit_type == UNIT_TYPE_MINERAL
     candidate_xy = np.transpose(np.nonzero(minerals)).tolist()
     if len(candidate_xy) == 0: return None
     return random.choice(candidate_xy)
@@ -106,9 +105,8 @@ def find_minerals_screen(observation):
 
 def find_vespene_screen(observation):
     unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
-    vespene= ndimage.grey_erosion(unit_type == UNIT_TYPE_VESPENE,
-                                  size=(2, 2))
-    np.set_printoptions(threshold=np.nan, linewidth=300)
+    vespene = ndimage.grey_erosion(unit_type == UNIT_TYPE_VESPENE, size=(2, 2))
+    vespene = ndimage.binary_erosion(vespene)
     candidate_xy = np.transpose(np.nonzero(vespene)).tolist()
     if len(candidate_xy) == 0: return None
     return random.choice(candidate_xy)
@@ -136,24 +134,24 @@ def macro_do_nothing(observation):
 
 def macro_build_spawning_pool(observation):
     micros = []
-    micros.append([micro_select_any_worker, True])
     micros.append([micro_move_camera_to_self_base, True])
+    micros.append([micro_select_any_worker, True])
     micros.append([micro_build_spawning_pool, True])
     return micros
 
 
 def macro_build_roach_warren(observation):
     micros = []
-    micros.append([micro_select_any_worker, True])
     micros.append([micro_move_camera_to_self_base, True])
+    micros.append([micro_select_any_worker, True])
     micros.append([micro_build_roach_warren, True])
     return micros
 
 
 def macro_build_extractor(observation):
     micros = []
-    micros.append([micro_select_any_worker, True])
     micros.append([micro_move_camera_to_self_base, True])
+    micros.append([micro_select_any_worker, True])
     micros.append([micro_build_extractor, True])
     return micros
 
@@ -167,6 +165,14 @@ def macro_train_overlord(observation):
     micros.append((micro_train_overlord, False))
     micros.append((micro_train_overlord, False))
     micros.append((micro_move_away_from_hatchery, True))
+    return micros
+
+
+def macro_train_queen(observation):
+    micros = []
+    micros.append((micro_move_camera_to_self_base, True))
+    micros.append((micro_select_hatchery, True))
+    micros.append((micro_train_queen, True))
     return micros
 
 
@@ -200,6 +206,14 @@ def macro_train_roach(observation):
     micros.append((micro_train_roach, True))
     micros.append((micro_train_roach, True))
     micros.append((micro_train_roach, True))
+    return micros
+
+
+def macro_queen_inject_larva(observation):
+    micros = []
+    micros.append((micro_move_camera_to_self_base, True))
+    micros.append((micro_select_queen, True))
+    micros.append((micro_inject_larva, True))
     return micros
 
 
@@ -328,7 +342,7 @@ def micro_select_all_armies(observation):
 def micro_build_spawning_pool(observation):
     if has_spawning_pool_screen(observation):
         return None
-    xy = find_vacant_location(observation, 7)
+    xy = find_vacant_creep_location(observation, 4)
     if xy is None: return None
     function_id = actions.FUNCTIONS.Build_SpawningPool_screen.id
     function_args = [[NOT_QUEUED], xy[::-1]]
@@ -338,7 +352,7 @@ def micro_build_spawning_pool(observation):
 def micro_build_roach_warren(observation):
     if has_roach_warren_screen(observation):
         return None
-    xy = find_vacant_location(observation, 7)
+    xy = find_vacant_creep_location(observation, 4)
     if xy is None: return None
     function_id = actions.FUNCTIONS.Build_RoachWarren_screen.id
     function_args = [[NOT_QUEUED], xy[::-1]]
@@ -355,6 +369,12 @@ def micro_build_extractor(observation):
 
 def micro_train_overlord(observation):
     function_id = actions.FUNCTIONS.Train_Overlord_quick.id
+    function_args = [[0]]
+    return function_id, function_args
+
+
+def micro_train_queen(observation):
+    function_id = actions.FUNCTIONS.Train_Queen_quick.id
     function_args = [[0]]
     return function_id, function_args
 
@@ -388,8 +408,19 @@ def micro_select_hatchery(observation):
     return function_id, function_args
 
 
+def micro_select_queen(observation):
+    unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
+    candidate_xy = np.transpose(
+        np.nonzero(unit_type == UNIT_TYPE_QUEEN)).tolist()
+    if len(candidate_xy) == 0: return None
+    xy = random.choice(candidate_xy)
+    function_id = actions.FUNCTIONS.select_point.id
+    function_args = [[SELECT_POINT_SELECT], xy[::-1]]
+    return function_id, function_args
+
+
 def micro_move_away_from_hatchery(observation):
-    xy = find_location_far_from_hatchery(observation, distance=15)
+    xy = find_location_far_from_hatchery(observation, radius=15)
     if xy is None: return None
     function_id = actions.FUNCTIONS.Smart_screen.id
     function_args = [[NOT_QUEUED], xy[::-1]]
@@ -408,6 +439,17 @@ def micro_go_to_extractor(observation):
     xy = find_extractor_screen(observation)
     if xy is None: return None
     function_id = actions.FUNCTIONS.Smart_screen.id
+    function_args = [[NOT_QUEUED], xy[::-1]]
+    return function_id, function_args
+
+
+def micro_inject_larva(observation):
+    unit_type = observation["screen"][SCREEN_FEATURES.unit_type.index]
+    candidate_xy = np.transpose(
+        np.nonzero(unit_type == UNIT_TYPE_HATCHERY)).tolist()
+    if len(candidate_xy) == 0: return None
+    xy = random.choice(candidate_xy)
+    function_id = actions.FUNCTIONS.Effect_InjectLarva_screen.id
     function_args = [[NOT_QUEUED], xy[::-1]]
     return function_id, function_args
 
@@ -464,7 +506,9 @@ class ZergActionWrapperV0(gym.Wrapper):
                                macro_all_idle_workers_collect_minerals,
                                macro_all_defence,
                                macro_all_attack_enemy_base,
-                               macro_all_attack_any_enemy]
+                               macro_all_attack_any_enemy,
+                               macro_train_queen,
+                               macro_queen_inject_larva]
         self.action_space = Discrete(len(self._macro_actions))
 
     def step(self, action):
