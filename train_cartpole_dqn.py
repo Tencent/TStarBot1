@@ -10,6 +10,7 @@ from wrappers.cart_pole_wrappers import CartPoleRescaleWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from models.cart_pole_networks import CartPoleQNet
+from utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
@@ -110,6 +111,7 @@ def train():
 
 
 def main(argv):
+    print_arguments(FLAGS)
     train()
 
 

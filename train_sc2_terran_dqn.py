@@ -11,6 +11,7 @@ from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from models.sc2_networks import SC2QNet
+from utils.utils import print_arguments
 
 UNIT_TYPE_WHITELIST = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
                        24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
@@ -102,6 +103,7 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.eps_method,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,
@@ -123,6 +125,7 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.eps_method,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,
@@ -148,6 +151,7 @@ def train():
 
 
 def main(argv):
+    print_arguments(FLAGS)
     train()
 
 

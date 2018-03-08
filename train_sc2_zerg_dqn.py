@@ -11,30 +11,30 @@ from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from models.sc2_networks import SC2QNet
+from utils.utils import print_arguments
 
-UNIT_TYPE_WHITELIST = [0, 5, 6, 11, 18, 19, 20, 21, 22, 23,
-                       24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-                       34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
-                       44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
-                       54, 55, 56, 57, 58, 130, 132, 134, 146, 147,
-                       149, 268, 341, 342, 343, 365, 472, 473, 474, 483,
-                       484, 490, 498, 500, 561, 609, 638, 639, 640, 641,
-                       662, 665, 666, 689, 691, 692, 734, 830, 880, 1879,
-                       1883]
+UNIT_TYPE_WHITELIST = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
+                       89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
+                       103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
+                       94, 502, 503, 101, 92, 8, 112, 504, 87, 138,
+                       127, 687, 289, 114, 139, 95, 501, 109, 128, 118,
+                       494, 142, 113, 93, 16, 111, 489, 493, 893, 693,
+                       102, 140, 499, 7, 119, 892, 17, 115, 12, 150,
+                       117, 116, 690, 125]
 
-UNIT_TYPE_WHITELIST_TINY = [0, 132, 341, 21, 483, 20, 342, 18, 27, 19,
-                            45, 28, 638, 47, 48, 22, 32, 38, 23, 472,
-                            54, 39, 641, 33, 35, 130, 37, 29, 24, 42,
-                            57, 51, 134, 41, 692, 46, 36, 40, 53, 56,
-                            52, 268, 55, 49, 30, 5]
-
+UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
+                            89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
+                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
+                            94, 502, 503, 101, 92, 8, 112, 504, 87, 138,
+                            127, 687, 289, 114, 139, 95, 501, 109, 128, 118,
+                            494, 142, 113, 93, 16, 111, 489, 493, 893, 693]
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
-flags.DEFINE_enum("difficulty", '1',
+flags.DEFINE_enum("difficulty", '2',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
-flags.DEFINE_string("observation_filter", "effects,player_id,creep",
+flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
 flags.DEFINE_integer("memory_size", 50000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 2000, "Experience replay initial size.")
@@ -52,7 +52,7 @@ flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("agent", 'dqn', ['dqn', 'double_dqn'], "Algorithm.")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
-flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
+flags.DEFINE_integer("target_update_freq", 1000, "Target net update frequency.")
 flags.DEFINE_integer("optimize_freq", 4, "Frames between two optimizations")
 flags.DEFINE_integer("save_model_freq", 50, "Model saving frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
@@ -102,6 +102,7 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.eps_method,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,
@@ -123,6 +124,7 @@ def train():
             optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
+            eps_method=FLAGS.eps_method,
             eps_start=FLAGS.eps_start,
             eps_end=FLAGS.eps_end,
             eps_decay=FLAGS.eps_decay,
@@ -148,6 +150,7 @@ def train():
 
 
 def main(argv):
+    print_arguments(FLAGS)
     train()
 
 
