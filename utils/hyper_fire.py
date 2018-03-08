@@ -1,11 +1,13 @@
 import os
+import time
 import random
 
-
-save_model_dir = './checkpoints'
-log_dir = './log_hyper'
-local_log = './hyper.log'
-exps_num = 2
+job_name_prefix = 'zerg_dqn_d1'
+save_model_dir = '/out/checkpoints'
+save_log_path = '/out/log'
+log_dir = 'logs'
+local_log = 'hyper.log'
+exps_num = 40
 rand_patterns = {'memory_size':['enum', 100000, 50000, 50000, 20000],
                  'init_memory_size':['enum', 2000, 5000, 10000, 20000],
                  'eps_decay':['enum', 500000, 200000, 100000, 50000],
@@ -51,11 +53,19 @@ def hyper_tune(exp_id):
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
-    cmds = ('CUDA_VISIBLE_DEVICES=%d python -u train_sc2_zerg_dqn.py'
-            '%s > %s 2>&1 &' % (exp_id, conf, log_path))
-    print(cmds)
-    os.system(cmds)
-    return cmds
+    job_name = '%s-%d' % (job_name_prefix, exp_id)
+    cmds = ('fire run --mem 30g --cpu 10 --gpu 1 --mark %d '
+            '--name %s '
+            '--up sc2lab '
+            '--disk balderli/sc2_core '
+            'install_and_run.sh "%s" %s > %s 2>&1 &'
+            % (exp_id, job_name, conf, save_log_path, log_path))
+    assert os.system(cmds) == 0
+    time.sleep(0.5)
+    output = os.popen('fire id --mark %d ' % exp_id)
+    jobid = output.read().strip()
+    print("Job-%d-%s %s\n" % (exp_id, jobid, cmds))
+    return jobid, cmds
 
 
 if __name__ == '__main__':
@@ -64,5 +74,5 @@ if __name__ == '__main__':
 
     with open(local_log, 'wt') as f:
         for i in range(exps_num):
-            cmds = hyper_tune(i)
-            f.write("%s\n" % cmds)
+            jobid, cmds = hyper_tune(i)
+            f.write("Job-%d-%s %s\n" % (i, jobid, cmds))
