@@ -6,7 +6,7 @@ from absl import app
 from absl import flags
 
 from envs.sc2_env import StarCraftIIEnv
-from wrappers.terran_action_wrappers import TerranActionWrapperV0
+from wrappers.zerg_action_wrappers import ZergActionWrapperV0
 from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
@@ -72,7 +72,7 @@ def create_env():
         game_steps_per_episode=0,
         visualize_feature_map=False,
         score_index=None)
-    env = TerranActionWrapperV0(env)
+    env = ZergActionWrapperV0(env)
     env = SC2ObservationWrapper(
         env=env,
         unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
