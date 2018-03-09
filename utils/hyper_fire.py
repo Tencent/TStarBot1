@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import re
 
 job_name_prefix = 'zerg_dqn_d1'
 save_model_dir = '/out/checkpoints'
@@ -8,7 +9,7 @@ save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
 exps_num = 40
-rand_patterns = {'memory_size':['enum', 100000, 50000, 50000, 20000],
+rand_patterns = {'memory_size':['enum', 200000, 100000, 50000, 50000, 20000],
                  'init_memory_size':['enum', 2000, 5000, 10000, 20000],
                  'eps_decay':['enum', 500000, 200000, 100000, 50000],
                  'learning_rate':['log-uniform', -8, -2],
@@ -48,18 +49,28 @@ def gen_random_hypers(rand_patterns):
     return conf
 
 
+def allocate_resources(conf):
+    items = [item.split() for item in re.split(" --", conf)
+             if len(item.split()) == 2]
+    items_map = {k:v for k, v in items}
+    mem = int(items_map['memory_size']) / 2500 + 3
+    cpu = 10
+    return mem, cpu
+
+
 def hyper_tune(exp_id):
     conf = gen_random_hypers(rand_patterns)
+    mem, cpu = allocate_resources(conf)
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
     job_name = '%s-%d' % (job_name_prefix, exp_id)
-    cmds = ('fire run --mem 30g --cpu 10 --gpu 1 --mark %d '
+    cmds = ('fire run --mem %dg --cpu %d --gpu 1 --mark %d '
             '--name %s '
             '--up sc2lab '
             '--disk balderli/sc2_core '
             'install_and_run.sh "%s" %s > %s 2>&1 &'
-            % (exp_id, job_name, conf, save_log_path, log_path))
+            % (mem, cpu, exp_id, job_name, conf, save_log_path, log_path))
     assert os.system(cmds) == 0
     time.sleep(0.5)
     output = os.popen('fire id --mark %d ' % exp_id)
