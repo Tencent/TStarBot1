@@ -27,11 +27,11 @@ def gen_random_hypers(rand_patterns):
         if pattern[0] == 'uniform':
             assert len(pattern) == 3, "Type 'uniform' requires 2 arguments"
             value = random.uniform(pattern[1], pattern[2])
-            conf += " --%s %f" % (param_name, value)
+            conf += " --%s %g" % (param_name, value)
         elif pattern[0] == 'log-uniform':
             assert len(pattern) == 3, "Type 'log-uniform' requires 2 arguments."
             value = pow(10.0, random.uniform(pattern[1], pattern[2]))
-            conf += " --%s %f" % (param_name, value)
+            conf += " --%s %g" % (param_name, value)
         elif pattern[0] == 'enum':
             value = random.choice(pattern[1:])
             conf += " --%s %s" % (param_name, value)
