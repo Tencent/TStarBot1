@@ -36,7 +36,7 @@ flags.DEFINE_enum("loss_type", 'smooth_l1', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 100, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 100, "Print train cost frequency.")
-flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
+flags.DEFINE_boolean("use_batchnorm", True, "Use batchnorm or not.")
 flags.DEFINE_boolean("allow_eval_mode", False,
                      "Allow eval() during training, for batchnorm.")
 flags.FLAGS(sys.argv)
@@ -94,7 +94,6 @@ def train():
             network=network,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
-            optimize_freq=FLAGS.optimize_freq,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_method=FLAGS.eps_method,
