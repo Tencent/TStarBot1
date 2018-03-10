@@ -309,7 +309,7 @@ class FastDQNAgent(object):
             torch.load(model_path, map_location=lambda storage, loc: storage))
 
     def _get_current_eps(self, steps):
-        if self._eps_method == 'exp':
+        if self._eps_method == 'exponential':
             eps = self._eps_end + (self._eps_start - self._eps_end) * \
                 math.exp(-1. * steps / self._eps_decay)
         elif self._eps_method == 'linear':

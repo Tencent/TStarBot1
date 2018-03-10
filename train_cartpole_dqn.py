@@ -16,7 +16,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_actor_workers", 1, "Game steps per agent step.")
 flags.DEFINE_integer("memory_size", 10000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 128, "Experience replay initial size.")
-flags.DEFINE_enum("eps_method", 'eps', ['eps', 'linear'],
+flags.DEFINE_enum("eps_method", 'exponential', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 0.9, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.05, "Min greedy epsilon for exploration.")
