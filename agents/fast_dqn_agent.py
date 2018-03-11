@@ -114,6 +114,7 @@ class FastDQNAgent(object):
         self._save_model_dir = save_model_dir
         self._save_model_freq = save_model_freq
         self._action_space = action_space
+        self._memory_size = memory_size
         self._init_memory_size = max(init_memory_size, batch_size)
         self._gradient_clipping = gradient_clipping
         self._allow_eval_mode = allow_eval_mode
@@ -139,7 +140,6 @@ class FastDQNAgent(object):
         self._optimizer = optim.RMSprop(self._q_network.parameters(),
                                         momentum=momentum,
                                         lr=learning_rate)
-        self._memory = ReplayMemory(memory_size)
 
     def act(self, observation, eps=0):
         if random.uniform(0, 1) >= eps:
@@ -225,8 +225,8 @@ class FastDQNAgent(object):
                       self._transition_queue))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
-        self._batch_thread = [threading.Thread(target=self._prepare_batch)
-                              for i in range(8)]
+        self._batch_thread = [threading.Thread(target=self._prepare_batch, args=(tid,))
+                              for tid in range(8)]
         for process in self._actor_processes:
             process.daemon = True
             process.start()
@@ -234,7 +234,8 @@ class FastDQNAgent(object):
             thread.daemon = True
             thread.start()
 
-    def _prepare_batch(self):
+    def _prepare_batch(self, tid):
+        memory = ReplayMemory(int(self._memory_size / 8))
         steps = 0
         if self._frame_step_ratio < 1:
             steps_per_frame = int(1 / self._frame_step_ratio)
@@ -244,14 +245,14 @@ class FastDQNAgent(object):
             steps += 1
             if self._frame_step_ratio < 1:
                 if steps % steps_per_frame == 0: 
-                    self._memory.push(*(self._transition_queue.get()))
+                    memory.push(*(self._transition_queue.get()))
             else:
                 #print("Trans Queue Size: %d" % self._transition_queue.qsize())
                 for i in range(frames_per_step):
-                    self._memory.push(*(self._transition_queue.get()))
-            if len(self._memory) < self._init_memory_size:
+                    memory.push(*(self._transition_queue.get()))
+            if len(memory) < self._init_memory_size:
                 continue
-            transitions = self._memory.sample(self._batch_size)
+            transitions = memory.sample(self._batch_size)
             self._batch_queue.put(self._transitions_to_batch(transitions))
 
     def _transitions_to_batch(self, transitions):
