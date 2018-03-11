@@ -10,7 +10,6 @@ log_dir = 'logs'
 local_log = 'hyper.log'
 exps_num = 25
 rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
-                 'init_memory_size':['enum', 2000, 5000, 10000],
                  'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
                  'learning_rate':['log-uniform', -7, -3],
                  'momentum':['enum', 0.95, 0.9, 0.0, 0.0],
@@ -54,14 +53,13 @@ def allocate_resources(conf):
              if len(item.split()) == 2]
     items_map = {k:v for k, v in items}
     mem = int(items_map['memory_size']) / 2500 + 4
-    mem = 50
-    cpu = 17
     return mem, cpu
 
 
 def hyper_tune(exp_id):
     conf = gen_random_hypers(rand_patterns)
-    mem, cpu = allocate_resources(conf)
+    #mem, cpu = allocate_resources(conf)
+    mem, cpu = 50, 17
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)

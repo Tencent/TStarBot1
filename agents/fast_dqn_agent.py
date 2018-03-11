@@ -122,6 +122,7 @@ class FastDQNAgent(object):
         self._print_freq = print_freq
         self._episode_idx = 0
         self._current_eps = multiprocessing.Value('d', 1.0)
+        self._num_threads = 8
 
         self._q_network = network
         if init_model_path:
@@ -216,7 +217,8 @@ class FastDQNAgent(object):
 
     def _init_parallel_actors(self, create_env_fn, num_actor_workers):
         self._transition_queue = multiprocessing.Queue(
-            1 if self._frame_step_ratio < 1 else int(self._frame_step_ratio * 8))
+            1 if self._frame_step_ratio < 1
+            else int(self._frame_step_ratio * self._num_threads))
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,
@@ -226,7 +228,7 @@ class FastDQNAgent(object):
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch, args=(tid,))
-                              for tid in range(8)]
+                              for tid in range(self._num_threads)]
         for process in self._actor_processes:
             process.daemon = True
             process.start()
@@ -235,7 +237,7 @@ class FastDQNAgent(object):
             thread.start()
 
     def _prepare_batch(self, tid):
-        memory = ReplayMemory(int(self._memory_size / 8))
+        memory = ReplayMemory(int(self._memory_size / self._num_threads))
         steps = 0
         if self._frame_step_ratio < 1:
             steps_per_frame = int(1 / self._frame_step_ratio)
@@ -250,7 +252,7 @@ class FastDQNAgent(object):
                 #print("Trans Queue Size: %d" % self._transition_queue.qsize())
                 for i in range(frames_per_step):
                     memory.push(*(self._transition_queue.get()))
-            if len(memory) < self._init_memory_size:
+            if len(memory) < self._init_memory_size / self._num_threads:
                 continue
             transitions = memory.sample(self._batch_size)
             self._batch_queue.put(self._transitions_to_batch(transitions))

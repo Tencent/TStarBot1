@@ -7,7 +7,6 @@ log_dir = './log_hyper'
 local_log = './hyper.log'
 exps_num = 5
 rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
-                 'init_memory_size':['enum', 2000, 5000, 10000],
                  'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
                  'learning_rate':['log-uniform', -7, -3],
                  'momentum':['enum', 0.95, 0.9, 0.0, 0.0],
