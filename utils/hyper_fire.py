@@ -8,18 +8,17 @@ save_model_dir = '/out/checkpoints'
 save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
-exps_num = 40
-rand_patterns = {'memory_size':['enum', 100000, 50000, 50000, 50000],
-                 'eps_end':['enum', 0.1, 0.1, 0.2],
+exps_num = 25
+rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
                  'init_memory_size':['enum', 2000, 5000, 10000],
-                 'eps_decay':['enum', 5000000, 2000000, 1000000, 1000000, 500000],
+                 'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
                  'learning_rate':['log-uniform', -7, -3],
                  'momentum':['enum', 0.95, 0.9, 0.0, 0.0],
                  'gradient_clipping':['enum', 1.0, 1000.0, 1e20, 1e20],
-                 'batch_size':['enum', 64, 128, 128, 128, 256],
+                 'batch_size':['enum', 64, 128, 128, 128, 128, 256],
                  'discount':['enum', 0.999, 0.99],
                  'agent':['enum', 'fast_dqn', 'fast_double_dqn'],
-                 'target_update_freq':['enum', 5000, 10000, 10000, 50000],
+                 'target_update_freq':['enum', 1000, 2000, 5000, 10000, 10000, 20000],
                  'frame_step_ratio':['enum', 0.1, 0.2, 0.5, 1.0, 2.0, 4.0],
                  'use_batchnorm':['bool'],
                  'allow_eval_mode':['bool']}
@@ -55,7 +54,8 @@ def allocate_resources(conf):
              if len(item.split()) == 2]
     items_map = {k:v for k, v in items}
     mem = int(items_map['memory_size']) / 2500 + 4
-    cpu = 11
+    mem = 50
+    cpu = 17
     return mem, cpu
 
 
@@ -73,7 +73,7 @@ def hyper_tune(exp_id):
             'install_and_run.sh "%s" %s > %s 2>&1 &'
             % (mem, cpu, exp_id, job_name, conf, save_log_path, log_path))
     assert os.system(cmds) == 0
-    time.sleep(0.5)
+    time.sleep(1.0)
     output = os.popen('fire id --mark %d ' % exp_id)
     jobid = output.read().strip()
     print("Job-%d-%s %s\n" % (exp_id, jobid, cmds))
