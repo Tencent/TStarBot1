@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import random
 import math
@@ -68,6 +69,7 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
         episode_id += 1
         print("Actor Worker ID %d Episode %d Epsilon %f Return: %f." %
               (pid, episode_id, current_eps.value, cum_return))
+        sys.stdout.flush()
 
 
 class FastDQNAgent(object):
@@ -121,7 +123,6 @@ class FastDQNAgent(object):
         self._current_eps = multiprocessing.Value('d', 1.0)
 
         self._q_network = network
-        self._q_network.share_memory()
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
