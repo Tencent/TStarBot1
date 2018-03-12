@@ -38,13 +38,13 @@ UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 8, "Game steps per agent step.")
-flags.DEFINE_boolean("use_tiny_net", False, "Use tiny net or not.")
+flags.DEFINE_boolean("use_tiny_net", True, "Use tiny net or not.")
 flags.DEFINE_enum("difficulty", '2',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
-flags.DEFINE_integer("memory_size", 40000, "Experience replay size.")
+flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 20000, "Experience replay initial size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
@@ -53,7 +53,7 @@ flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
 flags.DEFINE_float("learning_rate", 1e-4, "Learning rate.")
 flags.DEFINE_float("momentum", 0.95, "Momentum.")
-flags.DEFINE_float("gradient_clipping", 1.0, "Gradient clipping threshold.")
+flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
 flags.DEFINE_float("discount", 0.999, "Discount.")

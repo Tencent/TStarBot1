@@ -14,6 +14,9 @@ class ReplayMemory(object):
 
     def push(self, *args):
         if len(self._memory) < self._capacity:
+            #from copy import deepcopy
+            #for i in range(self._capacity):
+                #self._memory.append(deepcopy(Transition(*args)))
             self._memory.append(None)
         self._memory[self._position] = Transition(*args)
         self._position = (self._position + 1) % self._capacity

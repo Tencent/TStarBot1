@@ -8,17 +8,17 @@ save_model_dir = '/out/checkpoints'
 save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
-exps_num = 25
-rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
+exps_num = 35
+rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2, 0.4],
                  'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
-                 'learning_rate':['log-uniform', -7, -3],
+                 'learning_rate':['log-uniform', -7, -4],
                  'momentum':['enum', 0.95, 0.9, 0.0, 0.0],
-                 'gradient_clipping':['enum', 1.0, 1000.0, 1e20, 1e20],
-                 'batch_size':['enum', 64, 128, 128, 128, 128, 256],
+                 'gradient_clipping':['enum', 10.0, 1000.0, 1e20, 1e20],
+                 'batch_size':['enum', 128, 128, 128, 256],
                  'discount':['enum', 0.999, 0.99],
                  'agent':['enum', 'fast_dqn', 'fast_double_dqn'],
                  'target_update_freq':['enum', 1000, 2000, 5000, 10000, 10000, 20000],
-                 'frame_step_ratio':['enum', 0.1, 0.2, 0.5, 1.0, 2.0, 4.0],
+                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0],
                  'use_batchnorm':['bool'],
                  'allow_eval_mode':['bool']}
 
@@ -59,7 +59,7 @@ def allocate_resources(conf):
 def hyper_tune(exp_id):
     conf = gen_random_hypers(rand_patterns)
     #mem, cpu = allocate_resources(conf)
-    mem, cpu = 50, 17
+    mem, cpu = 35, 12
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
