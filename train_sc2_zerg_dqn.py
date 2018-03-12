@@ -33,18 +33,19 @@ UNIT_TYPE_WHITELIST_SMALL = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
 
 UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
                             89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
-                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151]
+                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
+                            94, 502, 503, 101, 92, 8, 112, 504, 87, 138]
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 8, "Game steps per agent step.")
-flags.DEFINE_boolean("use_tiny_net", True, "Use tiny net or not.")
+flags.DEFINE_boolean("use_tiny_net", False, "Use tiny net or not.")
 flags.DEFINE_enum("difficulty", '2',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
-flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
+flags.DEFINE_integer("memory_size", 40000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 20000, "Experience replay initial size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")

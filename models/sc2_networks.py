@@ -38,8 +38,8 @@ class SC2QNet(nn.Module):
             self.minimap_bn1 = nn.BatchNorm2d(16)
             self.minimap_bn2 = nn.BatchNorm2d(32)
             self.player_bn = nn.BatchNorm2d(10)
-        self.state_fc = nn.Linear(74 * (resolution ** 2), 256)
-        self.q_fc = nn.Linear(256, n_out)
+        self.state_fc = nn.Linear(74 * (resolution ** 2), 200)
+        self.q_fc = nn.Linear(200, n_out)
         self._batchnorm = batchnorm
 
     def forward(self, x):

@@ -125,6 +125,7 @@ class FastDQNAgent(object):
         self._num_threads = 8
 
         self._q_network = network
+        self._q_network.share_memory()
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[

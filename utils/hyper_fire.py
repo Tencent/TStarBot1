@@ -8,7 +8,7 @@ save_model_dir = '/out/checkpoints'
 save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
-exps_num = 35
+exps_num = 20
 rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2, 0.4],
                  'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
                  'learning_rate':['log-uniform', -7, -4],
@@ -59,7 +59,7 @@ def allocate_resources(conf):
 def hyper_tune(exp_id):
     conf = gen_random_hypers(rand_patterns)
     #mem, cpu = allocate_resources(conf)
-    mem, cpu = 35, 12
+    mem, cpu = 62, 20
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
