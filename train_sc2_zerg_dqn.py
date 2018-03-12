@@ -8,9 +8,11 @@ from absl import flags
 from envs.sc2_env import StarCraftIIEnv
 from wrappers.zerg_action_wrappers import ZergActionWrapperV0
 from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
+from wrappers.sc2_observation_wrappers import SC2ObservationTinyWrapper
 from agents.dqn_agent import DQNAgent
 from agents.fast_dqn_agent import FastDQNAgent
 from models.sc2_networks import SC2QNet
+from models.sc2_networks import SC2TinyQNet
 from utils.utils import print_arguments
 
 UNIT_TYPE_WHITELIST = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
@@ -20,18 +22,23 @@ UNIT_TYPE_WHITELIST = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
                        127, 687, 289, 114, 139, 95, 501, 109, 128, 118,
                        494, 142, 113, 93, 16, 111, 489, 493, 893, 693,
                        102, 140, 499, 7, 119, 892, 17, 115, 12, 150,
-                       117, 116, 690, 125]
+                       117, 116, 690, 125, 824]
 
-UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
+UNIT_TYPE_WHITELIST_SMALL = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
                             89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
                             103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
                             94, 502, 503, 101, 92, 8, 112, 504, 87, 138,
                             127, 687, 289, 114, 139, 95, 501, 109, 128, 118,
                             494, 142, 113, 93, 16, 111, 489, 493, 893, 693]
 
+UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
+                            89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
+                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151]
+
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 8, "Game steps per agent step.")
+flags.DEFINE_boolean("use_tiny_net", False, "Use tiny net or not.")
 flags.DEFINE_enum("difficulty", '2',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
@@ -77,10 +84,13 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     env = ZergActionWrapperV0(env)
-    env = SC2ObservationWrapper(
-        env=env,
-        unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
-        observation_filter=FLAGS.observation_filter.split(','))
+    if FLAGS.use_tiny_net:
+        env = SC2ObservationTinyWrapper(env=env)
+    else:
+        env = SC2ObservationWrapper(
+            env=env,
+            unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
+            observation_filter=FLAGS.observation_filter.split(','))
     return env
 
 
@@ -89,12 +99,18 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
-    network = SC2QNet(
-        resolution=env.observation_space.spaces[0].shape[1],
-        n_channels_screen=env.observation_space.spaces[0].shape[0],
-        n_channels_minimap=env.observation_space.spaces[1].shape[0],
-        n_out=env.action_space.n,
-        batchnorm=FLAGS.use_batchnorm)
+    if FLAGS.use_tiny_net:
+        network = SC2TinyQNet(
+            in_dims=env.observation_space.shape[0],
+            out_dims=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
+    else:
+        network = SC2QNet(
+            resolution=env.observation_space.spaces[0].shape[1],
+            n_channels_screen=env.observation_space.spaces[0].shape[0],
+            n_channels_minimap=env.observation_space.spaces[1].shape[0],
+            n_out=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
 
     if FLAGS.agent == 'dqn' or FLAGS.agent == 'double_dqn':
         agent = DQNAgent(

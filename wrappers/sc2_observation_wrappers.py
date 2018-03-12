@@ -74,3 +74,19 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
             else:
                 num_channels += 1
         return num_channels
+
+
+class SC2ObservationTinyWrapper(gym.ObservationWrapper):
+
+    def __init__(self, env):
+        super(SC2ObservationTinyWrapper, self).__init__(env)
+        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        self.observation_space = spaces.Box(0.0, float('inf'), [10])
+
+    def _observation(self, observation):
+        observation_player = self._transform_player_features(
+            observation["player"])
+        return observation_player
+
+    def _transform_player_features(self, observation):
+        return np.log10(observation[1:].astype(np.float32) + 1)

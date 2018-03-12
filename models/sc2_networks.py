@@ -61,3 +61,34 @@ class SC2QNet(nn.Module):
         state = F.leaky_relu(self.state_fc(
             screen_minimap.view(screen_minimap.size(0), -1)))
         return self.q_fc(state)
+
+
+class SC2TinyQNet(nn.Module):
+    def __init__(self,
+                 in_dims,
+                 out_dims,
+                 batchnorm=False):
+        super(SC2TinyQNet, self).__init__()
+        self.fc1 = nn.Linear(in_dims, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, 256)
+        self.fc4 = nn.Linear(256, out_dims)
+        if batchnorm:
+            self.bn1 = nn.BatchNorm1d(1024)
+            self.bn2 = nn.BatchNorm1d(512)
+            self.bn3 = nn.BatchNorm1d(256)
+        self._batchnorm = batchnorm
+
+    def forward(self, inputs):
+        x = inputs
+        if not self._batchnorm:
+            x = F.leaky_relu(self.fc1(x))
+            x = F.leaky_relu(self.fc2(x))
+            x = F.leaky_relu(self.fc3(x))
+            x = F.leaky_relu(self.fc4(x))
+        else:
+            x = F.leaky_relu(self.bn1(self.fc1(x)))
+            x = F.leaky_relu(self.bn2(self.fc2(x)))
+            x = F.leaky_relu(self.bn3(self.fc3(x)))
+            x = F.leaky_relu(self.fc4(x))
+        return x
