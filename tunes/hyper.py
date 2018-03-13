@@ -50,7 +50,7 @@ def hyper_tune(exp_id):
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
-    cmds = ('CUDA_VISIBLE_DEVICES=%d python -u train_sc2_zerg_dqn.py'
+    cmds = ('CUDA_VISIBLE_DEVICES=%d python -u train_sc2_zerg_dqn_v0.py'
             '%s > %s 2>&1 &' % (exp_id, conf, log_path))
     print(cmds)
     os.system(cmds)
