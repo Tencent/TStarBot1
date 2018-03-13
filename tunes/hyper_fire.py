@@ -17,7 +17,7 @@ rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
                  'discount':['enum', 0.99, 0.99, 0.999],
                  'agent':['enum', 'fast_dqn', 'fast_double_dqn', 'fast_double_dqn'],
                  'target_update_freq':['enum', 2500, 5000, 5000, 10000],
-                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0]]
+                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0]}
 
 
 def gen_random_hypers(rand_patterns):
