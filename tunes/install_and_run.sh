@@ -15,4 +15,4 @@ export SC2PATH="/fid/balderli/sc2_core/StarCraftII"
 
 # run
 cd sc2lab
-python3 -u train_sc2_zerg_dqn_v0.py $1 | tee $2
+python3 -u train_sc2_zerg_dqn_v1.py $1 | tee $2
