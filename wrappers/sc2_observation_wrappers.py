@@ -76,10 +76,10 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
         return num_channels
 
 
-class SC2ObservationTinyWrapper(gym.ObservationWrapper):
+class SC2ObservationNonSpatialWrapperV0(gym.ObservationWrapper):
 
     def __init__(self, env):
-        super(SC2ObservationTinyWrapper, self).__init__(env)
+        super(SC2ObservationNonSpatialWrapperV0, self).__init__(env)
         assert isinstance(env.observation_space, PySC2ObservationSpace)
         self.observation_space = spaces.Box(0.0, float('inf'), [10])
 
@@ -90,3 +90,134 @@ class SC2ObservationTinyWrapper(gym.ObservationWrapper):
 
     def _transform_player_features(self, observation):
         return np.log10(observation[1:].astype(np.float32) + 1)
+
+
+PLAYER_RELATIVE_ENEMY = 4
+PLAYER_RELATIVE_SELF = 1
+
+
+class SC2ObservationNonSpatialWrapperV1(gym.Wrapper):
+
+    def __init__(self, env):
+        super(SC2ObservationNonSpatialWrapperV1, self).__init__(env)
+        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        self.observation_space = spaces.Box(0.0, float('inf'), [22])
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self._observation(observation), reward, done, info
+
+    def reset(self):
+        observation = self.env.reset()
+        self._update_player_position_mask(observation)
+        return self._observation(observation)
+
+    def _observation(self, observation):
+        observation_player = observation["player"]
+        player_id = observation_player[0]
+        minerals = observation_player[1]
+        vespene = observation_player[2]
+        food_used = observation_player[3]
+        food_cap = observation_player[4]
+        food_army = observation_player[5]
+        food_workers = observation_player[6]
+        idle_worker_count = observation_player[7]
+        army_count = observation_player[8]
+        warp_gate_count = observation_player[9]
+        larva_count = observation_player[10]
+
+        game_loop = observation["game_loop"][0]
+        enemy_pixels_minimap = self._count_enemy_pixels_minimap(observation)
+        enemy_pixels_screen = self._count_enemy_pixels_screen(observation)
+        enemy_pixels_self_range = self._count_enemy_pixels_self_range(observation)
+        enemy_pixels_oppo_range = self._count_enemy_pixels_oppo_range(observation)
+        self_pixels_minimap = self._count_self_pixels_minimap(observation)
+        self_pixels_screen = self._count_self_pixels_screen(observation)
+        self_pixels_self_range = self._count_self_pixels_self_range(observation)
+        self_pixels_oppo_range = self._count_self_pixels_oppo_range(observation)
+
+        features = np.array([minerals,
+                             vespene,
+                             food_used,
+                             food_cap,
+                             food_army,
+                             food_workers,
+                             idle_worker_count,
+                             army_count,
+                             larva_count,
+                             game_loop,
+                             enemy_pixels_minimap,
+                             enemy_pixels_screen,
+                             enemy_pixels_self_range,
+                             enemy_pixels_oppo_range,
+                             self_pixels_minimap,
+                             self_pixels_screen,
+                             self_pixels_self_range,
+                             self_pixels_oppo_range,
+                             self.env.num_spawning_pools,
+                             self.env.num_extractors,
+                             self.env.num_roach_warrens,
+                             self.env.num_queens]).astype(np.float32)
+        log_features = np.log10(features + 1)
+        assert log_features.shape[0] == self.observation_space.shape[0]
+        return log_features
+
+    def _count_enemy_pixels_minimap(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(player_relative == PLAYER_RELATIVE_ENEMY)
+
+    def _count_enemy_pixels_screen(self, observation):
+        player_relative = observation["screen"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(player_relative == PLAYER_RELATIVE_ENEMY)
+
+    def _count_enemy_pixels_self_range(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(np.logical_and(player_relative == PLAYER_RELATIVE_ENEMY,
+                                     self._self_range_mask == 1))
+
+    def _count_enemy_pixels_oppo_range(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(np.logical_and(player_relative == PLAYER_RELATIVE_ENEMY,
+                                     self._opponent_range_mask == 1))
+
+    def _count_self_pixels_minimap(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(player_relative == PLAYER_RELATIVE_SELF)
+
+    def _count_self_pixels_screen(self, observation):
+        player_relative = observation["screen"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(player_relative == PLAYER_RELATIVE_SELF)
+
+    def _count_self_pixels_self_range(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(np.logical_and(player_relative == PLAYER_RELATIVE_SELF,
+                                     self._self_range_mask == 1))
+
+    def _count_self_pixels_oppo_range(self, observation):
+        player_relative = observation["minimap"][
+            MINIMAP_FEATURES.player_relative.index]
+        return np.sum(np.logical_and(player_relative == PLAYER_RELATIVE_SELF,
+                                     self._opponent_range_mask == 1))
+
+    def _update_player_position_mask(self, observation):
+        camera = observation["minimap"][MINIMAP_FEATURES.camera.index]
+        resolution = self.env.observation_space.space_attr["minimap"][-1]
+        half_resolution = resolution // 2
+        if np.nonzero(camera == 1)[0].any() < resolution / 2:
+            self._self_range_mask = np.zeros((resolution, resolution))
+            self._opponent_range_mask = np.zeros((resolution, resolution))
+            self._self_range_mask[:half_resolution, :half_resolution] = 1
+            self._opponent_range_mask[-half_resolution:, -half_resolution:] = 1
+        else:
+            print("position right-bottom.")
+            self._self_range_mask = np.zeros((resolution, resolution))
+            self._opponent_range_mask = np.zeros((resolution, resolution))
+            self._self_range_mask[-half_resolution:, -half_resolution:] = 1
+            self._oppenent_range_mask[:half_resolution, :half_resolution] = 1

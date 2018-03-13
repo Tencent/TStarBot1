@@ -7,10 +7,10 @@ from absl import flags
 
 from envs.sc2_env import StarCraftIIEnv
 from wrappers.zerg_action_wrappers import ZergActionWrapperV0
-from wrappers.sc2_observation_wrappers import SC2ObservationTinyWrapper
+from wrappers.sc2_observation_wrappers import SC2ObservationNonSpatialWrapperV1
 from agents.dqn_agent import DQNAgent
 from agents.fast_dqn_agent import FastDQNAgent
-from models.sc2_networks import SC2TinyQNet
+from models.sc2_networks import SC2NonSpatialQNet
 from utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
@@ -59,7 +59,7 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     env = ZergActionWrapperV0(env)
-    env = SC2ObservationTinyWrapper(env=env)
+    env = SC2ObservationNonSpatialWrapperV1(env=env)
     return env
 
 
@@ -68,7 +68,7 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
-    network = SC2TinyQNet(
+    network = SC2NonSpatialQNet(
         in_dims=env.observation_space.shape[0],
         out_dims=env.action_space.n,
         batchnorm=FLAGS.use_batchnorm)

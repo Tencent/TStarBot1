@@ -63,12 +63,12 @@ class SC2QNet(nn.Module):
         return self.q_fc(state)
 
 
-class SC2TinyQNet(nn.Module):
+class SC2NonSpatialQNet(nn.Module):
     def __init__(self,
                  in_dims,
                  out_dims,
                  batchnorm=False):
-        super(SC2TinyQNet, self).__init__()
+        super(SC2NonSpatialQNet, self).__init__()
         self.fc1 = nn.Linear(in_dims, 1024)
         self.fc2 = nn.Linear(1024, 512)
         self.fc3 = nn.Linear(512, 256)

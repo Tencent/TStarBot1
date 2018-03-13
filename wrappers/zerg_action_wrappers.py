@@ -526,6 +526,7 @@ class ZergActionWrapperV0(gym.Wrapper):
                     break
                 else:
                     continue
+            self._record_action(action)
             observation, reward, done, info = self.env.step(action)
             observation["base_xy"] = self._base_xy
             acted = True
@@ -534,6 +535,7 @@ class ZergActionWrapperV0(gym.Wrapper):
                 return observation, reward_cum, done, info
         if not acted:
             action = micro_do_nothing(observation)
+            self._record_action(action)
             observation, reward, done, info = self.env.step(action)
             observation["base_xy"] = self._base_xy
             reward_cum += reward
@@ -543,5 +545,36 @@ class ZergActionWrapperV0(gym.Wrapper):
     def reset(self):
         observation = self.env.reset()
         self._base_xy = locate_camera_minimap(observation)
+        self._num_spawning_pools = 0
+        self._num_extractors = 0
+        self._num_roach_warrens = 0
+        self._num_queens = 0
         self._last_observation = observation
         return observation
+
+    def _record_action(self, action):
+        function_id = action[0]
+        if function_id == actions.FUNCTIONS.Build_SpawningPool_screen.id:
+            self._num_spawning_pools = 1
+        if function_id == actions.FUNCTIONS.Build_Extractor_screen.id:
+            self._num_extractors = 1
+        if function_id == actions.FUNCTIONS.Build_RoachWarren_screen.id:
+            self._num_roach_warrens = 1
+        if function_id == actions.FUNCTIONS.Train_Queen_quick.id:
+            self._num_queens = 1
+
+    @property
+    def num_spawning_pools(self):
+        return self._num_spawning_pools
+
+    @property
+    def num_extractors(self):
+        return self._num_extractors
+
+    @property
+    def num_roach_warrens(self):
+        return self._num_roach_warrens
+
+    @property
+    def num_queens(self):
+        return self._num_queens
