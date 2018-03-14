@@ -17,7 +17,7 @@ rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.1, 0.2],
                  'gradient_clipping':['enum', 1.0, 2.0, 10.0, 100.0, 1e20, 1e20, 1e20],
                  'agent':['enum', 'fast_double_dqn'],
                  'target_update_freq':['enum', 2500, 5000, 10000, 20000],
-                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0],
+                 'frame_step_ratio':['enum', 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0],
                  'use_batchnorm':['bool'],
                  'allow_eval_mode':['bool']}
 
