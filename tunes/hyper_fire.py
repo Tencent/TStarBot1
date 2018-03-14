@@ -9,15 +9,17 @@ save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
 exps_num = 40
-rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
+rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.1, 0.2],
                  'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
-                 'learning_rate':['log-uniform', -9, -5],
-                 'momentum':['enum', 0.95, 0.9],
-                 'batch_size':['enum', 128, 128, 256],
+                 'learning_rate':['log-uniform', -9, -6],
+                 'momentum':['enum', 0.95, 0.9, 0.0],
                  'discount':['enum', 0.99, 0.99, 0.999],
-                 'agent':['enum', 'fast_dqn', 'fast_double_dqn', 'fast_double_dqn'],
-                 'target_update_freq':['enum', 2500, 5000, 5000, 10000],
-                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0]}
+                 'gradient_clipping':['enum', 1.0, 2.0, 10.0, 100.0, 1e20, 1e20, 1e20],
+                 'agent':['enum', 'fast_double_dqn'],
+                 'target_update_freq':['enum', 2500, 5000, 10000, 20000],
+                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0],
+                 'use_batchnorm':['bool'],
+                 'allow_eval_mode':['bool']}
 
 
 def gen_random_hypers(rand_patterns):

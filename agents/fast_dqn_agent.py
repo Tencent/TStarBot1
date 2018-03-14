@@ -228,7 +228,8 @@ class FastDQNAgent(object):
                       self._transition_queue))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
-        self._batch_thread = [threading.Thread(target=self._prepare_batch, args=(tid,))
+        self._batch_thread = [threading.Thread(target=self._prepare_batch,
+                                               args=(tid,))
                               for tid in range(self._num_threads)]
         for process in self._actor_processes:
             process.daemon = True
