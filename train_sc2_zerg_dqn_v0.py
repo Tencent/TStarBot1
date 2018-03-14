@@ -161,7 +161,7 @@ def train():
             init_memory_size=FLAGS.init_memory_size,
             frame_step_ratio=FLAGS.frame_step_ratio,
             gradient_clipping=FLAGS.gradient_clipping,
-            double_dqn=True if FLAGS.agent == 'double_dqn' else False,
+            double_dqn=True if FLAGS.agent == 'fast_double_dqn' else False,
             target_update_freq=FLAGS.target_update_freq,
             allow_eval_mode=FLAGS.allow_eval_mode,
             loss_type=FLAGS.loss_type,
