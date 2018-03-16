@@ -76,18 +76,19 @@ class DQNAgent(object):
         self._episode_idx = 0
 
         self._q_network = network
+        self._target_q_network = deepcopy(network)
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
                 init_model_path.rfind('-')+1:])
         if torch.cuda.device_count() > 1:
             self._q_network = nn.DataParallel(self._q_network)
+            self._target_q_network = nn.DataParallel(self._target_q_network)
         if torch.cuda.is_available():
             self._q_network.cuda()
+            self._target_q_network.cuda()
 
-        if double_dqn:
-            self._init_target_network(network)
-            self._update_target_network()
+        self._update_target_network()
 
         self._optimizer = optim.RMSprop(self._q_network.parameters(),
                                         momentum=momentum,
@@ -124,7 +125,7 @@ class DQNAgent(object):
                 next_observation, reward, done, _ = env.step(action)
                 self._memory.push(observation, action, reward,
                                   next_observation, done)
-                if self._double_dqn and steps % self._target_update_freq == 0:
+                if steps % self._target_update_freq == 0:
                     self._update_target_network()
                 if (len(self._memory) >= self._init_memory_size and
                     frames % self._optimize_freq == 0):
@@ -155,24 +156,23 @@ class DQNAgent(object):
         # compute max-q target
         if self._allow_eval_mode:
             self._q_network.eval()
-        q_next = self._q_network(next_obs_batch)
+        q_next_target = self._target_q_network(next_obs_batch)
         if self._double_dqn:
-            q_next_target = self._target_q_network(next_obs_batch)
+            q_next = self._q_network(next_obs_batch)
             futures = q_next_target.gather(
                 1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
         else:
-            futures = q_next.max(dim=1)[0].view(-1, 1).squeeze()
+            futures = q_next_target.max(dim=1)[0].view(-1, 1).squeeze()
         futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
-        target_q.volatile = False
         # define loss
         self._q_network.train()
         q = self._q_network(obs_batch).gather(
             1, action_batch.view(-1, 1))
         if self._loss_type == "smooth_l1":
-            loss = F.smooth_l1_loss(q, target_q)
+            loss = F.smooth_l1_loss(q, Variable(target_q))
         elif self._loss_type == "mse":
-            loss = F.mse_loss(q, target_q)
+            loss = F.mse_loss(q, Variable(target_q))
         else:
             raise NotImplementedError
         # compute gradient and update parameters
@@ -218,15 +218,6 @@ class DQNAgent(object):
 
         return (next_obs_batch, obs_batch, reward_batch, action_batch,
                 done_batch)
-
-    def _init_target_network(self, network):
-        self._target_q_network = deepcopy(network)
-        if torch.cuda.device_count() > 1:
-            self._target_q_network = nn.DataParallel(self._target_q_network)
-        if torch.cuda.is_available():
-            self._target_q_network.cuda()
-        if self._allow_eval_mode:
-            self._target_q_network.eval()
 
     def _update_target_network(self):
         self._target_q_network.load_state_dict(
