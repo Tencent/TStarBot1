@@ -170,9 +170,9 @@ class DQNAgent(object):
         q = self._q_network(obs_batch).gather(
             1, action_batch.view(-1, 1))
         if self._loss_type == "smooth_l1":
-            loss = F.smooth_l1_loss(q, Variable(target_q))
+            loss = F.smooth_l1_loss(q, Variable(target_q.data))
         elif self._loss_type == "mse":
-            loss = F.mse_loss(q, Variable(target_q))
+            loss = F.mse_loss(q, Variable(target_q.data))
         else:
             raise NotImplementedError
         # compute gradient and update parameters
