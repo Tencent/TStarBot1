@@ -42,7 +42,7 @@ class StarCraftIIEnv(gym.Env):
         timestep = self._sc2_env.step([op])[0]
         observation = timestep.observation
         self._available_actions = observation["available_actions"]
-        reward = timestep.reward
+        reward = float(timestep.reward)
         done = timestep.last() 
         if done: self._reseted = False
         info = {}
