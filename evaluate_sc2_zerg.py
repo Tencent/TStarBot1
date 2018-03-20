@@ -132,7 +132,7 @@ def train():
             observation = env.reset()
             done = False
             while not done:
-                action = agent.act(observation, eps=1.0)
+                action = agent.act(observation, eps=0)
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
             print("Evaluated %d/%d Episodes Avg Return %f "
