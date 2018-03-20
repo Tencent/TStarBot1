@@ -30,7 +30,7 @@ flags.DEFINE_enum("difficulty", '2',
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("network_version", 'v1', ['v0', 'v1'], "network version.")
+flags.DEFINE_enum("observation_version", 'v1', ['v0', 'v1'], "Obs version.")
 flags.DEFINE_enum("agent", 'fast_double_dqn',
                   ['dqn', 'double_dqn', 'fast_dqn', 'fast_double_dqn',
                    'random', 'keyboard'],
@@ -51,12 +51,12 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     env = ZergActionWrapperV0(env)
-    if FLAGS.network_version == 'v0':
+    if FLAGS.observation_version == 'v0':
         env = SC2ObservationWrapper(
             env=env,
             unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
             observation_filter=FLAGS.observation_filter.split(','))
-    elif FLAGS.network_version == 'v1':
+    elif FLAGS.observation_version == 'v1':
         env = SC2ObservationNonSpatialWrapperV1(env=env)
     else:
         raise NotImplementedError
@@ -65,14 +65,14 @@ def create_env():
 
 def train():
     env = create_env()
-    if FLAGS.network_version == 'v0':
+    if FLAGS.observation_version == 'v0':
         network = SC2QNet(
             resolution=env.observation_space.spaces[0].shape[1],
             n_channels_screen=env.observation_space.spaces[0].shape[0],
             n_channels_minimap=env.observation_space.spaces[1].shape[0],
             n_out=env.action_space.n,
             batchnorm=FLAGS.use_batchnorm)
-    elif FLAGS.network_version == 'v1':
+    elif FLAGS.observation_version == 'v1':
         network = SC2NonSpatialQNet(
             in_dims=env.observation_space.shape[0],
             out_dims=env.action_space.n,

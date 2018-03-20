@@ -63,6 +63,7 @@ flags.DEFINE_integer("print_freq", 1000, "Print train cost frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("allow_eval_mode", False,
                      "Allow eval() during training, for batchnorm.")
+flags.DEFINE_boolean("flip_minimap_screen", True, "Use batchnorm or not.")
 flags.FLAGS(sys.argv)
 
 
@@ -81,7 +82,8 @@ def create_env():
     env = SC2ObservationWrapper(
         env=env,
         unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
-        observation_filter=FLAGS.observation_filter.split(','))
+        observation_filter=FLAGS.observation_filter.split(','),
+        flip=FLAGS.flip_minimap_screen)
     return env
 
 

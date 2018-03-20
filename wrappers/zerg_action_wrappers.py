@@ -578,3 +578,11 @@ class ZergActionWrapperV0(gym.Wrapper):
     @property
     def num_queens(self):
         return self._num_queens
+
+    @property
+    def player_corner(self):
+        resolution = self.env.observation_space.space_attr["minimap"][-1]
+        if self._base_xy[0] < resolution // 2:
+            return 0
+        else:
+            return 1

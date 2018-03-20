@@ -8,11 +8,9 @@ from absl import flags
 from envs.sc2_env import StarCraftIIEnv
 from wrappers.zerg_action_wrappers import ZergActionWrapperV0
 from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
-from wrappers.sc2_observation_wrappers import SC2ObservationTinyWrapper
 from agents.dqn_agent import DQNAgent
 from agents.fast_dqn_agent import FastDQNAgent
-from models.sc2_networks import SC2QNet
-from models.sc2_networks import SC2TinyQNet
+from models.sc2_networks import SC2QNetV2
 from utils.utils import print_arguments
 
 UNIT_TYPE_WHITELIST = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
@@ -33,34 +31,32 @@ UNIT_TYPE_WHITELIST_SMALL = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
 
 UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
                             89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
-                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
-                            94, 502, 503, 101, 92, 8, 112, 504, 87, 138]
+                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151]
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 8, "Game steps per agent step.")
-flags.DEFINE_boolean("use_tiny_net", False, "Use tiny net or not.")
 flags.DEFINE_enum("difficulty", '2',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
-flags.DEFINE_integer("memory_size", 40000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 20000, "Experience replay initial size.")
+flags.DEFINE_integer("memory_size", 100000, "Experience replay size.")
+flags.DEFINE_integer("init_memory_size", 100000, "Experience replay initial size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
-flags.DEFINE_float("learning_rate", 1e-4, "Learning rate.")
+flags.DEFINE_float("learning_rate", 1e-5, "Learning rate.")
 flags.DEFINE_float("momentum", 0.95, "Momentum.")
-flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
+flags.DEFINE_float("gradient_clipping", 1.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
 flags.DEFINE_float("discount", 0.999, "Discount.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_enum("agent", 'fast_dqn',
+flags.DEFINE_enum("agent", 'fast_double_dqn',
                   ['dqn', 'double_dqn', 'fast_dqn', 'fast_double_dqn'],
                   "RL Algorithm.")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
@@ -68,7 +64,8 @@ flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency."
 flags.DEFINE_integer("save_model_freq", 100000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 1000, "Print train cost frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
-flags.DEFINE_boolean("allow_eval_mode", False,
+flags.DEFINE_boolean("flip_minimap_screen", True, "Use batchnorm or not.")
+flags.DEFINE_boolean("allow_eval_mode", True,
                      "Allow eval() during training, for batchnorm.")
 flags.FLAGS(sys.argv)
 
@@ -85,13 +82,11 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     env = ZergActionWrapperV0(env)
-    if FLAGS.use_tiny_net:
-        env = SC2ObservationTinyWrapper(env=env)
-    else:
-        env = SC2ObservationWrapper(
-            env=env,
-            unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
-            observation_filter=FLAGS.observation_filter.split(','))
+    env = SC2ObservationWrapper(
+        env=env,
+        unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
+        observation_filter=FLAGS.observation_filter.split(','),
+        flip=FLAGS.flip_minimap_screen)
     return env
 
 
@@ -100,18 +95,12 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
-    if FLAGS.use_tiny_net:
-        network = SC2TinyQNet(
-            in_dims=env.observation_space.shape[0],
-            out_dims=env.action_space.n,
-            batchnorm=FLAGS.use_batchnorm)
-    else:
-        network = SC2QNet(
-            resolution=env.observation_space.spaces[0].shape[1],
-            n_channels_screen=env.observation_space.spaces[0].shape[0],
-            n_channels_minimap=env.observation_space.spaces[1].shape[0],
-            n_out=env.action_space.n,
-            batchnorm=FLAGS.use_batchnorm)
+    network = SC2QNetV2(
+        resolution=env.observation_space.spaces[0].shape[1],
+        n_channels_screen=env.observation_space.spaces[0].shape[0],
+        n_channels_minimap=env.observation_space.spaces[1].shape[0],
+        n_out=env.action_space.n,
+        batchnorm=FLAGS.use_batchnorm)
 
     if FLAGS.agent == 'dqn' or FLAGS.agent == 'double_dqn':
         agent = DQNAgent(

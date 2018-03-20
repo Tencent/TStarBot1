@@ -15,7 +15,8 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
     def __init__(self,
                  env,
                  unit_type_whitelist=None,
-                 observation_filter=[]):
+                 observation_filter=[],
+                 flip=True):
         super(SC2ObservationWrapper, self).__init__(env)
         assert isinstance(env.observation_space, PySC2ObservationSpace)
         self._unit_type_map = None
@@ -23,6 +24,7 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
             self._unit_type_map = {
                 v : i for i, v in enumerate(unit_type_whitelist)}
         self._observation_filter = set(observation_filter)
+        self._flip = flip
 
         n_channels_screen = self._get_num_spatial_channels(SCREEN_FEATURES)
         n_channels_minimap = self._get_num_spatial_channels(MINIMAP_FEATURES)
@@ -40,7 +42,16 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
             observation["minimap"], MINIMAP_FEATURES)
         observation_player = self._transform_player_features(
             observation["player"])
+        if self._flip:
+            observation_screen = self._diagonal_flip(observation_screen)
+            observation_minimap = self._diagonal_flip(observation_minimap)
         return (observation_screen, observation_minimap, observation_player)
+
+    def _diagonal_flip(self, observation):
+        if self.env.player_corner == 0:
+            return np.flip(np.flip(observation, axis=1), axis=2).copy()
+        else:
+            return observation
 
     def _transform_spatial_features(self, observation, specs):
         features = []
@@ -54,8 +65,10 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
             if spec.type == FeatureType.CATEGORICAL:
                 features.append(np.eye(scale, dtype=np.float32)[ob][:, :, 1:])
             else:
+                if spec.name == "unit_hit_points":
+                    scale = 10000 # not 1600, seems a bug in pysc2
                 features.append(
-                    np.expand_dims(np.log10(ob + 1, dtype=np.float32), axis=2))
+                    np.expand_dims(ob.astype(np.float32) / scale, axis=2))
         return np.transpose(np.concatenate(features, axis=2), (2, 0, 1))
 
     def _transform_player_features(self, observation):
@@ -75,6 +88,10 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
                 num_channels += 1
         return num_channels
 
+    @property
+    def player_corner(self):
+        return self.env.player_corner
+
 
 class SC2ObservationNonSpatialWrapperV0(gym.ObservationWrapper):
 
@@ -90,6 +107,10 @@ class SC2ObservationNonSpatialWrapperV0(gym.ObservationWrapper):
 
     def _transform_player_features(self, observation):
         return np.log10(observation[1:].astype(np.float32) + 1)
+
+    @property
+    def player_corner(self):
+        return self.env.player_corner
 
 
 PLAYER_RELATIVE_ENEMY = 4
@@ -221,3 +242,7 @@ class SC2ObservationNonSpatialWrapperV1(gym.Wrapper):
             self._opponent_range_mask = np.zeros((resolution, resolution))
             self._self_range_mask[-half_resolution:, -half_resolution:] = 1
             self._oppenent_range_mask[:half_resolution, :half_resolution] = 1
+
+    @property
+    def player_corner(self):
+        return self.env.player_corner
