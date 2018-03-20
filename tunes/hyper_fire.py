@@ -68,7 +68,7 @@ def hyper_tune(exp_id):
             'install_and_run.sh "%s" %s > %s 2>&1 &'
             % (mem, cpu, exp_id, job_name, conf, save_log_path, log_path))
     assert os.system(cmds) == 0
-    time.sleep(0.5)
+    time.sleep(1.0)
     output = os.popen('fire id --mark %d ' % exp_id)
     jobid = output.read().strip()
     print("Job-%d-%s %s\n" % (exp_id, jobid, cmds))
