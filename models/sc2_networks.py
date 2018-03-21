@@ -125,6 +125,83 @@ class SC2QNetV2(nn.Module):
         return self.q_fc(state)
 
 
+class SC2DuelingQNetV2(nn.Module):
+
+    def __init__(self,
+                 resolution,
+                 n_channels_screen,
+                 n_channels_minimap,
+                 n_out,
+                 batchnorm=False):
+        super(SC2DuelingQNetV2, self).__init__()
+        assert resolution == 32
+        self.screen_conv1 = nn.Conv2d(in_channels=n_channels_screen,
+                                      out_channels=16,
+                                      kernel_size=5,
+                                      stride=1,
+                                      padding=2)
+        self.minimap_conv1 = nn.Conv2d(in_channels=n_channels_minimap,
+                                       out_channels=16,
+                                       kernel_size=5,
+                                       stride=1,
+                                       padding=2)
+        self.screen_conv2 = nn.Conv2d(in_channels=16,
+                                      out_channels=32,
+                                      kernel_size=3,
+                                      stride=2,
+                                      padding=2)
+        self.minimap_conv2 = nn.Conv2d(in_channels=16,
+                                       out_channels=32,
+                                       kernel_size=3,
+                                       stride=2,
+                                       padding=2)
+        if batchnorm:
+            self.screen_bn1 = nn.BatchNorm2d(16)
+            self.screen_bn2 = nn.BatchNorm2d(32)
+            self.minimap_bn1 = nn.BatchNorm2d(16)
+            self.minimap_bn2 = nn.BatchNorm2d(32)
+
+        self.value_sp_fc = nn.Linear(64 * 17 * 17, 256)
+        self.value_nonsp_fc1 = nn.Linear(10, 512)
+        self.value_nonsp_fc2 = nn.Linear(512, 256)
+        self.value_final_fc = nn.Linear(512, 1)
+
+        self.adv_sp_fc = nn.Linear(64 * 17 * 17, 256)
+        self.adv_nonsp_fc1 = nn.Linear(10, 512)
+        self.adv_nonsp_fc2 = nn.Linear(512, 256)
+        self.adv_final_fc = nn.Linear(512, n_out)
+        self._batchnorm = batchnorm
+
+    def forward(self, x):
+        screen, minimap, player = x
+        if self._batchnorm:
+            screen = F.relu(self.screen_bn1(self.screen_conv1(screen)))
+            screen = F.relu(self.screen_bn2(self.screen_conv2(screen)))
+            minimap = F.relu(self.minimap_bn1(self.minimap_conv1(minimap)))
+            minimap = F.relu(self.minimap_bn2(self.minimap_conv2(minimap)))
+        else:
+            screen = F.relu(self.screen_conv1(screen))
+            screen = F.relu(self.screen_conv2(screen))
+            minimap = F.relu(self.minimap_conv1(minimap))
+            minimap = F.relu(self.minimap_conv2(minimap))
+        screen_minimap = torch.cat((screen, minimap), 1)
+        screen_minimap = screen_minimap.view(screen_minimap.size(0), -1)
+
+        value_sp_state = F.relu(self.value_sp_fc(screen_minimap))
+        value_nonsp_state = F.relu(self.value_nonsp_fc2(
+            F.relu(self.value_nonsp_fc1(player))))
+        value_state = torch.cat((value_sp_state, value_nonsp_state), 1)
+        value = self.value_final_fc(value_state)
+
+        adv_sp_state = F.relu(self.adv_sp_fc(screen_minimap))
+        adv_nonsp_state = F.relu(self.adv_nonsp_fc2(
+            F.relu(self.adv_nonsp_fc1(player))))
+        adv_state = torch.cat((adv_sp_state, adv_nonsp_state), 1)
+        adv = self.adv_final_fc(adv_state)
+        adv_subtract = adv - adv.mean(dim=1, keepdim=True)
+        return value + adv_subtract
+
+
 class SC2NonSpatialQNet(nn.Module):
     def __init__(self,
                  in_dims,

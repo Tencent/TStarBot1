@@ -27,8 +27,10 @@ flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
+flags.DEFINE_enum("optimizer_type", 'rmsprop', ['rmsprop', 'adam'], "Optimizer.")
 flags.DEFINE_float("learning_rate", 1e-7, "Learning rate.")
 flags.DEFINE_float("momentum", 0.95, "Momentum.")
+flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
 flags.DEFINE_float("gradient_clipping", 1e20, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
@@ -80,8 +82,10 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type=FLAGS.optimizer_type,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
+            adam_eps=FLAGS.adam_eps,
             optimize_freq=int(FLAGS.frame_step_ratio),
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
@@ -111,8 +115,10 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type=FLAGS.optimizer_type,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
+            adam_eps=FLAGS.adam_eps,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_method=FLAGS.eps_method,

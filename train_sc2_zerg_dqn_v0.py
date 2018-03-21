@@ -11,6 +11,7 @@ from wrappers.sc2_observation_wrappers import SC2ObservationWrapper
 from agents.dqn_agent import DQNAgent
 from agents.fast_dqn_agent import FastDQNAgent
 from models.sc2_networks import SC2QNetV2
+from models.sc2_networks import SC2DuelingQNetV2
 from utils.utils import print_arguments
 
 UNIT_TYPE_WHITELIST = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
@@ -42,14 +43,16 @@ flags.DEFINE_enum("difficulty", '2',
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
 flags.DEFINE_integer("memory_size", 100000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 100000, "Experience replay initial size.")
+flags.DEFINE_integer("init_memory_size", 100000, "Experience replay init size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
+flags.DEFINE_enum("optimizer_type", 'rmsprop', ['rmsprop', 'adam'], "Optimizer.")
 flags.DEFINE_float("learning_rate", 1e-5, "Learning rate.")
 flags.DEFINE_float("momentum", 0.95, "Momentum.")
+flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
 flags.DEFINE_float("gradient_clipping", 1.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 128, "Batch size.")
@@ -59,6 +62,7 @@ flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("agent", 'fast_double_dqn',
                   ['dqn', 'double_dqn', 'fast_dqn', 'fast_double_dqn'],
                   "RL Algorithm.")
+flags.DEFINE_boolean("use_dueling_arch", True, "Use dueling arch or not.")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 100000, "Model saving frequency.")
@@ -95,20 +99,30 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
-    network = SC2QNetV2(
-        resolution=env.observation_space.spaces[0].shape[1],
-        n_channels_screen=env.observation_space.spaces[0].shape[0],
-        n_channels_minimap=env.observation_space.spaces[1].shape[0],
-        n_out=env.action_space.n,
-        batchnorm=FLAGS.use_batchnorm)
+    if FLAGS.use_dueling_arch:
+        network = SC2DuelingQNetV2(
+            resolution=env.observation_space.spaces[0].shape[1],
+            n_channels_screen=env.observation_space.spaces[0].shape[0],
+            n_channels_minimap=env.observation_space.spaces[1].shape[0],
+            n_out=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
+    else:
+        network = SC2QNetV2(
+            resolution=env.observation_space.spaces[0].shape[1],
+            n_channels_screen=env.observation_space.spaces[0].shape[0],
+            n_channels_minimap=env.observation_space.spaces[1].shape[0],
+            n_out=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
 
     if FLAGS.agent == 'dqn' or FLAGS.agent == 'double_dqn':
         agent = DQNAgent(
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type=FLAGS.optimizer_type,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
+            adam_eps=FLAGS.adam_eps,
             optimize_freq=int(FLAGS.frame_step_ratio),
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
@@ -138,8 +152,10 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type=FLAGS.optimizer_type,
             learning_rate=FLAGS.learning_rate,
             momentum=FLAGS.momentum,
+            adam_eps=FLAGS.adam_eps,
             batch_size=FLAGS.batch_size,
             discount=FLAGS.discount,
             eps_method=FLAGS.eps_method,

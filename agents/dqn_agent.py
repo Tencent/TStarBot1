@@ -37,8 +37,10 @@ class DQNAgent(object):
                  observation_space,
                  action_space,
                  network,
+                 optimizer_type,
                  learning_rate,
                  momentum,
+                 adam_eps,
                  optimize_freq,
                  batch_size,
                  discount,
@@ -90,9 +92,16 @@ class DQNAgent(object):
 
         self._update_target_network()
 
-        self._optimizer = optim.RMSprop(self._q_network.parameters(),
-                                        momentum=momentum,
-                                        lr=learning_rate)
+        if optimizer_type == "rmsprop":
+            self._optimizer = optim.RMSprop(self._q_network.parameters(),
+                                            momentum=momentum,
+                                            lr=learning_rate)
+        elif optimizer_type == "adam":
+            self._optimizer = optim.Adam(self._q_network.parameters(),
+                                         eps=adam_eps,
+                                         lr=learning_rate)
+        else:
+            raise NotImplementedError
         self._memory = ReplayMemory(memory_size)
 
     def act(self, observation, eps=0):

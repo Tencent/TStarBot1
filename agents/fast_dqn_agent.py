@@ -79,8 +79,10 @@ class FastDQNAgent(object):
                  observation_space,
                  action_space,
                  network,
+                 optimizer_type,
                  learning_rate,
                  momentum,
+                 adam_eps,
                  batch_size,
                  discount,
                  eps_method,
@@ -142,9 +144,16 @@ class FastDQNAgent(object):
 
         self._update_target_network()
 
-        self._optimizer = optim.RMSprop(self._q_network.parameters(),
-                                        momentum=momentum,
-                                        lr=learning_rate)
+        if optimizer_type == "rmsprop":
+            self._optimizer = optim.RMSprop(self._q_network.parameters(),
+                                            momentum=momentum,
+                                            lr=learning_rate)
+        elif optimizer_type == "adam":
+            self._optimizer = optim.Adam(self._q_network.parameters(),
+                                         eps=adam_eps,
+                                         lr=learning_rate)
+        else:
+            raise NotImplementedError
 
     def act(self, observation, eps=0):
         if random.uniform(0, 1) >= eps:
