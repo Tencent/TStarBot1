@@ -5,17 +5,13 @@ import random
 save_model_dir = './checkpoints'
 log_dir = './log_hyper'
 local_log = './hyper.log'
-exps_num = 8
-rand_patterns = {'eps_end':['enum', 0.1, 0.1, 0.2],
-                 'eps_decay':['enum', 2000000, 1000000, 1000000, 500000],
-                 'learning_rate':['log-uniform', -9, -5],
-                 'momentum':['enum', 0.95, 0.9],
-                 'batch_size':['enum', 128, 128, 256],
-                 'discount':['enum', 0.99, 0.99, 0.999],
-                 'agent':['enum', 'fast_dqn', 'fast_double_dqn', 'fast_double_dqn'],
-                 'target_update_freq':['enum', 2500, 5000, 5000, 10000],
-                 'frame_step_ratio':['enum', 0.25, 0.5, 1.0, 2.0, 4.0]}
-
+exps_num = 3
+rand_patterns = {'eps_decay':['enum', 200000, 1000000, 5000000],
+                 'learning_rate':['log-uniform', -6, -4],
+                 'optimizer_type':['enum', 'adam'],
+                 'adam_eps':['enum', 1e-7, 1e-8],
+                 'discount':['enum', 0.99, 0.999],
+                 'frame_step_ratio':['enum', 0.2, 0.5, 1.0, 2.0]}
 
 def gen_random_hypers(rand_patterns):
     conf = ""
