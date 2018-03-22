@@ -3,19 +3,13 @@ import time
 import random
 import re
 
-job_name_prefix = 'zerg_dqn_duel_adam'
+job_name_prefix = 'zerg_dqn_duel_adam_e2'
 save_model_dir = '/out/checkpoints'
 save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
 exps_num = 20
-rand_patterns = {'learning_rate':['log-uniform', -7, -4],
-                 'optimizer_type':['enum', 'adam'],
-                 'adam_eps':['enum', 1e-8, 1e-7, 1e-6, 1e-5],
-                 'discount':['enum', 0.99, 0.999],
-                 'target_update_freq':['enum', 10000, 20000],
-                 'frame_step_ratio':['enum', 0.2, 0.5, 1.0, 2.0],
-                 'use_batchnorm':['bool']}
+rand_patterns = {'learning_rate':['log-uniform', -7, -5]}
 
 
 def gen_random_hypers(rand_patterns):
@@ -53,7 +47,7 @@ def allocate_resources(conf):
 
 def hyper_tune(exp_id):
     conf = gen_random_hypers(rand_patterns)
-    mem, cpu = 62, 20
+    mem, cpu = 83, 20
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
