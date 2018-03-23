@@ -129,11 +129,14 @@ def train():
     try:
         cum_return = 0.0
         for i in range(FLAGS.num_episodes):
-            observation = env.reset()
+            observation, info = env.reset()
             done = False
             while not done:
-                action = agent.act(observation, eps=0)
-                observation, reward, done, _ = env.step(action)
+                availables = info["available_actions"]
+                print(availables)
+                action = agent.act(observation, availables, eps=0)
+                print(action)
+                observation, reward, done, info = env.step(action)
                 cum_return += reward
             print("Evaluated %d/%d Episodes Avg Return %f "
                   "Avg Winning Rate %f" % 

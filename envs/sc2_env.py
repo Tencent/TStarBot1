@@ -3,7 +3,7 @@ import gym
 import pysc2.env.sc2_env
 from pysc2.lib import actions
 
-from envs.space import PySC2ActionSpace, PySC2ObservationSpace
+from envs.space import PySC2RawAction, PySC2RawObservation
 
 
 class StarCraftIIEnv(gym.Env):
@@ -30,9 +30,9 @@ class StarCraftIIEnv(gym.Env):
             minimap_size_px=(resolution, resolution),
             visualize=visualize_feature_map,
             score_index=score_index)
-        self.observation_space = PySC2ObservationSpace(
+        self.observation_space = PySC2RawObservation(
             self._sc2_env.observation_spec)
-        self.action_space = PySC2ActionSpace(self._sc2_env.action_spec)
+        self.action_space = PySC2RawAction(self._sc2_env.action_spec)
         self._reseted = False
 
     def _step(self, action):
@@ -45,7 +45,7 @@ class StarCraftIIEnv(gym.Env):
         reward = float(timestep.reward)
         done = timestep.last() 
         if done: self._reseted = False
-        info = {}
+        info = {"available_actions": self._available_actions}
         return (observation, reward, done, info)
         
     def _reset(self):
@@ -53,7 +53,8 @@ class StarCraftIIEnv(gym.Env):
         observation = timestep.observation
         self._available_actions = observation["available_actions"]
         self._reseted = True
-        return observation
+        info = {"available_actions": self._available_actions}
+        return observation, info
 
     def _close(self):
         self._sc2_env.close()

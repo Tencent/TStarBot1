@@ -7,7 +7,7 @@ from pysc2.lib.features import FeatureType
 import gym
 from gym import spaces
 
-from envs.space import PySC2ObservationSpace
+from envs.space import PySC2RawObservation
 
 
 class SC2ObservationWrapper(gym.ObservationWrapper):
@@ -18,7 +18,7 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
                  observation_filter=[],
                  flip=True):
         super(SC2ObservationWrapper, self).__init__(env)
-        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        assert isinstance(env.observation_space, PySC2RawObservation)
         self._unit_type_map = None
         if unit_type_whitelist is not None:
             self._unit_type_map = {
@@ -97,7 +97,7 @@ class SC2ObservationNonSpatialWrapperV0(gym.ObservationWrapper):
 
     def __init__(self, env):
         super(SC2ObservationNonSpatialWrapperV0, self).__init__(env)
-        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        assert isinstance(env.observation_space, PySC2RawObservation)
         self.observation_space = spaces.Box(0.0, float('inf'), [10])
 
     def _observation(self, observation):
@@ -121,7 +121,7 @@ class SC2ObservationNonSpatialWrapperV1(gym.Wrapper):
 
     def __init__(self, env):
         super(SC2ObservationNonSpatialWrapperV1, self).__init__(env)
-        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        assert isinstance(env.observation_space, PySC2RawObservation)
         self.observation_space = spaces.Box(0.0, float('inf'), [22])
 
     def step(self, action):
@@ -129,9 +129,9 @@ class SC2ObservationNonSpatialWrapperV1(gym.Wrapper):
         return self._observation(observation), reward, done, info
 
     def reset(self):
-        observation = self.env.reset()
+        observation, info = self.env.reset()
         self._update_player_position_mask(observation)
-        return self._observation(observation)
+        return self._observation(observation), info
 
     def _observation(self, observation):
         observation_player = observation["player"]

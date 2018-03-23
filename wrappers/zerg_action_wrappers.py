@@ -9,8 +9,9 @@ from pysc2.lib.features import MINIMAP_FEATURES
 import gym
 from gym.spaces.discrete import Discrete
 
-from envs.space import PySC2ActionSpace
-from envs.space import PySC2ObservationSpace
+from envs.space import PySC2RawAction
+from envs.space import PySC2RawObservation
+from envs.space import MaskableDiscrete
 
 UNIT_TYPE_BACKGROUND = 0
 UNIT_TYPE_HATCHERY = 86
@@ -23,7 +24,15 @@ UNIT_TYPE_EXTRACTOR = 88
 UNIT_TYPE_QUEEN = 126
 
 PLAYER_RELATIVE_ENEMY = 4
+
+PLAYERINFO_MINERALS = 1
+PLAYERINFO_VESPENE = 2
+PLAYERINFO_FOOD_USED = 3
+PLAYERINFO_FOOD_CAP = 4
+PLAYERINFO_FOOD_ARMY = 5
+PLAYERINFO_FOOD_WORKER = 6
 PLAYERINFO_IDLE_WORKER_COUNT = 7
+PLAYERINFO_LARVA_COUNT = 10
 
 NOT_QUEUED = 0
 QUEUED = 1
@@ -54,6 +63,12 @@ def has_roach_warren_screen(observation):
 def has_enemy_screen(observation):
     player_relative = observation["screen"][
         SCREEN_FEATURES.player_relative.index]
+    return np.any(player_relative == PLAYER_RELATIVE_ENEMY)
+
+
+def has_enemy_minimap(observation):
+    player_relative = observation["minimap"][
+        MINIMAP_FEATURES.player_relative.index]
     return np.any(player_relative == PLAYER_RELATIVE_ENEMY)
 
 
@@ -489,8 +504,8 @@ class ZergActionWrapperV0(gym.Wrapper):
 
     def __init__(self, env):
         super(ZergActionWrapperV0, self).__init__(env)
-        assert isinstance(env.action_space, PySC2ActionSpace)
-        assert isinstance(env.observation_space, PySC2ObservationSpace)
+        assert isinstance(env.action_space, PySC2RawAction)
+        assert isinstance(env.observation_space, PySC2RawObservation)
         shape_screen = self.env.observation_space.space_attr["screen"][1:]
         shape_minimap = self.env.observation_space.space_attr["minimap"][1:]
         assert shape_screen == (32, 32) and shape_minimap == (32, 32)
@@ -509,9 +524,11 @@ class ZergActionWrapperV0(gym.Wrapper):
                                macro_all_attack_any_enemy,
                                macro_train_queen,
                                macro_queen_inject_larva]
-        self.action_space = Discrete(len(self._macro_actions))
+        self.action_space = MaskableDiscrete(len(self._macro_actions))
 
     def step(self, action):
+        if action == 8: # TODO: informal, to be updated
+            self._num_vespene_workers += 1
         macro_action = self._macro_actions[action]
         observation = self._last_observation
         observation["base_xy"] = self._base_xy
@@ -540,28 +557,97 @@ class ZergActionWrapperV0(gym.Wrapper):
             observation["base_xy"] = self._base_xy
             reward_cum += reward
         self._last_observation = observation 
+        info["available_actions"] = self._get_available_actions(observation)
         return observation, reward_cum, done, info
             
     def reset(self):
-        observation = self.env.reset()
+        observation, info = self.env.reset()
         self._base_xy = locate_camera_minimap(observation)
         self._num_spawning_pools = 0
         self._num_extractors = 0
         self._num_roach_warrens = 0
         self._num_queens = 0
+        self._num_vespene_workers = 0
+        self._build_spawning_pool_steps = 0
         self._last_observation = observation
-        return observation
+        info["available_actions"] = self._get_available_actions(observation)
+        return observation, info
+
+    def _get_available_actions(self, observation):
+        num_armies = observation["player"][PLAYERINFO_FOOD_ARMY]
+        num_workers = observation["player"][PLAYERINFO_FOOD_WORKER]
+        num_idle_workers = observation["player"][PLAYERINFO_IDLE_WORKER_COUNT]
+        num_minerals = observation["player"][PLAYERINFO_MINERALS]
+        num_vespenes = observation["player"][PLAYERINFO_VESPENE]
+        num_food = observation["player"][PLAYERINFO_FOOD_CAP] - \
+            observation["player"][PLAYERINFO_FOOD_USED]
+
+        availables = [0]
+        # macro train overlords
+        if num_minerals >= 100:
+            availables.append(1)
+        # macro train workers
+        if num_minerals >= 50 and num_food >= 1:
+            availables.append(2)
+        # macro train zerglings
+        if (num_minerals >= 50 and num_food >= 1 and
+            self._num_spawning_pools >= 1 and
+            self._build_spawning_pool_steps > 35):
+           availables.append(3)
+        # macro train roaches
+        if (num_minerals >= 75 and num_food >= 1 and
+            self._num_roach_warrens >= 1 and num_vespenes >= 25):
+            availables.append(4)
+        # macro build spawning pool
+        if (num_minerals >= 200 and num_workers >= 1 and
+            self._num_spawning_pools == 0):
+            availables.append(5)
+        # macro build roach warren
+        if (num_minerals >= 200 and num_workers >= 1 and
+            self._num_spawning_pools >= 1 and self._num_roach_warrens == 0 and
+            self._build_spawning_pool_steps > 35):
+            availables.append(6)
+        # macro build extractor
+        if (num_minerals >= 25 and num_workers >= 1 and
+            self._num_extractors < 2):
+            availables.append(7)
+        # macro collect vespene
+        if (self._num_vespene_workers < 8 and num_workers >= 1 and
+            self._num_extractors > 0):
+            availables.append(8)
+        # macro collect minerals
+        if num_idle_workers > 0:
+            availables.append(9)
+        # macro attack or defence
+        if (num_armies - self._num_queens > 5 and
+            actions.FUNCTIONS.select_army.id in observation["available_actions"]):
+            availables.append(11)
+            if has_enemy_minimap(observation):
+                availables.append(10)
+                availables.append(12)
+        # macro train queen
+        if (num_minerals >= 150 and num_food >= 2 and
+            self._num_spawning_pools >= 1 and
+            self._build_spawning_pool_steps > 35):
+            availables.append(13)
+        # macro queen inject larva
+        if self._num_queens > 0:
+            availables.append(14)
+
+        return availables
 
     def _record_action(self, action):
         function_id = action[0]
         if function_id == actions.FUNCTIONS.Build_SpawningPool_screen.id:
-            self._num_spawning_pools = 1
+            self._num_spawning_pools += 1
         if function_id == actions.FUNCTIONS.Build_Extractor_screen.id:
-            self._num_extractors = 1
+            self._num_extractors += 1
         if function_id == actions.FUNCTIONS.Build_RoachWarren_screen.id:
-            self._num_roach_warrens = 1
+            self._num_roach_warrens += 1
         if function_id == actions.FUNCTIONS.Train_Queen_quick.id:
-            self._num_queens = 1
+            self._num_queens += 1
+        if self._num_spawning_pools == 1:
+            self._build_spawning_pool_steps += 1
 
     @property
     def num_spawning_pools(self):
@@ -578,6 +664,10 @@ class ZergActionWrapperV0(gym.Wrapper):
     @property
     def num_queens(self):
         return self._num_queens
+
+    @property
+    def num_vespene_workers(self):
+        return self._num_vespene_workers
 
     @property
     def player_corner(self):
