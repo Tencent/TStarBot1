@@ -10,7 +10,7 @@ from gym import spaces
 from envs.space import PySC2RawObservation
 
 
-class SC2ObservationWrapper(gym.ObservationWrapper):
+class SC2ObservationWrapper(gym.Wrapper):
 
     def __init__(self,
                  env,
@@ -34,6 +34,14 @@ class SC2ObservationWrapper(gym.ObservationWrapper):
             spaces.Box(0.0, float('inf'), [n_channels_screen, *shape_screen]),
             spaces.Box(0.0, float('inf'), [n_channels_minimap, *shape_minimap]),
             spaces.Box(0.0, float('inf'), [10])])
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self._observation(observation), reward, done, info
+
+    def reset(self):
+        observation, info = self.env.reset()
+        return self._observation(observation), info
 
     def _observation(self, observation):
         observation_screen = self._transform_spatial_features(

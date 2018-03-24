@@ -99,6 +99,7 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env = create_env()
+    a, b = env.reset()
     if FLAGS.use_dueling_arch:
         network = SC2DuelingQNetV2(
             resolution=env.observation_space.spaces[0].shape[1],

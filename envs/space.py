@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import gym
 from gym.spaces.discrete import Discrete
 
@@ -12,7 +13,7 @@ class PySC2RawAction(gym.Space):
         if availables is None:
             function_id = np.random.randint(len(self._functions))
         else:
-            function_id = np.random.choice(availables)
+            function_id = random.choice(availables)
         function_args = [[np.random.randint(0, size) for size in arg.sizes]
                           for arg in self._functions[function_id].args]
         return (function_id, function_args)
@@ -67,7 +68,7 @@ class MaskableDiscrete(Discrete):
     def sample(self, availables=None):
         if availables is None:
             return super(MaskableDiscrete, self).sample()
-        action = np.random.choice(availables)
+        action = random.choice(availables)
         assert self.contains(action, availables)
         return action
 

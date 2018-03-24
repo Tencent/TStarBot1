@@ -17,6 +17,7 @@ import torch.optim as optim
 from gym import spaces
 
 from agents.memory import ReplayMemory, Transition
+from envs.space import MaskableDiscrete
 
 
 def tuple_cuda(tensors):
@@ -37,7 +38,7 @@ def tuple_variable(tensors, volatile=False):
 def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
                  allow_eval_mode, out_queue):
 
-    def act(observation, eps):
+    def act(observation, availables=None, eps=0):
         if random.uniform(0, 1) >= eps:
             if isinstance(observation, tuple):
                 observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
@@ -49,21 +50,32 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
             if allow_eval_mode:
                 q_network.eval()
             q = q_network(tuple_variable(observation, volatile=True))
+            if availables is not None:
+                nonavailables = list(
+                    set(range(action_space.n)) - set(availables))
+                q[:, nonavailables] = float('-inf')
             action = q.data.max(1)[1][0]
             return action
         else:
-            return action_space.sample()
+            return action_space.sample(availables)
 
     env = env_create_fn()
     episode_id = 0
     while True:
         cum_return = 0.0
-        observation = env.reset()
+        observation, info = env.reset()
         done = False
         while not done:
-            action = act(observation, eps=current_eps.value)
-            next_observation, reward, done, _ = env.step(action)
-            out_queue.put((observation, action, reward, next_observation, done))
+            if "available_actions" in info:
+                action = act(observation,
+                             availables=info["available_actions"],
+                             eps=current_eps.value)
+            else:
+                action = act(observation,
+                             eps=current_eps.value)
+            next_observation, reward, done, info = env.step(action)
+            out_queue.put((observation, action, reward, next_observation, done,
+                           info["available_actions"]))
             observation = next_observation
             cum_return += reward
         episode_id += 1
@@ -101,7 +113,7 @@ class FastDQNAgent(object):
                  save_model_dir=None,
                  save_model_freq=50000,
                  print_freq=1000):
-        assert isinstance(action_space, spaces.Discrete)
+        assert isinstance(action_space, MaskableDiscrete)
         multiprocessing.set_start_method('spawn')
 
         self._batch_size = batch_size
@@ -155,7 +167,7 @@ class FastDQNAgent(object):
         else:
             raise NotImplementedError
 
-    def act(self, observation, eps=0):
+    def act(self, observation, availables=None, eps=0):
         if random.uniform(0, 1) >= eps:
             if isinstance(observation, tuple):
                 observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
@@ -167,10 +179,14 @@ class FastDQNAgent(object):
             if self._allow_eval_mode:
                 self._q_network.eval()
             q = self._q_network(tuple_variable(observation, volatile=True))
+            if availables is not None:
+                nonavailables = list(
+                    set(range(self._action_space.n)) - set(availables))
+                q[:, nonavailables] = float('-inf')
             action = q.data.max(1)[1][0]
             return action
         else:
-            return self._action_space.sample()
+            return self._action_space.sample(availables)
 
     def learn(self, create_env_fn, num_actor_workers):
         self._init_parallel_actors(create_env_fn, num_actor_workers)
@@ -194,17 +210,25 @@ class FastDQNAgent(object):
 
     def _optimize(self):
         #print("Batch Queue Size: %d" % self._batch_queue.qsize())
-        (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch) = \
-            self._batch_queue.get()
+        (next_obs_batch, obs_batch, reward_batch, action_batch,
+         done_batch, available_actions) = self._batch_queue.get()
         # compute max-q target
         if self._allow_eval_mode:
             self._q_network.eval()
         q_next_target = self._target_q_network(next_obs_batch)
         if self._double_dqn:
             q_next = self._q_network(next_obs_batch)
+            for i, availables in enumerate(available_actions):
+                nonavailables = list(
+                    set(range(self._action_space.n)) - set(availables))
+                q_next[[i], nonavailables] = float('-inf')
             futures = q_next_target.gather(
                 1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
         else:
+            for i, availables in enumerate(available_actions):
+                nonavailables = list(
+                    set(range(self._action_space.n)) - set(availables))
+                q_target_next[[i], nonavailables] = float('-inf')
             futures = q_next_target.max(dim=1)[0].view(-1, 1).squeeze()
         futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
@@ -303,7 +327,7 @@ class FastDQNAgent(object):
         done_batch = tuple_variable(done_batch)
 
         return (next_obs_batch, obs_batch, reward_batch, action_batch,
-                done_batch)
+                done_batch, batch.available_actions)
 
     def _update_target_network(self):
         self._target_q_network.load_state_dict(

@@ -133,9 +133,7 @@ def train():
             done = False
             while not done:
                 availables = info["available_actions"]
-                print(availables)
                 action = agent.act(observation, availables, eps=0)
-                print(action)
                 observation, reward, done, info = env.step(action)
                 cum_return += reward
             print("Evaluated %d/%d Episodes Avg Return %f "
