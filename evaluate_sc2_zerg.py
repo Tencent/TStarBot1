@@ -14,12 +14,12 @@ from agents.keyboard_agent import KeyboardAgent
 from agents.dqn_agent import DQNAgent
 from agents.fast_dqn_agent import FastDQNAgent
 from models.sc2_networks import SC2QNet
+from models.sc2_networks import SC2DuelingQNetV2
 from models.sc2_networks import SC2NonSpatialQNet
 
 UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
                             89, 105, 90, 126, 100, 472, 641, 137, 97, 96,
-                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151,
-                            94, 502, 503, 101, 92, 8, 112, 504, 87, 138]
+                            103, 107, 98, 688, 108, 129, 99, 9, 91, 151]
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
@@ -30,12 +30,13 @@ flags.DEFINE_enum("difficulty", '2',
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("observation_version", 'v1', ['v0', 'v1'], "Obs version.")
+flags.DEFINE_enum("observation_version", 'v0', ['v0', 'v1'], "Obs version.")
 flags.DEFINE_enum("agent", 'fast_double_dqn',
                   ['dqn', 'double_dqn', 'fast_dqn', 'fast_double_dqn',
                    'random', 'keyboard'],
                    "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
+flags.DEFINE_boolean("flip_minimap_screen", True, "Use batchnorm or not.")
 flags.FLAGS(sys.argv)
 
 
@@ -55,7 +56,8 @@ def create_env():
         env = SC2ObservationWrapper(
             env=env,
             unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
-            observation_filter=FLAGS.observation_filter.split(','))
+            observation_filter=FLAGS.observation_filter.split(','),
+            flip=FLAGS.flip_minimap_screen)
     elif FLAGS.observation_version == 'v1':
         env = SC2ObservationNonSpatialWrapperV1(env=env)
     else:
@@ -66,7 +68,7 @@ def create_env():
 def train():
     env = create_env()
     if FLAGS.observation_version == 'v0':
-        network = SC2QNet(
+        network = SC2DuelingQNetV2(
             resolution=env.observation_space.spaces[0].shape[1],
             n_channels_screen=env.observation_space.spaces[0].shape[0],
             n_channels_minimap=env.observation_space.spaces[1].shape[0],
@@ -85,8 +87,10 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type='adam',
             learning_rate=0,
             momentum=0.95,
+            adam_eps=1e-7,
             optimize_freq=1,
             batch_size=128,
             discount=0.999,
@@ -104,8 +108,10 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
+            optimizer_type='adam',
             learning_rate=0,
             momentum=0.95,
+            adam_eps=1e-7,
             batch_size=128,
             discount=0.99,
             eps_method='linear',
@@ -135,8 +141,7 @@ def train():
                 action = agent.act(observation, eps=0)
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
-            print("Evaluated %d/%d Episodes Avg Return %f "
-                  "Avg Winning Rate %f" % 
+            print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
                   (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
     except KeyboardInterrupt:
