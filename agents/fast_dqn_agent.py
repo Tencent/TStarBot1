@@ -71,10 +71,14 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
             else:
                 return action_space.sample()
 
-    env = env_create_fn()
     episode_id = 0
+    env = env_create_fn()
     while True:
+        episode_id += 1
         cum_return = 0.0
+        if episode_id % 3 == 0:
+            env.close()
+            env = env_create_fn()
         observation = env.reset()
         done = False
         while not done:
@@ -83,7 +87,6 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
             out_queue.put((observation, action, reward, next_observation, done))
             observation = next_observation
             cum_return += reward
-        episode_id += 1
         print("Actor Worker ID %d Episode %d Epsilon %f Return: %f." %
               (pid, episode_id, current_eps.value, cum_return))
         sys.stdout.flush()
@@ -270,9 +273,7 @@ class FastDQNAgent(object):
         return loss.data[0]
 
     def _init_parallel_actors(self, create_env_fn, num_actor_workers):
-        self._transition_queue = multiprocessing.Queue(
-            1 if self._frame_step_ratio < 1
-            else int(self._frame_step_ratio * self._num_threads))
+        self._transition_queue = multiprocessing.Queue(8)
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,

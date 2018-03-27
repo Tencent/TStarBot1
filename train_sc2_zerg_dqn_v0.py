@@ -4,6 +4,7 @@ import os
 import traceback
 from absl import app
 from absl import flags
+import random
 
 from envs.sc2_env import StarCraftIIEnv
 from wrappers.zerg_action_wrappers import ZergActionWrapperV0
@@ -36,10 +37,8 @@ UNIT_TYPE_WHITELIST_TINY = [0, 86, 483, 341, 342, 88, 638, 104, 110, 106,
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
-flags.DEFINE_integer("num_actor_workers", 8, "Game steps per agent step.")
-flags.DEFINE_enum("difficulty", '2',
-                  ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
-                  "Bot's strength.")
+flags.DEFINE_integer("num_actor_workers", 10, "Game steps per agent step.")
+flags.DEFINE_string("difficulty", '1,2,3,4,5,6,7', "Bot's strengths.")
 flags.DEFINE_string("observation_filter", "effects,player_id",
                     "Observation field to ignore.")
 flags.DEFINE_integer("memory_size", 100000, "Experience replay size.")
@@ -81,7 +80,7 @@ def create_env():
         resolution=32,
         agent_race='Z',
         bot_race='Z',
-        difficulty=FLAGS.difficulty,
+        difficulty=random.choice(FLAGS.difficulty.split(',')),
         game_steps_per_episode=0,
         visualize_feature_map=False,
         score_index=None)
