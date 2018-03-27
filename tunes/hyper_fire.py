@@ -3,12 +3,14 @@ import time
 import random
 import re
 
-job_name_prefix = 'zerg_dqn_duel_adam_e2'
+job_name_prefix = 'zerg_dqn_duel_adam_d7'
 save_model_dir = '/out/checkpoints'
 save_log_path = '/out/log'
 log_dir = 'logs'
 local_log = 'hyper.log'
 exps_num = 20
+
+conf_filepath = 'exp.conf'
 rand_patterns = {'learning_rate':['log-uniform', -7, -5]}
 
 
@@ -37,6 +39,12 @@ def gen_random_hypers(rand_patterns):
     return conf
 
 
+def read_conf_from_file(filepath, conf_id):
+    with open(filepath, 'rt') as f:
+        conf = ' ' + f.readlines()[conf_id].strip()
+    return conf
+
+
 def allocate_resources(conf):
     items = [item.split() for item in re.split(" --", conf)
              if len(item.split()) == 2]
@@ -46,8 +54,11 @@ def allocate_resources(conf):
 
 
 def hyper_tune(exp_id):
-    conf = gen_random_hypers(rand_patterns)
-    mem, cpu = 83, 20
+    if conf_filepath is not None:
+        conf = read_conf_from_file(conf_filepath, exp_id)
+    else:
+        conf = gen_random_hypers(rand_patterns)
+    mem, cpu = 83, 24
     conf += ' --save_model_dir %s' % os.path.join(save_model_dir,
                                                   'checkpoints_%d' % exp_id)
     log_path = os.path.join(log_dir, 'log_%d' % exp_id)
