@@ -3,8 +3,7 @@ import random
 
 Transition = namedtuple(
     'Transition',
-    ('observation', 'action', 'reward', 'next_observation', 'done',
-     'available_actions'))
+    ('observation', 'action', 'reward', 'next_observation', 'done'))
 
 
 class ReplayMemory(object):

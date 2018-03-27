@@ -549,7 +549,8 @@ class ZergActionWrapperV0(gym.Wrapper):
             acted = True
             reward_cum += reward
             if done:
-                return observation, reward_cum, done, info
+                action_mask = self._get_available_action_mask(observation)
+                return (observation, action_mask), reward_cum, done, info
         if not acted:
             action = micro_do_nothing(observation)
             self._record_action(action)
@@ -557,11 +558,11 @@ class ZergActionWrapperV0(gym.Wrapper):
             observation["base_xy"] = self._base_xy
             reward_cum += reward
         self._last_observation = observation 
-        info["available_actions"] = self._get_available_actions(observation)
-        return observation, reward_cum, done, info
+        action_mask = self._get_available_action_mask(observation)
+        return (observation, action_mask), reward_cum, done, info
             
     def reset(self):
-        observation, info = self.env.reset()
+        observation = self.env.reset()
         self._base_xy = locate_camera_minimap(observation)
         self._num_spawning_pools = 0
         self._num_extractors = 0
@@ -570,10 +571,10 @@ class ZergActionWrapperV0(gym.Wrapper):
         self._num_vespene_workers = 0
         self._build_spawning_pool_steps = 0
         self._last_observation = observation
-        info["available_actions"] = self._get_available_actions(observation)
-        return observation, info
+        action_mask = self._get_available_action_mask(observation)
+        return (observation, action_mask)
 
-    def _get_available_actions(self, observation):
+    def _get_available_action_mask(self, observation):
         num_armies = observation["player"][PLAYERINFO_FOOD_ARMY]
         num_workers = observation["player"][PLAYERINFO_FOOD_WORKER]
         num_idle_workers = observation["player"][PLAYERINFO_IDLE_WORKER_COUNT]
@@ -582,59 +583,60 @@ class ZergActionWrapperV0(gym.Wrapper):
         num_food = observation["player"][PLAYERINFO_FOOD_CAP] - \
             observation["player"][PLAYERINFO_FOOD_USED]
 
-        availables = [0]
+        action_mask = np.zeros(self.action_space.n)
+        action_mask[0] = 1
         # macro train overlords
         if num_minerals >= 100:
-            availables.append(1)
+            action_mask[1] = 1
         # macro train workers
         if num_minerals >= 50 and num_food >= 1:
-            availables.append(2)
+            action_mask[2] = 1
         # macro train zerglings
         if (num_minerals >= 50 and num_food >= 1 and
             self._num_spawning_pools >= 1 and
             self._build_spawning_pool_steps > 35):
-           availables.append(3)
+            action_mask[3] = 1
         # macro train roaches
         if (num_minerals >= 75 and num_food >= 1 and
             self._num_roach_warrens >= 1 and num_vespenes >= 25):
-            availables.append(4)
+            action_mask[4] = 1
         # macro build spawning pool
         if (num_minerals >= 200 and num_workers >= 1 and
             self._num_spawning_pools == 0):
-            availables.append(5)
+            action_mask[5] = 1
         # macro build roach warren
         if (num_minerals >= 200 and num_workers >= 1 and
             self._num_spawning_pools >= 1 and self._num_roach_warrens == 0 and
             self._build_spawning_pool_steps > 35):
-            availables.append(6)
+            action_mask[6] = 1
         # macro build extractor
         if (num_minerals >= 25 and num_workers >= 1 and
             self._num_extractors < 2):
-            availables.append(7)
+            action_mask[7] = 1
         # macro collect vespene
         if (self._num_vespene_workers < 8 and num_workers >= 1 and
             self._num_extractors > 0):
-            availables.append(8)
+            action_mask[8] = 1
         # macro collect minerals
         if num_idle_workers > 0:
-            availables.append(9)
+            action_mask[9] = 1
         # macro attack or defence
         if (num_armies - self._num_queens > 5 and
             actions.FUNCTIONS.select_army.id in observation["available_actions"]):
-            availables.append(11)
+            action_mask[11] = 1
             if has_enemy_minimap(observation):
-                availables.append(10)
-                availables.append(12)
+                action_mask[10] = 1
+                action_mask[12] = 1
         # macro train queen
         if (num_minerals >= 150 and num_food >= 2 and
             self._num_spawning_pools >= 1 and
             self._build_spawning_pool_steps > 35):
-            availables.append(13)
+            action_mask[13] = 1
         # macro queen inject larva
         if self._num_queens > 0:
-            availables.append(14)
+            action_mask[14] = 1
 
-        return availables
+        return action_mask
 
     def _record_action(self, action):
         function_id = action[0]

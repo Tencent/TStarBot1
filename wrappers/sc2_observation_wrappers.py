@@ -8,9 +8,10 @@ import gym
 from gym import spaces
 
 from envs.space import PySC2RawObservation
+from envs.space import MaskableDiscrete
 
 
-class SC2ObservationWrapper(gym.Wrapper):
+class SC2ObservationWrapper(gym.ObservationWrapper):
 
     def __init__(self,
                  env,
@@ -35,15 +36,10 @@ class SC2ObservationWrapper(gym.Wrapper):
             spaces.Box(0.0, float('inf'), [n_channels_minimap, *shape_minimap]),
             spaces.Box(0.0, float('inf'), [10])])
 
-    def step(self, action):
-        observation, reward, done, info = self.env.step(action)
-        return self._observation(observation), reward, done, info
-
-    def reset(self):
-        observation, info = self.env.reset()
-        return self._observation(observation), info
-
     def _observation(self, observation):
+        if isinstance(self.env.action_space, MaskableDiscrete):
+            observation, action_mask = observation
+
         observation_screen = self._transform_spatial_features(
             observation["screen"], SCREEN_FEATURES)
         observation_minimap = self._transform_spatial_features(
@@ -53,7 +49,12 @@ class SC2ObservationWrapper(gym.Wrapper):
         if self._flip:
             observation_screen = self._diagonal_flip(observation_screen)
             observation_minimap = self._diagonal_flip(observation_minimap)
-        return (observation_screen, observation_minimap, observation_player)
+
+        if isinstance(self.action_space, MaskableDiscrete):
+            return (observation_screen, observation_minimap, observation_player,
+                    action_mask)
+        else:
+            return (observation_screen, observation_minimap, observation_player)
 
     def _diagonal_flip(self, observation):
         if self.env.player_corner == 0:
@@ -137,9 +138,9 @@ class SC2ObservationNonSpatialWrapperV1(gym.Wrapper):
         return self._observation(observation), reward, done, info
 
     def reset(self):
-        observation, info = self.env.reset()
+        observation = self.env.reset()
         self._update_player_position_mask(observation)
-        return self._observation(observation), info
+        return self._observation(observation)
 
     def _observation(self, observation):
         observation_player = observation["player"]

@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import gym
 from gym.spaces.discrete import Discrete
 
@@ -9,18 +8,16 @@ class PySC2RawAction(gym.Space):
     def __init__(self, action_spec_fn):
         self._functions = list(action_spec_fn().functions)
 
-    def sample(self, availables=None):
-        if availables is None:
-            function_id = np.random.randint(len(self._functions))
-        else:
-            function_id = random.choice(availables)
+    def sample(self, availables):
+        function_id = np.random.choice(availables).item()
         function_args = [[np.random.randint(0, size) for size in arg.sizes]
                           for arg in self._functions[function_id].args]
+        assert self.contains((function_id, function_args))
         return (function_id, function_args)
 
-    def contains(self, x, availables=None):
+    def contains(self, x, availables):
         function_id, function_args = x
-        if availables is not None and function_id not in availables:
+        if not function_id in availables:
             return False
         args_spec = self._functions[function_id].args
         if len(function_args) != len(args_spec):
@@ -46,10 +43,10 @@ class PySC2RawObservation(gym.Space):
     def __init__(self, observation_spec_fn):
         self._feature_layers = observation_spec_fn()
 
-    def sample(self, availables=None):
+    def sample(self):
         raise NotImplementedError
 
-    def contains(self, x, availables=None):
+    def contains(self, x):
         raise NotImplementedError
 
     def to_jsonable(self, sample_n):
@@ -65,14 +62,10 @@ class PySC2RawObservation(gym.Space):
 
 class MaskableDiscrete(Discrete):
 
-    def sample(self, availables=None):
-        if availables is None:
-            return super(MaskableDiscrete, self).sample()
-        action = random.choice(availables)
-        assert self.contains(action, availables)
-        return action
+    def sample(self, availables):
+        x = np.random.choice(availables).item()
+        assert self.contains(x, availables)
+        return x
 
-    def contains(self, x, availables=None):
-        if availables is None:
-            return super(MaskableDiscrete, self).contains(x)
+    def contains(self, x, availables):
         return super(MaskableDiscrete, self).contains(x) and x in availables
