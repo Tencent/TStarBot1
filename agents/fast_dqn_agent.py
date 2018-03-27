@@ -144,7 +144,7 @@ class FastDQNAgent(object):
         self._loss_type = loss_type
         self._print_freq = print_freq
         self._episode_idx = 0
-        self._current_eps = multiprocessing.Value('d', 1.0)
+        self._current_eps = multiprocessing.Value('d', eps_start)
         self._num_threads = 8
 
         self._q_network = network
