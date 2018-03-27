@@ -72,13 +72,13 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
                 return action_space.sample()
 
     episode_id = 0
-    env = env_create_fn()
+    env, difficulty = env_create_fn()
     while True:
         episode_id += 1
         cum_return = 0.0
         if episode_id % 3 == 0:
             env.close()
-            env = env_create_fn()
+            env, difficulty = env_create_fn()
         observation = env.reset()
         done = False
         while not done:
@@ -87,8 +87,9 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
             out_queue.put((observation, action, reward, next_observation, done))
             observation = next_observation
             cum_return += reward
-        print("Actor Worker ID %d Episode %d Epsilon %f Return: %f." %
-              (pid, episode_id, current_eps.value, cum_return))
+        print("Actor Worker ID: %d Episode: %d Difficulty: %s Epsilon: %f "
+              "Return: %f." %
+              (pid, episode_id, difficulty, current_eps.value, cum_return))
         sys.stdout.flush()
 
 

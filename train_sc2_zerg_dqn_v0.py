@@ -74,13 +74,14 @@ flags.FLAGS(sys.argv)
 
 
 def create_env():
+    difficulty = random.choice(FLAGS.difficulty.split(','))
     env = StarCraftIIEnv(
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
         resolution=32,
         agent_race='Z',
         bot_race='Z',
-        difficulty=random.choice(FLAGS.difficulty.split(',')),
+        difficulty=difficulty,
         game_steps_per_episode=0,
         visualize_feature_map=False,
         score_index=None)
@@ -90,14 +91,14 @@ def create_env():
         unit_type_whitelist=UNIT_TYPE_WHITELIST_TINY,
         observation_filter=FLAGS.observation_filter.split(','),
         flip=FLAGS.flip_minimap_screen)
-    return env
+    return env, difficulty
 
 
 def train():
     if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
         os.makedirs(FLAGS.save_model_dir)
 
-    env = create_env()
+    env, _ = create_env()
     if FLAGS.use_dueling_arch:
         network = SC2DuelingQNetV2(
             resolution=env.observation_space.spaces[0].shape[1],
