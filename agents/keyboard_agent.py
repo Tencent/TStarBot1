@@ -32,7 +32,7 @@ class KeyboardAgent(object):
         self._cmd_thread.start()
 
     def act(self, observation, eps=0):
-        time.sleep(0.1)
+        #time.sleep(0.02)
         if not self._action_queue.empty():
             return self._action_queue.get()
         else:
