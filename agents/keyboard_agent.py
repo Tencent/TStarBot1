@@ -3,6 +3,10 @@ import queue
 import threading
 from gym import spaces
 from absl import logging
+import numpy as np
+
+from envs.space import MaskableDiscrete
+from envs.space import PySC2RawAction
 
 
 def add_input(action_queue, n):
@@ -24,6 +28,7 @@ class KeyboardAgent(object):
     def __init__(self, action_space):
         super(KeyboardAgent, self).__init__()
         logging.set_verbosity(logging.ERROR)
+        self._action_space = action_space
         assert isinstance(action_space, spaces.Discrete)
         self._action_queue = queue.Queue()
         self._cmd_thread = threading.Thread(
@@ -32,8 +37,16 @@ class KeyboardAgent(object):
         self._cmd_thread.start()
 
     def act(self, observation, eps=0):
-        #time.sleep(0.02)
+        time.sleep(0.1)
         if not self._action_queue.empty():
-            return self._action_queue.get()
+            action = self._action_queue.get()
+            if (isinstance(self._action_space, MaskableDiscrete) or
+                isinstance(self._action_space, PySC2RawAction)):
+                action_mask = observation[-1]
+                if action_mask[action] == 0:
+                    print("Action not available. Availables: %s" %
+                          np.nonzero(action_mask))
+                    action = 0
+            return action
         else:
             return 0

@@ -14,7 +14,6 @@ class RandomAgent(object):
         if (isinstance(self._action_space, MaskableDiscrete) or
             isinstance(self._action_space, PySC2RawAction)):
             action_mask = observation[-1]
-            print(action_mask)
             return self._action_space.sample(np.nonzero(action_mask)[0])
         else:
             return self._action_space.sample()

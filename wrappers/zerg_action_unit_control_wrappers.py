@@ -541,10 +541,6 @@ class ZergActionWrapper(gym.Wrapper):
                 name='attack_closest_unit_20', # 17
                 function=self._attack_closest_unit,
                 is_valid=self._is_valid_attack_20),
-            Function(
-                name='attack_closest_unit_5', # 18
-                function=self._attack_closest_unit,
-                is_valid=self._is_valid_attack_5),
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
 
@@ -919,21 +915,18 @@ class ZergActionWrapper(gym.Wrapper):
         else:
             return False
 
-    def _is_valid_attack_5(self):
-        if (len(self._data.combat_units) > 5 and
-            len(self._data.enemy_units) > 0):
-            return True
-        else:
-            return False
-
     def _attack_closest_group(self):
         enemy_group = self._data.closest_enemy_groups(
             self._data.init_base_pos)[0]
         return self._micro_attack(enemy_group)
 
     def _rally_idle_combat_units(self):
+        if self.player_corner == 0:
+            rally_pos = (65, 113)
+        else:
+            rally_pos = (138, 36)
         return [ActionCreator.attack(self._data.idle_combat_units,
-                                     pos=(100, 78))]
+                                     pos=rally_pos)]
 
     def _is_valid_rally_idle_combat_units(self):
         if len(self._data.idle_combat_units) > 0:
