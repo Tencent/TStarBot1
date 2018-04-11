@@ -264,21 +264,20 @@ class SC2DuelingQNetV3(nn.Module):
             self.bn3 = nn.BatchNorm2d(16)
 
         self.value_sp_fc = nn.Linear(16 * 7 * 7, 256)
-        self.value_nonsp_fc1 = nn.Linear(n_dims, 512)
-        self.value_nonsp_fc2 = nn.Linear(512, 512)
+        self.value_nonsp_fc1 = nn.Linear(n_dims, 1024)
+        self.value_nonsp_fc2 = nn.Linear(1024, 512)
         self.value_nonsp_fc3 = nn.Linear(512, 256)
         self.value_final_fc = nn.Linear(512, 1)
 
         self.adv_sp_fc = nn.Linear(16 * 7 * 7, 256)
-        self.adv_nonsp_fc1 = nn.Linear(n_dims, 512)
-        self.adv_nonsp_fc2 = nn.Linear(512, 512)
+        self.adv_nonsp_fc1 = nn.Linear(n_dims, 1024)
+        self.adv_nonsp_fc2 = nn.Linear(1024, 512)
         self.adv_nonsp_fc3 = nn.Linear(512, 256)
         self.adv_final_fc = nn.Linear(512, n_out)
         self._batchnorm = batchnorm
 
     def forward(self, x):
         spatial, nonspatial = x
-        print(spatial.size(), nonspatial.size())
         if self._batchnorm:
             spatial = F.relu(self.bn1(self.conv1(spatial)))
             spatial = F.relu(self.bn2(self.conv2(spatial)))

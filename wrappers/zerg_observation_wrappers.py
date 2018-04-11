@@ -155,7 +155,56 @@ class UnitStat1DFeature(object):
         return 4 * 2
 
 
-class ZergObservationWrapper(gym.ObservationWrapper):
+class GameProgressFeature(object):
+
+    def features(self, observation):
+        game_loop = observation["game_loop"][0]
+        features_20 = self._onehot(game_loop, 20)
+        features_8 = self._onehot(game_loop, 8)
+        features_5 = self._onehot(game_loop, 5)
+        return np.concatenate([features_20, features_8, features_5])
+
+    def _onehot(self, value, n_bins):
+        bin_width = 24000 // n_bins
+        features = np.zeros(n_bins, dtype=np.float32)
+        idx = int(value // bin_width)
+        idx = n_bins - 1 if idx >= n_bins else idx
+        features[idx] = 1.0
+        return features
+
+    @property
+    def num_dims(self):
+        return 20 + 8 + 5
+
+
+class ActionSeqFeature(object):
+
+    def __init__(self, n_dims_action_space, seq_len):
+        self._action_seq = [-1] * seq_len
+        self._n_dims_action_space = n_dims_action_space
+
+    def reset(self):
+        self._action_seq = [-1] * len(self._action_seq)
+
+    def push_action(self, action):
+        self._action_seq.pop(0)
+        self._action_seq.append(action)
+
+    def features(self):
+        features = np.zeros(self._n_dims_action_space * len(self._action_seq),
+                            dtype=np.float32)
+        for i, action in enumerate(self._action_seq):
+            assert action < self._n_dims_action_space
+            if action >= 0:
+                features[i * self._n_dims_action_space + action] = 1.0
+        return features
+
+    @property
+    def num_dims(self):
+        return self._n_dims_action_space * len(self._action_seq)
+
+
+class ZergObservationWrapper(gym.Wrapper):
 
     def __init__(self,
                  env,
@@ -205,16 +254,31 @@ class ZergObservationWrapper(gym.ObservationWrapper):
                        UNIT_TYPEID.ZERG_EXTRACTOR.value])
         self._unit_stat_feature = UnitStat1DFeature()
         self._player_feature = Player1DFeature()
+        self._game_progress_feature = GameProgressFeature()
+        self._action_seq_feature = ActionSeqFeature(self.action_space.n, 6)
         self._flip = flip
 
         n_channels = sum([self._unit_type_feature.num_channels,
                           self._player_relative_feature.num_channels])
         n_dims = sum([self._unit_stat_feature.num_dims,
                       self._unit_count_feature.num_dims,
-                      self._player_feature.num_dims])
+                      self._player_feature.num_dims,
+                      self._game_progress_feature.num_dims,
+                      self._action_seq_feature.num_dims])
         self.observation_space = spaces.Tuple([
             spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution]),
             spaces.Box(0.0, float('inf'), [n_dims])])
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        self._action_seq_feature.push_action(action)
+        return self._observation(observation), reward, done, info
+
+    def reset(self):
+        observation = self.env.reset()
+        self._action_seq_feature.reset()
+        print(self.env.player_position)
+        return self._observation(observation)
 
     def _observation(self, observation):
         if isinstance(self.env.action_space, MaskableDiscrete):
@@ -225,12 +289,16 @@ class ZergObservationWrapper(gym.ObservationWrapper):
         unit_count_feat = self._unit_count_feature.features(observation)
         unit_stat_feat = self._unit_stat_feature.features(observation)
         player_feat = self._player_feature.features(observation)
+        game_progress_feat = self._game_progress_feature.features(observation)
+        action_seq_feat = self._action_seq_feature.features()
 
         spatial_feat = np.concatenate([player_rel_feat,
                                        unit_type_feat])
         nonspatial_feat = np.concatenate([unit_stat_feat,
                                           unit_count_feat,
-                                          player_feat])
+                                          player_feat,
+                                          game_progress_feat,
+                                          action_seq_feat])
 
         #np.set_printoptions(threshold=np.nan, linewidth=300)
         #for i in range(spatial_feat.shape[0]):
