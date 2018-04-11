@@ -277,7 +277,6 @@ class ZergObservationWrapper(gym.Wrapper):
     def reset(self):
         observation = self.env.reset()
         self._action_seq_feature.reset()
-        print(self.env.player_position)
         return self._observation(observation)
 
     def _observation(self, observation):
