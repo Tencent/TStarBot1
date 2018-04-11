@@ -31,6 +31,7 @@ PLACE_COLLISION_UNIT_SET = {UNIT_TYPEID.ZERG_HATCHERY.value,
                             UNIT_TYPEID.ZERG_SPAWNINGPOOL.value,
                             UNIT_TYPEID.ZERG_ROACHWARREN.value,
                             UNIT_TYPEID.ZERG_HYDRALISKDEN.value,
+                            UNIT_TYPEID.ZERG_EXTRACTOR.value,
                             UNIT_TYPEID.NEUTRAL_MINERALFIELD.value,
                             UNIT_TYPEID.NEUTRAL_MINERALFIELD750.value,
                             UNIT_TYPEID.NEUTRAL_VESPENEGEYSER.value}
@@ -572,7 +573,7 @@ class ZergActionWrapper(gym.Wrapper):
         return (observation, self._action_mask)
 
     @property
-    def player_corner(self):
+    def player_position(self):
         if self._data.init_base_pos[0] < 100:
             return 0
         else:
@@ -921,7 +922,7 @@ class ZergActionWrapper(gym.Wrapper):
         return self._micro_attack(enemy_group)
 
     def _rally_idle_combat_units(self):
-        if self.player_corner == 0:
+        if self.player_position == 0:
             rally_pos = (65, 113)
         else:
             rally_pos = (138, 36)
