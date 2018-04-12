@@ -17,8 +17,8 @@ from utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_integer("num_parallels", 8, "Parallel number.")
-flags.DEFINE_integer("num_episodes", 25, "Number of episodes to evaluate.")
+flags.DEFINE_integer("num_parallels", 4, "Parallel number.")
+flags.DEFINE_integer("num_episodes", 50, "Number of episodes to evaluate.")
 flags.DEFINE_float("epsilon", 0.05, "Epsilon for policy.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '2',
@@ -50,7 +50,7 @@ def create_env():
     return env
 
 
-def train():
+def train(pid):
     env = create_env()
     network = SC2DuelingQNetV3(
         resolution=env.observation_space.spaces[0].shape[1],
@@ -97,8 +97,10 @@ def train():
                 action = agent.act(observation, eps=FLAGS.epsilon)
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
-            print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
-                  (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
+            print("Process: %d Episode: %d Outcome: %f" % (pid, i, reward))
+            print("Process: %d Evaluated %d/%d Episodes Avg Return %f "
+                  "Avg Winning Rate %f" %
+                  (pid, i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
     except KeyboardInterrupt:
         pass
@@ -109,7 +111,7 @@ def train():
 
 def main(argv):
     print_arguments(FLAGS)
-    processes = [multiprocessing.Process(target=train)
+    processes = [multiprocessing.Process(target=train, args=(pid,))
                  for pid in range(FLAGS.num_parallels)]
     for p in processes:
         p.daemon = True
