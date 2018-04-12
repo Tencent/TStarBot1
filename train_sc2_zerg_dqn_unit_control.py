@@ -24,7 +24,7 @@ flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 10000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay", 5000000, "Greedy epsilon decay step.")
 flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam'], "Optimizer.")
 flags.DEFINE_float("learning_rate", 3e-7, "Learning rate.")
 flags.DEFINE_float("momentum", 0.9, "Momentum.")
