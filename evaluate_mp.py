@@ -5,6 +5,7 @@ import traceback
 from absl import app
 from absl import flags
 import multiprocessing
+import time
 
 from envs.sc2_env_unit_control import StarCraftIIEnv
 from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
@@ -91,6 +92,9 @@ def train(pid):
     try:
         cum_return = 0.0
         for i in range(FLAGS.num_episodes):
+            if (i + 1) % 5 == 0:
+                env.close()
+                env = create_env()
             observation = env.reset()
             done = False
             while not done:
@@ -116,6 +120,7 @@ def main(argv):
     for p in processes:
         p.daemon = True
         p.start()
+        time.sleep(1)
     for p in processes:
         p.join()
 
