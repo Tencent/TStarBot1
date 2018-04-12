@@ -4,6 +4,7 @@ import os
 import traceback
 from absl import app
 from absl import flags
+import multiprocessing
 
 from envs.sc2_env_unit_control import StarCraftIIEnv
 from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
@@ -16,7 +17,8 @@ from utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
+flags.DEFINE_integer("num_parallels", 8, "Parallel number.")
+flags.DEFINE_integer("num_episodes", 25, "Number of episodes to evaluate.")
 flags.DEFINE_float("epsilon", 0.05, "Epsilon for policy.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '2',
@@ -107,8 +109,13 @@ def train():
 
 def main(argv):
     print_arguments(FLAGS)
-    train()
-
+    processes = [multiprocessing.Process(target=train)
+                 for pid in range(FLAGS.num_parallels)]
+    for p in processes:
+        p.daemon = True
+        p.start()
+    for p in processes:
+        p.join()
 
 if __name__ == '__main__':
     app.run(main)
