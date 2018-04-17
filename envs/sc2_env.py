@@ -33,6 +33,7 @@ class StarCraftIIEnv(gym.Env):
         self.observation_space = PySC2RawObservation(
             self._sc2_env.observation_spec)
         self.action_space = PySC2RawAction(self._sc2_env.action_spec)
+        self._difficulty = difficulty
         self._reseted = False
 
     def _step(self, action):
@@ -44,7 +45,10 @@ class StarCraftIIEnv(gym.Env):
         self._available_actions = observation["available_actions"]
         reward = float(timestep.reward)
         done = timestep.last() 
-        if done: self._reseted = False
+        if done:
+            self._reseted = False
+            print("Episode Done. Difficulty: %s Outcome %f" %
+                  (self._difficulty, reward))
         info = {}
         return (observation, reward, done, info)
         
