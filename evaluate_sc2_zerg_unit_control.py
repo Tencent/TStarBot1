@@ -8,6 +8,7 @@ from absl import flags
 from envs.sc2_env_unit_control import StarCraftIIEnv
 from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
 from wrappers.zerg_observation_wrappers import ZergObservationWrapper
+from wrappers.sc2_reward_wrappers import RewardShapingWrapperV1
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent
@@ -28,6 +29,7 @@ flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
+flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
 flags.FLAGS(sys.argv)
 
 
@@ -43,6 +45,8 @@ def create_env():
         game_steps_per_episode=0,
         visualize_feature_map=FLAGS.render,
         score_index=None)
+    if FLAGS.use_reward_shaping:
+        env = RewardShapingWrapperV1(env)
     env = ZergActionWrapper(env)
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
@@ -93,6 +97,7 @@ def train():
             done = False
             while not done:
                 action = agent.act(observation, eps=FLAGS.epsilon)
+                #print(action, observation[-1])
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
             print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
