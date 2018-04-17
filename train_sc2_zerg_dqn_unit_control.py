@@ -9,7 +9,7 @@ import random
 from envs.sc2_env_unit_control import StarCraftIIEnv
 from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
 from wrappers.zerg_observation_wrappers import ZergObservationWrapper
-from wrappers.sc2_reward_wrappers import RewardShapingWrapperV1
+from wrappers.sc2_reward_wrappers import RewardShapingWrapperV2
 from agents.fast_dqn_agent import FastDQNAgent
 from models.sc2_networks import SC2DuelingQNetV3
 from utils.utils import print_arguments
@@ -61,7 +61,7 @@ def create_env():
         visualize_feature_map=False,
         score_index=None)
     if FLAGS.use_reward_shaping:
-        env = RewardShapingWrapperV1(env)
+        env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env, difficulty
