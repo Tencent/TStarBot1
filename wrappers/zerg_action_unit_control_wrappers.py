@@ -134,6 +134,10 @@ class ZergData(object):
             self.enemy_groups,
             key=lambda g: self._distance(unit, self._centroid(g)))[:num]
 
+    def unrallied_idle_combat_units(self, rally_point):
+        return [u for u in self.idle_combat_units
+                if self._distance(u, rally_point) > 12]
+
     @property
     def init_base_pos(self):
         return self._init_base_pos
@@ -562,10 +566,14 @@ class ZergActionWrapper(gym.Wrapper):
                 name='morph_lair', # 14
                 function=self._morph_lair,
                 is_valid=self._is_valid_morph_lair),
+            #Function(
+                #name='rally_idle_combat_units', # 15
+                #function=self._rally_idle_combat_units,
+                #is_valid=self._is_valid_rally_idle_combat_units),
             Function(
-                name='rally_idle_combat_units', # 15
-                function=self._rally_idle_combat_units,
-                is_valid=self._is_valid_rally_idle_combat_units),
+                name='rally_idle_combat_units_to_B', # 15
+                function=self._rally_idle_combat_units_to_B,
+                is_valid=self._is_valid_rally_idle_combat_units_to_B),
             Function(
                 name='attack_closest_unit_30', # 16
                 function=self._attack_closest_unit,
@@ -980,6 +988,17 @@ class ZergActionWrapper(gym.Wrapper):
     def _rally_new_combat_units_to_A(self):
         return [ActionCreator.attack(self._data.newly_produced_combat_units,
                                      pos=self._rally_pos_A)]
+
+    def _rally_idle_combat_units_to_B(self):
+        return [ActionCreator.attack(
+            self._data.unrallied_idle_combat_units(self._rally_pos_B),
+            pos=self._rally_pos_B)]
+
+    def _is_valid_rally_idle_combat_units_to_B(self):
+        if len(self._data.unrallied_idle_combat_units(self._rally_pos_B)) > 10:
+            return True
+        else:
+            return False
 
     def _is_valid_rally_new_combat_units(self):
         if len(self._data.newly_produced_combat_units) > 0:
