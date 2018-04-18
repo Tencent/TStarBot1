@@ -576,6 +576,8 @@ class ZergActionWrapper(gym.Wrapper):
             actions = self._assign_idle_drones_to_minerals() + actions
         if platform.system() != 'Linux' and not self._data.is_any_unit_selected:
             actions = self._select_all() + actions
+        actions.extend(self._micro_attack(self._data.attacking_combat_units,
+                                          self._data.enemy_units))
         observation, reward, done, info = self.env.step(actions)
         self._data.update(observation)
         self._action_mask = self._get_valid_action_mask()
@@ -915,8 +917,7 @@ class ZergActionWrapper(gym.Wrapper):
             return False
 
     def _attack_closest_unit(self):
-        return self._micro_attack(self._data.combat_units,
-                                  self._data.enemy_units)
+        return self._start_attack(self._data.combat_units)
 
     def _is_valid_attack_30(self):
         if (len(self._data.combat_units) > 30 and
@@ -932,11 +933,6 @@ class ZergActionWrapper(gym.Wrapper):
         else:
             return False
 
-    def _attack_closest_group(self):
-        enemy_group = self._data.closest_enemy_groups(
-            self._data.init_base_pos)[0]
-        return self._micro_attack(enemy_group)
-
     def _rally_idle_combat_units(self):
         if self.player_position == 0:
             rally_pos = (65, 113)
@@ -951,13 +947,16 @@ class ZergActionWrapper(gym.Wrapper):
         else:
             return False
 
+    def _start_attack(self, units):
+        self._data.label_attack_status(units)
+        return []
+
     def _micro_attack(self, self_units, enemy_units):
 
         def select_and_attack(unit, enemy_units):
             assert len(enemy_units) > 0
-            close_units = self._closest_units(unit, enemy_units, 5)
-            weakest_unit = self._weakest_units(unit, close_units, 1)[0]
-            return ActionCreator.attack([unit], target=weakest_unit)
+            closest_unit = self._closest_units(unit, enemy_units, 1)[0]
+            return ActionCreator.attack([unit], target=closest_unit)
 
         air_combat_units = [u for u in self_units
                             if u.unit_type in AIR_COMBAT_UNIT_SET]
