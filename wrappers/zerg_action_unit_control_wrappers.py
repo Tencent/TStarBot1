@@ -459,13 +459,21 @@ class ActionCreator(object):
     def attack(who, target=None, pos=None):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.ATTACK.value
+        action.action_raw.unit_command.ability_id = ABILITY_ID.ATTACK.value
         if target is not None:
             action.action_raw.unit_command.target_unit_tag = target.tag
         if pos is not None:
             action.action_raw.unit_command.target_world_space_pos.x = pos[0]
             action.action_raw.unit_command.target_world_space_pos.y = pos[1]
+        return action
+
+    @staticmethod
+    def move(who, pos):
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
+        action.action_raw.unit_command.ability_id = ABILITY_ID.MOVE.value
+        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
+        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
         return action
 
     @staticmethod
@@ -953,10 +961,21 @@ class ZergActionWrapper(gym.Wrapper):
 
     def _micro_attack(self, self_units, enemy_units):
 
-        def select_and_attack(unit, enemy_units):
-            assert len(enemy_units) > 0
-            closest_unit = self._closest_units(unit, enemy_units, 1)[0]
-            return ActionCreator.attack([unit], target=closest_unit)
+        def flee_or_fight(unit, target_units):
+            assert len(target_units) > 0
+            closest_target = self._closest_units(unit, target_units, 1)[0]
+            closest_dist = self._closest_dist(unit, enemy_units)
+            strongest_health = self._strongest_health(self_units)
+            if (closest_dist < 5.0 and
+                unit.float_attr.health / unit.float_attr.health_max < 0.3 and
+                strongest_health > 0.9):
+                x = unit.float_attr.pos_x + (unit.float_attr.pos_x - \
+                    closest_target.float_attr.pos_x) * 0.2
+                y = unit.float_attr.pos_y + (unit.float_attr.pos_y - \
+                    closest_target.float_attr.pos_y) * 0.2
+                return ActionCreator.move([unit], pos=(x, y))
+            else:
+                return ActionCreator.attack([unit], target=closest_target)
 
         air_combat_units = [u for u in self_units
                             if u.unit_type in AIR_COMBAT_UNIT_SET]
@@ -969,15 +988,14 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         for unit in air_combat_units:
             if len(air_enemy_units) > 0:
-                actions.append(select_and_attack(unit, air_enemy_units))
+                actions.append(flee_or_fight(unit, air_enemy_units))
         for unit in land_combat_units:
             if len(land_enemy_units) > 0:
-                actions.append(select_and_attack(unit, land_enemy_units))
+                actions.append(flee_or_fight(unit, land_enemy_units))
         for unit in air_land_combat_units:
-            if len(air_enemy_units) > 0:
-                actions.append(select_and_attack(unit, air_enemy_units))
-            if len(land_enemy_units) > 0:
-                actions.append(select_and_attack(unit, land_enemy_units))
+            if len(enemy_units) > 0:
+                actions.append(
+                    flee_or_fight(unit, air_enemy_units + land_enemy_units))
         return actions
 
     def _closest_units(self, unit, target_units, num=1):
@@ -989,14 +1007,12 @@ class ZergActionWrapper(gym.Wrapper):
             return sorted(target_units,
                           key=lambda u: self._distance(unit, u))[:num]
 
-    def _weakest_units(self, unit, target_units, num=1):
-        assert num >= 1
-        if num == 1:
-            return [min(target_units, key=lambda u: u.float_attr.health)] \
-                   if len(target_units) > 0 else []
-        else:
-            return sorted(target_units,
-                          key=lambda u: u.float_attr.health)[:num]
+    def _closest_dist(self, unit, target_units):
+        return min(self._distance(unit, u) for u in target_units) \
+               if len(target_units) > 0 else float('inf')
+
+    def _strongest_health(self, units):
+        return max(u.float_attr.health / u.float_attr.health_max for u in units)
 
     def _weakest_unit(self, unit, target_units):
         assert len(target_units) > 0
