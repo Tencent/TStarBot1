@@ -36,6 +36,11 @@ PLACE_COLLISION_UNIT_SET = {UNIT_TYPEID.ZERG_HATCHERY.value,
                             UNIT_TYPEID.NEUTRAL_MINERALFIELD750.value,
                             UNIT_TYPEID.NEUTRAL_VESPENEGEYSER.value}
 
+AIR_COMBAT_UNIT_SET = {}
+LAND_COMBAT_UNIT_SET = {UNIT_TYPEID.ZERG_ROACH.value,
+                        UNIT_TYPEID.ZERG_ZERGLING.value}
+AIR_LAND_COMBAT_UNIT_SET = {UNIT_TYPEID.ZERG_HYDRALISK.value}
+
 
 @unique
 class AllianceType(Enum):
@@ -49,15 +54,21 @@ class ZergData(object):
     def __init__(self):
         self._units = None
         self._player_info = None
+        self._attacking_tags = set()
 
     def update(self, observation):
         self._units = observation['units']
         self._player_info = observation['player']
 
     def reset(self, observation):
+        self._attacking_tags.clear()
         self.update(observation)
         self._init_base_pos = (self.bases[0].float_attr.pos_x,
                                self.bases[0].float_attr.pos_y)
+
+    def label_attack_status(self, units):
+        for u in units:
+            self._attacking_tags.add(u.tag)
 
     def get_pos_to_build(self, margin=3):
         cand_pos = []
@@ -259,6 +270,10 @@ class ZergData(object):
     @property
     def air_land_combat_units(self):
         return self.hydralisks
+
+    @property
+    def attacking_combat_units(self):
+        return [u for u in self.combat_units if u.tag in self._attacking_tags]
 
     @property
     def food(self):
@@ -900,7 +915,8 @@ class ZergActionWrapper(gym.Wrapper):
             return False
 
     def _attack_closest_unit(self):
-        return self._micro_attack(self._data.enemy_units)
+        return self._micro_attack(self._data.combat_units,
+                                  self._data.enemy_units)
 
     def _is_valid_attack_30(self):
         if (len(self._data.combat_units) > 30 and
@@ -935,7 +951,7 @@ class ZergActionWrapper(gym.Wrapper):
         else:
             return False
 
-    def _micro_attack(self, enemy_units):
+    def _micro_attack(self, self_units, enemy_units):
 
         def select_and_attack(unit, enemy_units):
             assert len(enemy_units) > 0
@@ -943,16 +959,22 @@ class ZergActionWrapper(gym.Wrapper):
             weakest_unit = self._weakest_units(unit, close_units, 1)[0]
             return ActionCreator.attack([unit], target=weakest_unit)
 
+        air_combat_units = [u for u in self_units
+                            if u.unit_type in AIR_COMBAT_UNIT_SET]
+        land_combat_units = [u for u in self_units
+                             if u.unit_type in LAND_COMBAT_UNIT_SET]
+        air_land_combat_units = [u for u in self_units
+                                 if u.unit_type in AIR_LAND_COMBAT_UNIT_SET]
         air_enemy_units = [u for u in enemy_units if u.bool_attr.is_flying]
         land_enemy_units = [u for u in enemy_units if not u.bool_attr.is_flying]
         actions = []
-        for unit in self._data.air_combat_units:
+        for unit in air_combat_units:
             if len(air_enemy_units) > 0:
                 actions.append(select_and_attack(unit, air_enemy_units))
-        for unit in self._data.land_combat_units:
+        for unit in land_combat_units:
             if len(land_enemy_units) > 0:
                 actions.append(select_and_attack(unit, land_enemy_units))
-        for unit in self._data.air_land_combat_units:
+        for unit in air_land_combat_units:
             if len(air_enemy_units) > 0:
                 actions.append(select_and_attack(unit, air_enemy_units))
             if len(land_enemy_units) > 0:

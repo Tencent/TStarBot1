@@ -31,7 +31,8 @@ flags.DEFINE_enum("agent", 'dqn', ['dqn', 'random', 'keyboard'], "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
-flags.DEFINE_boolean("flip_features", False, "Flip 2D features.")
+flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
+flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
 flags.FLAGS(sys.argv)
 
 
