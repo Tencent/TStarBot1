@@ -52,15 +52,19 @@ class AllianceType(Enum):
 
 class ZergData(object):
     def __init__(self):
-        self._units = None
+        self._units = []
         self._player_info = None
         self._attacking_tags = set()
+        self._historical_tags = set()
 
     def update(self, observation):
+        for u in self._units:
+            self._historical_tags.add(u.tag)
         self._units = observation['units']
         self._player_info = observation['player']
 
     def reset(self, observation):
+        self._historical_tags.clear()
         self._attacking_tags.clear()
         self.update(observation)
         self._init_base_pos = (self.bases[0].float_attr.pos_x,
@@ -254,6 +258,11 @@ class ZergData(object):
     @property
     def combat_units(self):
         return self.zerglings + self.roaches + self.hydralisks
+
+    @property
+    def newly_produced_combat_units(self):
+        return [u for u in self.combat_units
+                if u.tag not in self._historical_tags]
 
     @property
     def idle_combat_units(self):
@@ -584,6 +593,8 @@ class ZergActionWrapper(gym.Wrapper):
             actions = self._assign_idle_drones_to_minerals() + actions
         if platform.system() != 'Linux' and not self._data.is_any_unit_selected:
             actions = self._select_all() + actions
+        if self._is_valid_rally_new_combat_units():
+            actions.extend(self._rally_new_combat_units_to_A())
         actions.extend(self._micro_attack(self._data.attacking_combat_units,
                                           self._data.enemy_units))
         observation, reward, done, info = self.env.step(actions)
@@ -594,6 +605,7 @@ class ZergActionWrapper(gym.Wrapper):
     def reset(self):
         observation = self.env.reset()
         self._data.reset(observation)
+        self._set_rally_position()
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask)
 
@@ -609,6 +621,16 @@ class ZergActionWrapper(gym.Wrapper):
         mask = np.zeros(self.action_space.n)
         mask[ids] = 1
         return mask
+
+    def _set_rally_position(self):
+        if self.player_position == 0:
+            self._rally_pos_A = (68, 108)
+            #self._rally_pos_B = (121, 57)
+            self._rally_pos_B = (100, 78)
+        else:
+            self._rally_pos_A = (133, 36)
+            #self._rally_pos_B = (94, 88)
+            self._rally_pos_B = (100, 78)
 
     def _idle(self):
         return []
@@ -954,6 +976,17 @@ class ZergActionWrapper(gym.Wrapper):
             return True
         else:
             return False
+
+    def _rally_new_combat_units_to_A(self):
+        return [ActionCreator.attack(self._data.newly_produced_combat_units,
+                                     pos=self._rally_pos_A)]
+
+    def _is_valid_rally_new_combat_units(self):
+        if len(self._data.newly_produced_combat_units) > 0:
+            return True
+        else:
+            return False
+
 
     def _start_attack(self, units):
         self._data.label_attack_status(units)
