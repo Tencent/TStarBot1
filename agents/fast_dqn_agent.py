@@ -177,6 +177,10 @@ class FastDQNAgent(object):
             self._optimizer = optim.Adam(self._q_network.parameters(),
                                          eps=adam_eps,
                                          lr=learning_rate)
+        elif optimizer_type == "sgd":
+            self._optimizer = optim.SGD(self._q_network.parameters(),
+                                        momentum=momentum,
+                                        lr=learning_rate)
         else:
             raise NotImplementedError
 
