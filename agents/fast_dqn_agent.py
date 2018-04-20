@@ -127,7 +127,7 @@ class FastDQNAgent(object):
                  print_freq=1000):
         assert (isinstance(action_space, MaskableDiscrete) or
                 isinstance(action_space, spaces.Discrete))
-        #multiprocessing.set_start_method('spawn')
+        multiprocessing.set_start_method('spawn')
 
         self._batch_size = batch_size
         self._discount = discount
