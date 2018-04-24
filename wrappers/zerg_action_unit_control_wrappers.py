@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib.unit_controls import Unit
-from pysc2.lib.typeenums import UNIT_TYPEID, ABILITY_ID
+from pysc2.lib.typeenums import UNIT_TYPEID, ABILITY_ID, UPGRADE_ID
 from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
 
@@ -32,6 +32,7 @@ PLACE_COLLISION_UNIT_SET = {UNIT_TYPEID.ZERG_HATCHERY.value,
                             UNIT_TYPEID.ZERG_ROACHWARREN.value,
                             UNIT_TYPEID.ZERG_HYDRALISKDEN.value,
                             UNIT_TYPEID.ZERG_EXTRACTOR.value,
+                            UNIT_TYPEID.ZERG_EVOLUTIONCHAMBER.value,
                             UNIT_TYPEID.NEUTRAL_MINERALFIELD.value,
                             UNIT_TYPEID.NEUTRAL_MINERALFIELD750.value,
                             UNIT_TYPEID.NEUTRAL_VESPENEGEYSER.value}
@@ -54,6 +55,7 @@ class ZergData(object):
     def __init__(self):
         self._units = []
         self._player_info = None
+        self._raw_data = None
         self._attacking_tags = set()
         self._historical_tags = set()
 
@@ -62,6 +64,7 @@ class ZergData(object):
             self._historical_tags.add(u.tag)
         self._units = observation['units']
         self._player_info = observation['player']
+        self._raw_data = observation['raw_data']
 
     def reset(self, observation):
         self._historical_tags.clear()
@@ -74,12 +77,13 @@ class ZergData(object):
         for u in units:
             self._attacking_tags.add(u.tag)
 
-    def get_pos_to_build(self, margin=3):
+    def get_pos_to_build(self, margin):
         cand_pos = []
         for h in self.mature_bases:
-            region = (h.float_attr.pos_x - 9, h.float_attr.pos_y - 9,
-                      9 * 2, 9* 2)
-            cand_pos.extend(self._find_empty_place(region, margin=margin))
+            region = (h.float_attr.pos_x - 10, h.float_attr.pos_y - 10,
+                      10 * 2, 10 * 2)
+            cand_pos.extend(self._find_empty_place(
+                region, margin=margin, remove_corner=True))
         return random.choice(cand_pos) if len(cand_pos) > 0 else None
 
     def get_pos_to_base(self):
@@ -137,6 +141,10 @@ class ZergData(object):
     def unrallied_idle_combat_units(self, rally_point):
         return [u for u in self.idle_combat_units
                 if self._distance(u, rally_point) > 12]
+
+    @property
+    def upgraded_techs(self):
+        return set(self._raw_data.player.upgrade_ids)
 
     @property
     def init_base_pos(self):
@@ -209,6 +217,7 @@ class ZergData(object):
         return [u for u in self._units
                 if (u.int_attr.alliance == AllianceType.SELF.value and
                     u.unit_type == UNIT_TYPEID.ZERG_LAIR.value)]
+
     @property
     def idle_lairs(self):
         return [u for u in self.lairs if len(u.orders) == 0]
@@ -334,6 +343,14 @@ class ZergData(object):
         return False
 
     @property
+    def has_drone_move_to_build_evolution_chamber(self):
+        for u in self.drones:
+            if (len(u.orders) > 0 and
+                u.orders[0].ability_id == ABILITY_ID.BUILD_EVOLUTIONCHAMBER.value):
+                return True
+        return False
+
+    @property
     def extractors(self):
         return [u for u in self._units
                 if (u.int_attr.alliance == AllianceType.SELF.value and
@@ -381,6 +398,21 @@ class ZergData(object):
     def mature_hydraliskdens(self):
         return [u for u in self.hydraliskdens
                 if u.float_attr.build_progress == 1.0]
+
+    @property
+    def evolution_chambers(self):
+        return [u for u in self._units
+                if (u.int_attr.alliance == AllianceType.SELF.value and
+                    u.unit_type == UNIT_TYPEID.ZERG_EVOLUTIONCHAMBER.value)]
+
+    @property
+    def mature_evolution_chambers(self):
+        return [u for u in self.evolution_chambers
+                if u.float_attr.build_progress == 1.0]
+
+    @property
+    def idle_evolution_chambers(self):
+        return [u for u in self.mature_evolution_chambers if len(u.orders) == 0]
 
     @property
     def is_any_unit_selected(self):
@@ -443,10 +475,17 @@ class ZergData(object):
         return (sum(u.float_attr.pos_x for u in units) / len(units),
                 sum(u.float_attr.pos_y for u in units) / len(units))
 
-    def _find_empty_place(self, search_region, margin=0):
+    def _find_empty_place(self, search_region, margin=0, remove_corner=False):
         bottomleft = tuple(map(int, search_region[:2]))
         size = tuple(map(int, search_region[2:]))
         grids = np.zeros(size).astype(np.int)
+        if remove_corner:
+            cx, cy = size[0] / 2.0, size[1] / 2.0
+            r = max(cx, cy)
+            for x in range(size[0]):
+                for y in range(size[1]):
+                    if (x - cx) ** 2 + (y - cy) ** 2 > r ** 2:
+                        grids[x, y] = 1
         for u in self._units:
             if u.unit_type in PLACE_COLLISION_UNIT_SET:
                 radius = (u.float_attr.radius // 0.5) * 0.5 + margin
@@ -582,8 +621,37 @@ class ZergActionWrapper(gym.Wrapper):
                 name='attack_closest_unit_20', # 17
                 function=self._attack_closest_unit,
                 is_valid=self._is_valid_attack_20),
+            Function(
+                name='build_evolution_chamber', # 18
+                function=self._build_evolution_chamber,
+                is_valid=self._is_valid_build_evolution_chamber),
+            Function(
+                name='research_melee_level1', # 19
+                function=self._research_melee_level1,
+                is_valid=self._is_valid_research_melee_level1),
+            Function(
+                name='research_melee_level2', # 20
+                function=self._research_melee_level2,
+                is_valid=self._is_valid_research_melee_level2),
+            Function(
+                name='research_missile_level1', # 21
+                function=self._research_missile_level1,
+                is_valid=self._is_valid_research_missile_level1),
+            Function(
+                name='research_missile_level2', # 22
+                function=self._research_missile_level2,
+                is_valid=self._is_valid_research_missile_level2),
+            Function(
+                name='research_ground_armor_level1', # 23
+                function=self._research_ground_armor_level1,
+                is_valid=self._is_valid_research_ground_armor_level1),
+            Function(
+                name='research_ground_armor_level2', # 24
+                function=self._research_ground_armor_level2,
+                is_valid=self._is_valid_research_ground_armor_level2),
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
+        self._upgrades_in_progress = set()
 
     def step(self, action):
         '''
@@ -611,6 +679,7 @@ class ZergActionWrapper(gym.Wrapper):
         return (observation, self._action_mask), reward, done, info
 
     def reset(self):
+        self._upgrades_in_progress.clear()
         observation = self.env.reset()
         self._data.reset(observation)
         self._set_rally_position()
@@ -680,7 +749,7 @@ class ZergActionWrapper(gym.Wrapper):
             return False
 
     def _build_spawning_pool(self):
-        pos = self._data.get_pos_to_build(margin=3)
+        pos = self._data.get_pos_to_build(margin=2)
         drone = self._data.closest_drones(pos, num=1)[0]
         actions = []
         action = sc_pb.Action()
@@ -696,7 +765,7 @@ class ZergActionWrapper(gym.Wrapper):
         if (len(self._data.spawning_pools) == 0 and
             not self._data.has_drone_move_to_build_spawning_pool and
             self._data.mineral_count >= 200 and
-            self._data.get_pos_to_build(margin=3) is not None and
+            self._data.get_pos_to_build(margin=2) is not None and
             len(self._data.drones) > 0):
             return True
         else:
@@ -725,7 +794,7 @@ class ZergActionWrapper(gym.Wrapper):
             return False
 
     def _build_roach_warren(self):
-        pos = self._data.get_pos_to_build(margin=3)
+        pos = self._data.get_pos_to_build(margin=2)
         drone = self._data.closest_drones(pos, num=1)[0]
         actions = []
         action = sc_pb.Action()
@@ -742,14 +811,37 @@ class ZergActionWrapper(gym.Wrapper):
             len(self._data.roach_warrens) == 0 and
             not self._data.has_drone_move_to_build_roach_warren and
             self._data.mineral_count >= 150 and
-            self._data.get_pos_to_build(margin=3) is not None and
+            self._data.get_pos_to_build(margin=2) is not None and
+            len(self._data.drones) > 0):
+            return True
+        else:
+            return False
+
+    def _build_evolution_chamber(self):
+        pos = self._data.get_pos_to_build(margin=2)
+        drone = self._data.closest_drones(pos, num=1)[0]
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.BUILD_EVOLUTIONCHAMBER.value
+        action.action_raw.unit_command.unit_tags.append(drone.tag)
+        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
+        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
+        actions.append(action)
+        return actions
+
+    def _is_valid_build_evolution_chamber(self):
+        if (len(self._data.evolution_chambers) < 3 and
+            not self._data.has_drone_move_to_build_evolution_chamber and
+            self._data.mineral_count >= 75 and
+            self._data.get_pos_to_build(margin=2) is not None and
             len(self._data.drones) > 0):
             return True
         else:
             return False
 
     def _build_hydraliskden(self):
-        pos = self._data.get_pos_to_build(margin=3)
+        pos = self._data.get_pos_to_build(margin=2)
         drone = self._data.closest_drones(pos, num=1)[0]
         actions = []
         action = sc_pb.Action()
@@ -767,7 +859,7 @@ class ZergActionWrapper(gym.Wrapper):
             not self._data.has_drone_move_to_build_hydraliskden and
             self._data.mineral_count >= 100 and
             self._data.vespene_count >= 100 and
-            self._data.get_pos_to_build(margin=3) is not None and
+            self._data.get_pos_to_build(margin=2) is not None and
             len(self._data.drones) > 0):
             return True
         else:
@@ -899,7 +991,7 @@ class ZergActionWrapper(gym.Wrapper):
             return False
 
     def _produce_queen(self):
-        base = random.choice(self._data.mature_bases)
+        base = random.choice(self._data.idle_bases)
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(base.tag)
@@ -950,6 +1042,132 @@ class ZergActionWrapper(gym.Wrapper):
             self._data.vespene_count >= 100 and
             len(self._data.mature_spawning_pools) > 0 and
             len(self._data.idle_hatcheries) > 0):
+            return True
+        else:
+            return False
+
+    def _research_melee_level1(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGMELEEWEAPONSLEVEL1.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value)
+        return actions
+
+    def _is_valid_research_melee_level1(self):
+        if (self._data.mineral_count >= 100 and
+            self._data.vespene_count >= 100 and
+            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
+            len(self._data.idle_evolution_chambers) > 0):
+            return True
+        else:
+            return False
+
+    def _research_melee_level2(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGMELEEWEAPONSLEVEL2.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMELEEWEAPONSLEVEL2.value)
+        return actions
+
+    def _is_valid_research_melee_level2(self):
+        if (self._data.mineral_count >= 150 and
+            self._data.vespene_count >= 150 and
+            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value in self._data.upgraded_techs and
+            len(self._data.lairs) > 0 and
+            len(self._data.idle_evolution_chambers) > 0):
+            return True
+        else:
+            return False
+
+    def _research_missile_level1(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGMISSILEWEAPONSLEVEL1.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value)
+        return actions
+
+    def _is_valid_research_missile_level1(self):
+        if (self._data.mineral_count >= 100 and
+            self._data.vespene_count >= 100 and
+            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
+            len(self._data.idle_evolution_chambers) > 0):
+            return True
+        else:
+            return False
+
+    def _research_missile_level2(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGMISSILEWEAPONSLEVEL2.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL2.value)
+        return actions
+
+    def _is_valid_research_missile_level2(self):
+        if (self._data.mineral_count >= 150 and
+            self._data.vespene_count >= 150 and
+            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value in self._data.upgraded_techs and
+            len(self._data.lairs) > 0 and
+            len(self._data.idle_evolution_chambers) > 0):
+            return True
+        else:
+            return False
+
+    def _research_ground_armor_level1(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGGROUNDARMORLEVEL1.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value)
+        return actions
+
+    def _is_valid_research_ground_armor_level1(self):
+        if (self._data.mineral_count >= 150 and
+            self._data.vespene_count >= 150 and
+            UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value not in self._upgrades_in_progress and
+            len(self._data.idle_evolution_chambers) > 0):
+            return True
+        else:
+            return False
+
+    def _research_ground_armor_level2(self):
+        chamber = random.choice(self._data.idle_evolution_chambers)
+        actions = []
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(chamber.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY_ID.RESEARCH_ZERGGROUNDARMORLEVEL2.value
+        actions.append(action)
+        self._upgrades_in_progress.add(UPGRADE_ID.ZERGGROUNDARMORSLEVEL2.value)
+        return actions
+
+    def _is_valid_research_ground_armor_level2(self):
+        if (self._data.mineral_count >= 225 and
+            self._data.vespene_count >= 225 and
+            UPGRADE_ID.ZERGGROUNDARMORSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value in self._data.upgraded_techs and
+            len(self._data.lairs) > 0 and
+            len(self._data.idle_evolution_chambers) > 0):
             return True
         else:
             return False
