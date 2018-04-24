@@ -26,7 +26,8 @@ flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 5000000, "Greedy epsilon decay step.")
-flags.DEFINE_enum("optimizer_type", 'sgd', ['rmsprop', 'adam', 'sgd'],
+flags.DEFINE_integer("eps_decay2", 30000000, "Greedy epsilon decay step.")
+flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam', 'sgd'],
                   "Optimizer.")
 flags.DEFINE_float("learning_rate", 3e-7, "Learning rate.")
 flags.DEFINE_float("momentum", 0.9, "Momentum.")
@@ -94,6 +95,7 @@ def train():
         eps_start=FLAGS.eps_start,
         eps_end=FLAGS.eps_end,
         eps_decay=FLAGS.eps_decay,
+        eps_decay2=FLAGS.eps_decay2,
         memory_size=FLAGS.memory_size,
         init_memory_size=FLAGS.init_memory_size,
         frame_step_ratio=FLAGS.frame_step_ratio,

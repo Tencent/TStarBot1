@@ -113,6 +113,7 @@ class FastDQNAgent(object):
                  eps_start,
                  eps_end,
                  eps_decay,
+                 eps_decay2,
                  memory_size,
                  init_memory_size,
                  frame_step_ratio,
@@ -135,6 +136,7 @@ class FastDQNAgent(object):
         self._eps_start = eps_start
         self._eps_end = eps_end
         self._eps_decay = eps_decay
+        self._eps_decay2 = eps_decay2
         self._frame_step_ratio = frame_step_ratio
         self._target_update_freq = target_update_freq
         self._double_dqn = double_dqn
@@ -372,9 +374,14 @@ class FastDQNAgent(object):
             eps = self._eps_end + (self._eps_start - self._eps_end) * \
                 math.exp(-1. * steps / self._eps_decay)
         elif self._eps_method == 'linear':
-            steps = min(self._eps_decay, steps)
-            eps = self._eps_start - (self._eps_start - self._eps_end) * \
-                steps / self._eps_decay
+            if steps < self._eps_decay:
+                eps = self._eps_start - (self._eps_start - self._eps_end) * \
+                    steps / self._eps_decay
+            elif steps < self._eps_decay2:
+                eps = self._eps_end - (self._eps_end - 0.01) * \
+                    (steps - self._eps_decay) / self._eps_decay2
+            else:
+                eps = 0.01
         else:
             raise NotImplementedError
         return eps

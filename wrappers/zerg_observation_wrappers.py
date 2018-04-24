@@ -92,15 +92,40 @@ class PlayerRelative3DFeature(object):
 class Player1DFeature(object):
 
     def features(self, observation):
-        player_features = observation["player"][1:-2].astype(np.float32)
-        scale = np.array([1000, 1000, 10, 10, 10, 10, 10, 10])
+        player_features = observation["player"][1:-1].astype(np.float32)
+        food_unused = player_features[3] - player_features[2]
+        player_features[-1] = food_unused if food_unused >= 0 else 0
+        scale = np.array([1000, 1000, 10, 10, 10, 10, 10, 10, 10])
         scaled_features = (player_features / scale).astype(np.float32)
         log_features = np.log10(player_features + 1).astype(np.float32)
-        return np.concatenate((scaled_features, log_features))
+
+        additional_features = np.zeros(10, dtype=np.float32)
+        if food_unused <= 0:
+            additional_features[0] = 1
+        elif food_unused <= 3:
+            additional_features[1] = 1
+        elif food_unused <= 6:
+            additional_features[2] = 1
+        elif food_unused <= 9:
+            additional_features[3] = 1
+        elif food_unused <= 12:
+            additional_features[4] = 1
+        elif food_unused <= 15:
+            additional_features[5] = 1
+        elif food_unused <= 18:
+            additional_features[6] = 1
+        elif food_unused <= 21:
+            additional_features[7] = 1
+        elif food_unused <= 24:
+            additional_features[8] = 1
+        else:
+            additional_features[9] = 1
+        return np.concatenate((scaled_features, log_features,
+                               additional_features))
 
     @property
     def num_dims(self):
-        return 8 * 2
+        return 9 * 2 + 10
 
 
 class UnitCount1DFeature(object):
@@ -131,6 +156,31 @@ class UnitCount1DFeature(object):
             if u.unit_type in count:
                 count[u.unit_type] += 1
         return np.array(list(count.values()), dtype=np.float32)
+
+
+class UnitHasOrNotFeature(object):
+
+    def __init__(self, type_list):
+        self._type_list = type_list
+
+    def features(self, observation):
+        self_units = [u for u in observation['units']
+                      if u.int_attr.alliance == AllianceType.SELF.value]
+        features = self._generate_features(self_units)
+        return features
+
+
+    @property
+    def num_dims(self):
+        return len(self._type_list)
+
+    def _generate_features(self, units):
+        count = {t: 0 for t in self._type_list}
+        for u in units:
+            if u.unit_type in count:
+                count[u.unit_type] = 1
+        return np.array(list(count.values()), dtype=np.float32)
+
 
 class UnitStat1DFeature(object):
 
@@ -252,16 +302,19 @@ class ZergObservationWrapper(gym.Wrapper):
                        UNIT_TYPEID.ZERG_ROACHWARREN.value,
                        UNIT_TYPEID.ZERG_HYDRALISKDEN.value,
                        UNIT_TYPEID.ZERG_EXTRACTOR.value])
+        self._unit_has_feature = UnitHasOrNotFeature(
+            type_list=[UNIT_TYPEID.ZERG_LARVA.value])
         self._unit_stat_feature = UnitStat1DFeature()
         self._player_feature = Player1DFeature()
         self._game_progress_feature = GameProgressFeature()
-        self._action_seq_feature = ActionSeqFeature(self.action_space.n, 6)
+        self._action_seq_feature = ActionSeqFeature(self.action_space.n, 15)
         self._flip = flip
 
         n_channels = sum([self._unit_type_feature.num_channels,
                           self._player_relative_feature.num_channels])
         n_dims = sum([self._unit_stat_feature.num_dims,
                       self._unit_count_feature.num_dims,
+                      self._unit_has_feature.num_dims,
                       self._player_feature.num_dims,
                       self._game_progress_feature.num_dims,
                       self._action_seq_feature.num_dims])
@@ -286,6 +339,7 @@ class ZergObservationWrapper(gym.Wrapper):
         player_rel_feat = self._player_relative_feature.features(observation)
         unit_type_feat = self._unit_type_feature.features(observation)
         unit_count_feat = self._unit_count_feature.features(observation)
+        unit_has_feat = self._unit_has_feature.features(observation)
         unit_stat_feat = self._unit_stat_feature.features(observation)
         player_feat = self._player_feature.features(observation)
         game_progress_feat = self._game_progress_feature.features(observation)
@@ -295,6 +349,7 @@ class ZergObservationWrapper(gym.Wrapper):
                                        unit_type_feat])
         nonspatial_feat = np.concatenate([unit_stat_feat,
                                           unit_count_feat,
+                                          unit_has_feat,
                                           player_feat,
                                           game_progress_feat,
                                           action_seq_feat])
