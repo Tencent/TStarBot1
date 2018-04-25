@@ -9,12 +9,22 @@ from collections import defaultdict
 
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib.unit_controls import Unit
-from pysc2.lib.typeenums import UNIT_TYPEID, ABILITY_ID, UPGRADE_ID
+from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
+from pysc2.lib.typeenums import ABILITY_ID as ABILITY
+from pysc2.lib.typeenums import UPGRADE_ID as UPGRADE
 from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
 
 from envs.space import PySC2RawObservation
 from envs.space import MaskableDiscrete
+from envs.wrappers.data_context import DataContext
+from envs.wrappers.const import ALLY_TYPE
+from envs.wrappers.produce_mgr import ProduceManager
+from envs.wrappers.build_mgr import BuildManager
+from envs.wrappers.upgrade_mgr import UpgradeManager
+from envs.wrappers.morph_mgr import MorphManager
+from envs.wrappers.resource_mgr import ResourceManager
+from envs.wrappers.combat_mgr import CombatManager
 
 
 PLAYERINFO_MINERAL_COUNT = 1
@@ -26,29 +36,21 @@ PLAYERINFO_FOOD_WORKER = 6
 PLAYERINFO_IDLE_WORKER_COUNT = 7
 PLAYERINFO_LARVA_COUNT = 10
 
-PLACE_COLLISION_UNIT_SET = {UNIT_TYPEID.ZERG_HATCHERY.value,
-                            UNIT_TYPEID.ZERG_LAIR.value,
-                            UNIT_TYPEID.ZERG_SPAWNINGPOOL.value,
-                            UNIT_TYPEID.ZERG_ROACHWARREN.value,
-                            UNIT_TYPEID.ZERG_HYDRALISKDEN.value,
-                            UNIT_TYPEID.ZERG_EXTRACTOR.value,
-                            UNIT_TYPEID.ZERG_EVOLUTIONCHAMBER.value,
-                            UNIT_TYPEID.NEUTRAL_MINERALFIELD.value,
-                            UNIT_TYPEID.NEUTRAL_MINERALFIELD750.value,
-                            UNIT_TYPEID.NEUTRAL_VESPENEGEYSER.value}
+PLACE_COLLISION_UNIT_SET = {UNIT_TYPE.ZERG_HATCHERY.value,
+                            UNIT_TYPE.ZERG_LAIR.value,
+                            UNIT_TYPE.ZERG_SPAWNINGPOOL.value,
+                            UNIT_TYPE.ZERG_ROACHWARREN.value,
+                            UNIT_TYPE.ZERG_HYDRALISKDEN.value,
+                            UNIT_TYPE.ZERG_EXTRACTOR.value,
+                            UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value,
+                            UNIT_TYPE.NEUTRAL_MINERALFIELD.value,
+                            UNIT_TYPE.NEUTRAL_MINERALFIELD750.value,
+                            UNIT_TYPE.NEUTRAL_VESPENEGEYSER.value}
 
 AIR_COMBAT_UNIT_SET = {}
-LAND_COMBAT_UNIT_SET = {UNIT_TYPEID.ZERG_ROACH.value,
-                        UNIT_TYPEID.ZERG_ZERGLING.value}
-AIR_LAND_COMBAT_UNIT_SET = {UNIT_TYPEID.ZERG_HYDRALISK.value}
-
-
-@unique
-class AllianceType(Enum):
-    SELF = 1
-    ALLY = 2
-    NEUTRAL = 3
-    ENEMY = 4
+LAND_COMBAT_UNIT_SET = {UNIT_TYPE.ZERG_ROACH.value,
+                        UNIT_TYPE.ZERG_ZERGLING.value}
+AIR_LAND_COMBAT_UNIT_SET = {UNIT_TYPE.ZERG_HYDRALISK.value}
 
 
 class ZergData(object):
@@ -58,6 +60,7 @@ class ZergData(object):
         self._raw_data = None
         self._attacking_tags = set()
         self._historical_tags = set()
+        self._data = DataContext()
 
     def update(self, observation):
         for u in self._units:
@@ -65,6 +68,7 @@ class ZergData(object):
         self._units = observation['units']
         self._player_info = observation['player']
         self._raw_data = observation['raw_data']
+        self._data.update(observation)
 
     def reset(self, observation):
         self._historical_tags.clear()
@@ -165,13 +169,13 @@ class ZergData(object):
     @property
     def minerals(self):
         return [u for u in self._units
-                if (u.unit_type == UNIT_TYPEID.NEUTRAL_MINERALFIELD.value or
-                    u.unit_type == UNIT_TYPEID.NEUTRAL_MINERALFIELD750.value)]
+                if (u.unit_type == UNIT_TYPE.NEUTRAL_MINERALFIELD.value or
+                    u.unit_type == UNIT_TYPE.NEUTRAL_MINERALFIELD750.value)]
 
     @property
     def vespenes(self):
         return [u for u in self._units
-                if u.unit_type == UNIT_TYPEID.NEUTRAL_VESPENEGEYSER.value]
+                if u.unit_type == UNIT_TYPE.NEUTRAL_VESPENEGEYSER.value]
 
     @property
     def exploitable_vespenes(self):
@@ -183,15 +187,11 @@ class ZergData(object):
 
     @property
     def larvas(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_LARVA.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_LARVA.value)
 
     @property
     def drones(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_DRONE.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
 
     @property
     def idle_drones(self):
@@ -199,28 +199,23 @@ class ZergData(object):
 
     @property
     def hatcheries(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_HATCHERY.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
 
     @property
     def mature_hatcheries(self):
-        return [u for u in self.hatcheries
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
 
     @property
     def idle_hatcheries(self):
-        return [u for u in self.mature_hatcheries if len(u.orders) == 0]
+        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
 
     @property
     def lairs(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_LAIR.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_LAIR.value)
 
     @property
     def idle_lairs(self):
-        return [u for u in self.lairs if len(u.orders) == 0]
+        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_LAIR.value)
 
     @property
     def bases(self):
@@ -236,33 +231,23 @@ class ZergData(object):
 
     @property
     def overlords(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_OVERLORD.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_OVERLORD.value)
 
     @property
     def zerglings(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_ZERGLING.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_ZERGLING.value)
 
     @property
     def roaches(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_ROACH.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_ROACH.value)
 
     @property
     def hydralisks(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_HYDRALISK.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_HYDRALISK.value)
 
     @property
     def queens(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_QUEEN.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_QUEEN.value)
 
     @property
     def larva_injectable_queens(self):
@@ -306,7 +291,7 @@ class ZergData(object):
     def has_drone_move_to_build_hatchery(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_HATCHERY.value):
+                u.orders[0].ability_id == ABILITY.BUILD_HATCHERY.value):
                 return True
         return False
 
@@ -314,7 +299,7 @@ class ZergData(object):
     def has_drone_move_to_build_spawning_pool(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_SPAWNINGPOOL.value):
+                u.orders[0].ability_id == ABILITY.BUILD_SPAWNINGPOOL.value):
                 return True
         return False
 
@@ -322,7 +307,7 @@ class ZergData(object):
     def has_drone_move_to_build_extractor(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_EXTRACTOR.value):
+                u.orders[0].ability_id == ABILITY.BUILD_EXTRACTOR.value):
                 return True
         return False
 
@@ -330,7 +315,7 @@ class ZergData(object):
     def has_drone_move_to_build_roach_warren(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_ROACHWARREN.value):
+                u.orders[0].ability_id == ABILITY.BUILD_ROACHWARREN.value):
                 return True
         return False
 
@@ -338,7 +323,7 @@ class ZergData(object):
     def has_drone_move_to_build_hydraliskden(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_HYDRALISKDEN.value):
+                u.orders[0].ability_id == ABILITY.BUILD_HYDRALISKDEN.value):
                 return True
         return False
 
@@ -346,20 +331,17 @@ class ZergData(object):
     def has_drone_move_to_build_evolution_chamber(self):
         for u in self.drones:
             if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY_ID.BUILD_EVOLUTIONCHAMBER.value):
+                u.orders[0].ability_id == ABILITY.BUILD_EVOLUTIONCHAMBER.value):
                 return True
         return False
 
     @property
     def extractors(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_EXTRACTOR.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
 
     @property
     def mature_extractors(self):
-        return [u for u in self.extractors
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
 
     @property
     def notbusy_extractors(self):
@@ -368,51 +350,39 @@ class ZergData(object):
 
     @property
     def spawning_pools(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_SPAWNINGPOOL.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_SPAWNINGPOOL.value)
 
     @property
     def mature_spawning_pools(self):
-        return [u for u in self.spawning_pools
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_SPAWNINGPOOL.value)
 
     @property
     def roach_warrens(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_ROACHWARREN.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_ROACHWARREN.value)
 
     @property
     def mature_roach_warrens(self):
-        return [u for u in self.roach_warrens
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_ROACHWARREN.value)
 
     @property
     def hydraliskdens(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_HYDRALISKDEN.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_HYDRALISKDEN.value)
 
     @property
     def mature_hydraliskdens(self):
-        return [u for u in self.hydraliskdens
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_HYDRALISKDEN.value)
 
     @property
     def evolution_chambers(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.SELF.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_EVOLUTIONCHAMBER.value)]
+        return self._data.units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
 
     @property
     def mature_evolution_chambers(self):
-        return [u for u in self.evolution_chambers
-                if u.float_attr.build_progress == 1.0]
+        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
 
     @property
     def idle_evolution_chambers(self):
-        return [u for u in self.mature_evolution_chambers if len(u.orders) == 0]
+        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
 
     @property
     def is_any_unit_selected(self):
@@ -424,13 +394,13 @@ class ZergData(object):
     @property
     def enemy_extractors(self):
         return [u for u in self._units
-                if (u.int_attr.alliance == AllianceType.ENEMY.value and
-                    u.unit_type == UNIT_TYPEID.ZERG_EXTRACTOR.value)]
+                if (u.int_attr.alliance == ALLY_TYPE.ENEMY.value and
+                    u.unit_type == UNIT_TYPE.ZERG_EXTRACTOR.value)]
 
     @property
     def enemy_units(self):
         return [u for u in self._units
-                if u.int_attr.alliance == AllianceType.ENEMY.value]
+                if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
 
     @property
     def enemy_groups(self):
@@ -511,7 +481,7 @@ class ActionCreator(object):
     def attack(who, target=None, pos=None):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = ABILITY_ID.ATTACK.value
+        action.action_raw.unit_command.ability_id = ABILITY.ATTACK.value
         if target is not None:
             action.action_raw.unit_command.target_unit_tag = target.tag
         if pos is not None:
@@ -523,7 +493,7 @@ class ActionCreator(object):
     def move(who, pos):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = ABILITY_ID.MOVE.value
+        action.action_raw.unit_command.ability_id = ABILITY.MOVE.value
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
         return action
@@ -533,7 +503,7 @@ class ActionCreator(object):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.HARVEST_GATHER_DRONE.value
+            ABILITY.HARVEST_GATHER_DRONE.value
         action.action_raw.unit_command.target_unit_tag = target.tag
         return action
 
@@ -544,111 +514,162 @@ class ZergActionWrapper(gym.Wrapper):
         super(ZergActionWrapper, self).__init__(env)
         assert isinstance(env.observation_space, PySC2RawObservation)
         self._data = ZergData()
+        self._dc = DataContext()
+        self._produce_mgr = ProduceManager()
+        self._build_mgr = BuildManager()
+        self._upgrade_mgr = UpgradeManager()
+        self._morph_mgr = MorphManager()
+        self._resource_mgr = ResourceManager()
+        self._combat_mgr = CombatManager()
+
         self._actions = [
             Function(
                 name='idle', # 0
                 function=self._idle,
                 is_valid=self._is_valid_idle),
-            Function(
-                name='build_extractor', # 1
-                function=self._build_extractor,
-                is_valid=self._is_valid_build_extractor),
-            Function(
-                name='build_spawning_pool', # 2
-                function=self._build_spawning_pool,
-                is_valid=self._is_valid_build_spawning_pool),
-            Function(
-                name='build_roach_warren', # 3
-                function=self._build_roach_warren,
-                is_valid=self._is_valid_build_roach_warren),
-            Function(
-                name='build_hydraliskden', # 4
-                function=self._build_hydraliskden,
-                is_valid=self._is_valid_build_hydraliskden),
-            Function(
-                name='build_hatchery', # 5
-                function=self._build_hatchery,
-                is_valid=self._is_valid_build_hatchery),
-            Function(
-                name='produce_overlord', # 6
-                function=self._produce_overlord,
-                is_valid=self._is_valid_produce_overlord),
-            Function(
-                name='produce_drone', # 7
-                function=self._produce_drone,
-                is_valid=self._is_valid_produce_drone),
-            Function(
-                name='produce_zergling', # 8
-                function=self._produce_zergling,
-                is_valid=self._is_valid_produce_zergling),
-            Function(
-                name='produce_roach', # 9
-                function=self._produce_roach,
-                is_valid=self._is_valid_produce_roach),
-            Function(
-                name='produce_queen', # 10
-                function=self._produce_queen,
-                is_valid=self._is_valid_produce_queen),
-            Function(
-                name='produce_hydralisk', # 11
-                function=self._produce_hydralisk,
-                is_valid=self._is_valid_produce_hydralisk),
-            Function(
-                name='inject_larva', # 12
-                function=self._inject_larva,
-                is_valid=self._is_valid_inject_larva),
-            Function(
-                name='assign_drones_to_extractor', # 13
-                function=self._assign_drones_to_extractor,
-                is_valid=self._is_valid_assign_drones_to_extractor),
-            Function(
-                name='morph_lair', # 14
-                function=self._morph_lair,
-                is_valid=self._is_valid_morph_lair),
+            #Function(
+                #name='build_extractor', # 1
+                #function=self._build_extractor,
+                #is_valid=self._is_valid_build_extractor),
+            self._build_mgr.action(
+                "build_extractor", UNIT_TYPE.ZERG_EXTRACTOR.value),
+            self._build_mgr.action(
+                "build_spawning_pool", UNIT_TYPE.ZERG_SPAWNINGPOOL.value),
+            self._build_mgr.action(
+                "build_roach_warren", UNIT_TYPE.ZERG_ROACHWARREN.value),
+            self._build_mgr.action(
+                "build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
+            self._build_mgr.action(
+                "build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
+            #Function(
+                #name='build_spawning_pool', # 2
+                #function=self._build_spawning_pool,
+                #is_valid=self._is_valid_build_spawning_pool),
+            #Function(
+                #name='build_roach_warren', # 3
+                #function=self._build_roach_warren,
+                #is_valid=self._is_valid_build_roach_warren),
+            #Function(
+                #name='build_hydraliskden', # 4
+                #function=self._build_hydraliskden,
+                #is_valid=self._is_valid_build_hydraliskden),
+            #Function(
+                #name='build_hatchery', # 5
+                #function=self._build_hatchery,
+                #is_valid=self._is_valid_build_hatchery),
+            self._produce_mgr.action(
+                "produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
+            self._produce_mgr.action(
+                "produce_drone", UNIT_TYPE.ZERG_DRONE.value),
+            self._produce_mgr.action(
+                "produce_zergling", UNIT_TYPE.ZERG_ZERGLING.value),
+            self._produce_mgr.action(
+                "produce_roach", UNIT_TYPE.ZERG_ROACH.value),
+            self._produce_mgr.action(
+                "produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
+            self._produce_mgr.action(
+                "produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
+            #Function(
+                #name='produce_overlord', # 6
+                #function=self._produce_overlord,
+                #is_valid=self._is_valid_produce_overlord),
+            #Function(
+                #name='produce_drone', # 7
+                #function=self._produce_drone,
+                #is_valid=self._is_valid_produce_drone),
+            #Function(
+                #name='produce_zergling', # 8
+                #function=self._produce_zergling,
+                #is_valid=self._is_valid_produce_zergling),
+            #Function(
+                #name='produce_roach', # 9
+                #function=self._produce_roach,
+                #is_valid=self._is_valid_produce_roach),
+            #Function(
+                #name='produce_queen', # 10
+                #function=self._produce_queen,
+                #is_valid=self._is_valid_produce_queen),
+            #Function(
+                #name='produce_hydralisk', # 11
+                #function=self._produce_hydralisk,
+                #is_valid=self._is_valid_produce_hydralisk),
+            self._resource_mgr.action_queens_inject_larva,
+            #Function(
+                #name='inject_larva', # 12
+                #function=self._inject_larva,
+                #is_valid=self._is_valid_inject_larva),
+            self._resource_mgr.action_some_workers_gather_gas,
+            #Function(
+                #name='assign_drones_to_extractor', # 13
+                ##function=self._assign_drones_to_extractor,
+                #is_valid=self._is_valid_assign_drones_to_extractor),
+            self._morph_mgr.action(
+                "morph_lair", UNIT_TYPE.ZERG_LAIR.value),
+            #Function(
+                #name='morph_lair', # 14
+                #function=self._morph_lair,
+                #is_valid=self._is_valid_morph_lair),
             #Function(
                 #name='rally_idle_combat_units', # 15
                 #function=self._rally_idle_combat_units,
                 #is_valid=self._is_valid_rally_idle_combat_units),
-            Function(
-                name='rally_idle_combat_units_to_B', # 15
-                function=self._rally_idle_combat_units_to_B,
-                is_valid=self._is_valid_rally_idle_combat_units_to_B),
-            Function(
-                name='attack_closest_unit_30', # 16
-                function=self._attack_closest_unit,
-                is_valid=self._is_valid_attack_30),
-            Function(
-                name='attack_closest_unit_20', # 17
-                function=self._attack_closest_unit,
-                is_valid=self._is_valid_attack_20),
-            Function(
-                name='build_evolution_chamber', # 18
-                function=self._build_evolution_chamber,
-                is_valid=self._is_valid_build_evolution_chamber),
-            Function(
-                name='research_melee_level1', # 19
-                function=self._research_melee_level1,
-                is_valid=self._is_valid_research_melee_level1),
-            Function(
-                name='research_melee_level2', # 20
-                function=self._research_melee_level2,
-                is_valid=self._is_valid_research_melee_level2),
-            Function(
-                name='research_missile_level1', # 21
-                function=self._research_missile_level1,
-                is_valid=self._is_valid_research_missile_level1),
-            Function(
-                name='research_missile_level2', # 22
-                function=self._research_missile_level2,
-                is_valid=self._is_valid_research_missile_level2),
-            Function(
-                name='research_ground_armor_level1', # 23
-                function=self._research_ground_armor_level1,
-                is_valid=self._is_valid_research_ground_armor_level1),
-            Function(
-                name='research_ground_armor_level2', # 24
-                function=self._research_ground_armor_level2,
-                is_valid=self._is_valid_research_ground_armor_level2),
+            self._combat_mgr.action_rally_idle_combat_units_to_midfield,
+            self._combat_mgr.action_all_attack_30,
+            self._combat_mgr.action_all_attack_20,
+            #Function(
+                #name='rally_idle_combat_units_to_B', # 15
+                #function=self._rally_idle_combat_units_to_B,
+                #is_valid=self._is_valid_rally_idle_combat_units_to_B),
+            #Function(
+                #name='attack_closest_unit_30', # 16
+                #function=self._attack_closest_unit,
+                #is_valid=self._is_valid_attack_30),
+            #Function(
+                #name='attack_closest_unit_20', # 17
+                #function=self._attack_closest_unit,
+                #is_valid=self._is_valid_attack_20),
+            self._build_mgr.action(
+                "build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
+            #Function(
+                #name='build_evolution_chamber', # 18
+                #function=self._build_evolution_chamber,
+                #is_valid=self._is_valid_build_evolution_chamber),
+            self._upgrade_mgr.action(
+                "upgrade_melee_attack_1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action(
+                "upgrade_melee_attack_2", UPGRADE.ZERGMELEEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action(
+                "upgrade_missile_attack_1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action(
+                "upgrade_missile_attack_2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action(
+                "upgrade_ground_armor_1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
+            self._upgrade_mgr.action(
+                "upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value),
+            #Function(
+                #name='research_melee_level1', # 19
+                #function=self._research_melee_level1,
+                #is_valid=self._is_valid_research_melee_level1),
+            #Function(
+                #name='research_melee_level2', # 20
+                #function=self._research_melee_level2,
+                #is_valid=self._is_valid_research_melee_level2),
+            #Function(
+                #name='research_missile_level1', # 21
+                #function=self._research_missile_level1,
+                #is_valid=self._is_valid_research_missile_level1),
+            #Function(
+                #name='research_missile_level2', # 22
+                #function=self._research_missile_level2,
+                #is_valid=self._is_valid_research_missile_level2),
+            #Function(
+                #name='research_ground_armor_level1', # 23
+                #function=self._research_ground_armor_level1,
+                #is_valid=self._is_valid_research_ground_armor_level1),
+            #Function(
+                #name='research_ground_armor_level2', # 24
+                #function=self._research_ground_armor_level2,
+                #is_valid=self._is_valid_research_ground_armor_level2),
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
         self._upgrades_in_progress = set()
@@ -664,24 +685,40 @@ class ZergActionWrapper(gym.Wrapper):
             action = 0
         '''
         assert self._action_mask[action] == 1
-        actions = self._actions[action].function()
-        if self._is_valid_assign_idle_drones_to_minerals():
-            actions = self._assign_idle_drones_to_minerals() + actions
+        if action in {1,2,3,4,5, 6, 7, 8, 9, 10, 11,12,13,14,15,16,17,18, 19, 20, 21, 22, 23, 24}:
+        #if action in {1, 2, 3, 4, 5, 6, 7, 8, 9,10, 11}:
+            actions = self._actions[action].function(self._dc)
+        else:
+            actions = self._actions[action].function()
+        #if self._is_valid_assign_idle_drones_to_minerals():
+            #actions = self._assign_idle_drones_to_minerals() + actions
+        func = self._resource_mgr.action_idle_workers_gather_minerals
+        if func.is_valid(self._dc):
+            actions = func.function(self._dc) + actions
         if platform.system() != 'Linux' and not self._data.is_any_unit_selected:
             actions = self._select_all() + actions
-        if self._is_valid_rally_new_combat_units():
-            actions.extend(self._rally_new_combat_units_to_A())
-        actions.extend(self._micro_attack(self._data.attacking_combat_units,
-                                          self._data.enemy_units))
+        #if self._is_valid_rally_new_combat_units():
+            #actions.extend(self._rally_new_combat_units_to_A())
+        func = self._combat_mgr.action_rally_new_combat_units
+        if func.is_valid(self._dc):
+            actions.extend(func.function(self._dc))
+        func = self._combat_mgr.action_universal_micro_attack
+        if func.is_valid(self._dc):
+            actions.extend(func.function(self._dc))
+        #actions.extend(self._micro_attack(self._data.attacking_combat_units,
+                                          #self._data.enemy_units))
         observation, reward, done, info = self.env.step(actions)
         self._data.update(observation)
+        self._dc.update(observation)
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask), reward, done, info
 
     def reset(self):
+        self._combat_mgr.reset()
         self._upgrades_in_progress.clear()
         observation = self.env.reset()
         self._data.reset(observation)
+        self._dc.reset(observation)
         self._set_rally_position()
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask)
@@ -694,7 +731,16 @@ class ZergActionWrapper(gym.Wrapper):
             return 1
 
     def _get_valid_action_mask(self):
-        ids = [i for i, action in enumerate(self._actions) if action.is_valid()]
+        ids = []
+        for i, action in enumerate(self._actions):
+            if i in {1,2,3,4,5, 6, 7, 8, 9, 10, 11,12,13,14,15,16,17,18, 19, 20, 21, 22, 23, 24}:
+            #if i in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
+                if action.is_valid(self._dc):
+                    ids.append(i)
+            else:
+                if action.is_valid():
+                    ids.append(i)
+        #ids = [i for i, action in enumerate(self._actions) if action.is_valid()]
         mask = np.zeros(self.action_space.n)
         mask[ids] = 1
         return mask
@@ -733,7 +779,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_EXTRACTOR.value
+            ABILITY.BUILD_EXTRACTOR.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_unit_tag = vespene.tag
         actions.append(action)
@@ -754,7 +800,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_SPAWNINGPOOL.value
+            ABILITY.BUILD_SPAWNINGPOOL.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
@@ -777,7 +823,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_HATCHERY.value
+            ABILITY.BUILD_HATCHERY.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
@@ -799,7 +845,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_ROACHWARREN.value
+            ABILITY.BUILD_ROACHWARREN.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
@@ -823,7 +869,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_EVOLUTIONCHAMBER.value
+            ABILITY.BUILD_EVOLUTIONCHAMBER.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
@@ -846,7 +892,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.BUILD_HYDRALISKDEN.value
+            ABILITY.BUILD_HYDRALISKDEN.value
         action.action_raw.unit_command.unit_tags.append(drone.tag)
         action.action_raw.unit_command.target_world_space_pos.x = pos[0]
         action.action_raw.unit_command.target_world_space_pos.y = pos[1]
@@ -870,7 +916,7 @@ class ZergActionWrapper(gym.Wrapper):
         larva = random.choice(self._data.larvas)
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = ABILITY_ID.TRAIN_DRONE.value
+        action.action_raw.unit_command.ability_id = ABILITY.TRAIN_DRONE.value
         actions.append(action)
         return actions
 
@@ -888,7 +934,7 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(larva.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.TRAIN_OVERLORD.value
+            ABILITY.TRAIN_OVERLORD.value
         actions.append(action)
         return actions
 
@@ -905,7 +951,7 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(larva.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.TRAIN_ZERGLING.value
+            ABILITY.TRAIN_ZERGLING.value
         actions.append(action)
         return actions
 
@@ -924,7 +970,7 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(larva.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.TRAIN_ROACH.value
+            ABILITY.TRAIN_ROACH.value
         actions.append(action)
         return actions
 
@@ -944,7 +990,7 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(larva.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.TRAIN_HYDRALISK.value
+            ABILITY.TRAIN_HYDRALISK.value
         actions.append(action)
         return actions
 
@@ -996,7 +1042,7 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(base.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.TRAIN_QUEEN.value
+            ABILITY.TRAIN_QUEEN.value
         actions.append(action)
         return actions
 
@@ -1015,7 +1061,7 @@ class ZergActionWrapper(gym.Wrapper):
             action = sc_pb.Action()
             action.action_raw.unit_command.unit_tags.append(queen.tag)
             action.action_raw.unit_command.ability_id = \
-                ABILITY_ID.EFFECT_INJECTLARVA.value
+                ABILITY.EFFECT_INJECTLARVA.value
             base = self._data.closest_mature_bases(queen, num=1)[0]
             action.action_raw.unit_command.target_unit_tag = base.tag
             actions.append(action)
@@ -1033,7 +1079,7 @@ class ZergActionWrapper(gym.Wrapper):
         actions = []
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(hatchery.tag)
-        action.action_raw.unit_command.ability_id = ABILITY_ID.MORPH_LAIR.value
+        action.action_raw.unit_command.ability_id = ABILITY.MORPH_LAIR.value
         actions.append(action)
         return actions
 
@@ -1052,15 +1098,15 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGMELEEWEAPONSLEVEL1.value
+            ABILITY.RESEARCH_ZERGMELEEWEAPONSLEVEL1.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGMELEEWEAPONSLEVEL1.value)
         return actions
 
     def _is_valid_research_melee_level1(self):
         if (self._data.mineral_count >= 100 and
             self._data.vespene_count >= 100 and
-            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGMELEEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
             len(self._data.idle_evolution_chambers) > 0):
             return True
         else:
@@ -1072,16 +1118,16 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGMELEEWEAPONSLEVEL2.value
+            ABILITY.RESEARCH_ZERGMELEEWEAPONSLEVEL2.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMELEEWEAPONSLEVEL2.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGMELEEWEAPONSLEVEL2.value)
         return actions
 
     def _is_valid_research_melee_level2(self):
         if (self._data.mineral_count >= 150 and
             self._data.vespene_count >= 150 and
-            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE_ID.ZERGMELEEWEAPONSLEVEL1.value in self._data.upgraded_techs and
+            UPGRADE.ZERGMELEEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGMELEEWEAPONSLEVEL1.value in self._data.upgraded_techs and
             len(self._data.lairs) > 0 and
             len(self._data.idle_evolution_chambers) > 0):
             return True
@@ -1094,15 +1140,15 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGMISSILEWEAPONSLEVEL1.value
+            ABILITY.RESEARCH_ZERGMISSILEWEAPONSLEVEL1.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value)
         return actions
 
     def _is_valid_research_missile_level1(self):
         if (self._data.mineral_count >= 100 and
             self._data.vespene_count >= 100 and
-            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
             len(self._data.idle_evolution_chambers) > 0):
             return True
         else:
@@ -1114,16 +1160,16 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGMISSILEWEAPONSLEVEL2.value
+            ABILITY.RESEARCH_ZERGMISSILEWEAPONSLEVEL2.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL2.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value)
         return actions
 
     def _is_valid_research_missile_level2(self):
         if (self._data.mineral_count >= 150 and
             self._data.vespene_count >= 150 and
-            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE_ID.ZERGMISSILEWEAPONSLEVEL1.value in self._data.upgraded_techs and
+            UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value in self._data.upgraded_techs and
             len(self._data.lairs) > 0 and
             len(self._data.idle_evolution_chambers) > 0):
             return True
@@ -1136,15 +1182,15 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGGROUNDARMORLEVEL1.value
+            ABILITY.RESEARCH_ZERGGROUNDARMORLEVEL1.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGGROUNDARMORSLEVEL1.value)
         return actions
 
     def _is_valid_research_ground_armor_level1(self):
         if (self._data.mineral_count >= 150 and
             self._data.vespene_count >= 150 and
-            UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGGROUNDARMORSLEVEL1.value not in self._upgrades_in_progress and
             len(self._data.idle_evolution_chambers) > 0):
             return True
         else:
@@ -1156,16 +1202,16 @@ class ZergActionWrapper(gym.Wrapper):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(chamber.tag)
         action.action_raw.unit_command.ability_id = \
-            ABILITY_ID.RESEARCH_ZERGGROUNDARMORLEVEL2.value
+            ABILITY.RESEARCH_ZERGGROUNDARMORLEVEL2.value
         actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE_ID.ZERGGROUNDARMORSLEVEL2.value)
+        self._upgrades_in_progress.add(UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
         return actions
 
     def _is_valid_research_ground_armor_level2(self):
         if (self._data.mineral_count >= 225 and
             self._data.vespene_count >= 225 and
-            UPGRADE_ID.ZERGGROUNDARMORSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE_ID.ZERGGROUNDARMORSLEVEL1.value in self._data.upgraded_techs and
+            UPGRADE.ZERGGROUNDARMORSLEVEL2.value not in self._upgrades_in_progress and
+            UPGRADE.ZERGGROUNDARMORSLEVEL1.value in self._data.upgraded_techs and
             len(self._data.lairs) > 0 and
             len(self._data.idle_evolution_chambers) > 0):
             return True
@@ -1223,7 +1269,6 @@ class ZergActionWrapper(gym.Wrapper):
             return True
         else:
             return False
-
 
     def _start_attack(self, units):
         self._data.label_attack_status(units)
