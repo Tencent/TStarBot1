@@ -12,6 +12,7 @@ class StarCraftIIEnv(gym.Env):
                  map_name,
                  step_mul=8,
                  resolution=32,
+                 disable_fog=False,
                  agent_race=None,
                  bot_race=None,
                  difficulty=None,
@@ -24,6 +25,7 @@ class StarCraftIIEnv(gym.Env):
             step_mul=step_mul,
             agent_race=agent_race,
             bot_race=bot_race,
+            disable_fog=disable_fog,
             difficulty=difficulty,
             game_steps_per_episode=game_steps_per_episode,
             screen_size_px=(resolution, resolution),
@@ -32,26 +34,26 @@ class StarCraftIIEnv(gym.Env):
             score_index=score_index)
         self.observation_space = PySC2RawObservation(
             self._sc2_env.observation_spec)
-        self.action_space = PySC2RawAction(self._sc2_env.action_spec)
+        self.action_space = None
+        self._difficulty = difficulty
         self._reseted = False
 
-    def _step(self, action):
+    def _step(self, actions):
         assert self._reseted
-        assert self.action_space.contains(action, self._available_actions)
-        op =  actions.FunctionCall(*action)
-        timestep = self._sc2_env.step([op])[0]
+        timestep = self._sc2_env.step([actions])[0]
         observation = timestep.observation
-        self._available_actions = observation["available_actions"]
         reward = float(timestep.reward)
-        done = timestep.last() 
-        if done: self._reseted = False
+        done = timestep.last()
+        if done:
+            self._reseted = False
+            print("Episode Done. Difficulty: %s Outcome %f" %
+                  (self._difficulty, reward))
         info = {}
         return (observation, reward, done, info)
-        
+
     def _reset(self):
         timestep = self._sc2_env.reset()[0]
         observation = timestep.observation
-        self._available_actions = observation["available_actions"]
         self._reseted = True
         return observation
 

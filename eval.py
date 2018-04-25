@@ -5,14 +5,14 @@ import traceback
 from absl import app
 from absl import flags
 
-from envs.sc2_env_unit_control import StarCraftIIEnv
-from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
-from wrappers.zerg_observation_wrappers import ZergObservationWrapper
-from wrappers.sc2_reward_wrappers import RewardShapingWrapperV2
+from envs.sc2_env import StarCraftIIEnv
+from envs.wrappers.zerg_action_wrappers import ZergActionWrapper
+from envs.wrappers.zerg_observation_wrappers import ZergObservationWrapper
+from envs.wrappers.reward_wrappers import RewardShapingWrapperV2
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent
-from models.sc2_networks import SC2DuelingQNetV3
+from agents.models.sc2_networks import SC2DuelingQNetV3
 from utils.utils import print_arguments
 
 
@@ -95,11 +95,13 @@ def train():
         for i in range(FLAGS.num_episodes):
             observation = env.reset()
             done = False
+            step_id = 0
             while not done:
                 action = agent.act(observation, eps=FLAGS.epsilon)
-                #print(action, observation[-1])
+                print(step_id, action, observation[-1])
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
+                step_id += 1
             print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
                   (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
