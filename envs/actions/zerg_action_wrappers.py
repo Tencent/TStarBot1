@@ -35,49 +35,30 @@ class ZergActionWrapper(gym.Wrapper):
 
         self._actions = [
             self._action_do_nothing(),
-            self._build_mgr.action(
-                "build_extractor", UNIT_TYPE.ZERG_EXTRACTOR.value),
-            self._build_mgr.action(
-                "build_spawning_pool", UNIT_TYPE.ZERG_SPAWNINGPOOL.value),
-            self._build_mgr.action(
-                "build_roach_warren", UNIT_TYPE.ZERG_ROACHWARREN.value),
-            self._build_mgr.action(
-                "build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
-            self._build_mgr.action(
-                "build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
-            self._produce_mgr.action(
-                "produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
-            self._produce_mgr.action(
-                "produce_drone", UNIT_TYPE.ZERG_DRONE.value),
-            self._produce_mgr.action(
-                "produce_zergling", UNIT_TYPE.ZERG_ZERGLING.value),
-            self._produce_mgr.action(
-                "produce_roach", UNIT_TYPE.ZERG_ROACH.value),
-            self._produce_mgr.action(
-                "produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
-            self._produce_mgr.action(
-                "produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
+            self._build_mgr.action("build_extractor", UNIT_TYPE.ZERG_EXTRACTOR.value),
+            self._build_mgr.action("build_spawning_pool", UNIT_TYPE.ZERG_SPAWNINGPOOL.value),
+            self._build_mgr.action("build_roach_warren", UNIT_TYPE.ZERG_ROACHWARREN.value),
+            self._build_mgr.action("build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
+            self._build_mgr.action("build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
+            self._produce_mgr.action("produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
+            self._produce_mgr.action("produce_drone", UNIT_TYPE.ZERG_DRONE.value),
+            self._produce_mgr.action("produce_zergling", UNIT_TYPE.ZERG_ZERGLING.value),
+            self._produce_mgr.action("produce_roach", UNIT_TYPE.ZERG_ROACH.value),
+            self._produce_mgr.action("produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
+            self._produce_mgr.action("produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
             self._resource_mgr.action_queens_inject_larva,
             self._resource_mgr.action_some_workers_gather_gas,
-            self._morph_mgr.action(
-                "morph_lair", UNIT_TYPE.ZERG_LAIR.value),
+            self._morph_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
             self._combat_mgr.action_rally_idle_combat_units_to_midfield,
             self._combat_mgr.action_all_attack_30,
             self._combat_mgr.action_all_attack_20,
-            self._build_mgr.action(
-                "build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
-            self._upgrade_mgr.action(
-                "upgrade_melee_attack_1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
-            self._upgrade_mgr.action(
-                "upgrade_melee_attack_2", UPGRADE.ZERGMELEEWEAPONSLEVEL2.value),
-            self._upgrade_mgr.action(
-                "upgrade_missile_attack_1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
-            self._upgrade_mgr.action(
-                "upgrade_missile_attack_2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
-            self._upgrade_mgr.action(
-                "upgrade_ground_armor_1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
-            self._upgrade_mgr.action(
-                "upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
+            self._build_mgr.action("build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
+            self._upgrade_mgr.action("upgrade_melee_attack_1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_melee_attack_2", UPGRADE.ZERGMELEEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_missile_attack_1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_missile_attack_2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_ground_armor_1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
 
