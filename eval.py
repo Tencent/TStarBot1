@@ -48,6 +48,9 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
+    print("----------------------------- Actions -----------------------------")
+    env.print_actions()
+    print("-------------------------------------------------------------------")
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
 

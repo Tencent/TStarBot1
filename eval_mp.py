@@ -7,14 +7,14 @@ from absl import flags
 import multiprocessing
 import time
 
-from envs.sc2_env_unit_control import StarCraftIIEnv
-from wrappers.zerg_action_unit_control_wrappers import ZergActionWrapper
-from wrappers.zerg_observation_wrappers import ZergObservationWrapper
-from wrappers.sc2_reward_wrappers import RewardShapingWrapperV2
+from envs.sc2_env import StarCraftIIEnv
+from envs.actions.zerg_action_wrappers import ZergActionWrapper
+from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent
-from models.sc2_networks import SC2DuelingQNetV3
+from agents.models.sc2_networks import SC2DuelingQNetV3
 from utils.utils import print_arguments
 
 
@@ -51,6 +51,9 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
+    print("----------------------------- Actions -----------------------------")
+    env.print_actions()
+    print("-------------------------------------------------------------------")
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
 

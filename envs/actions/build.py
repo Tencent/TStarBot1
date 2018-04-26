@@ -90,7 +90,7 @@ class SpatialPlanner(object):
         else:
             areas = self._constructable_areas(2, dc)
             # TODO(@xinghai): to be replaced
-            random.choice(areas)
+            if len(areas) > 0: random.choice(areas)
             return len(self._constructable_areas(2, dc)) > 0
 
     def _constructable_areas(self, margin, dc):
