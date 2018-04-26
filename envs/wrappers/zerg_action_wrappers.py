@@ -1,16 +1,8 @@
 import gym
 import platform
 import numpy as np
-import random
-import math
-from enum import Enum, unique
-from collections import namedtuple
-from collections import defaultdict
 
-from pysc2.lib import actions as pysc2_actions
-from pysc2.lib.unit_controls import Unit
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
-from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 from pysc2.lib.typeenums import UPGRADE_ID as UPGRADE
 from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
@@ -18,494 +10,13 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 from envs.space import PySC2RawObservation
 from envs.space import MaskableDiscrete
 from envs.wrappers.data_context import DataContext
-from envs.wrappers.const import ALLY_TYPE
 from envs.wrappers.produce_mgr import ProduceManager
 from envs.wrappers.build_mgr import BuildManager
 from envs.wrappers.upgrade_mgr import UpgradeManager
 from envs.wrappers.morph_mgr import MorphManager
 from envs.wrappers.resource_mgr import ResourceManager
 from envs.wrappers.combat_mgr import CombatManager
-
-
-PLAYERINFO_MINERAL_COUNT = 1
-PLAYERINFO_VESPENE_COUNT = 2
-PLAYERINFO_FOOD_USED = 3
-PLAYERINFO_FOOD_CAP = 4
-PLAYERINFO_FOOD_ARMY = 5
-PLAYERINFO_FOOD_WORKER = 6
-PLAYERINFO_IDLE_WORKER_COUNT = 7
-PLAYERINFO_LARVA_COUNT = 10
-
-PLACE_COLLISION_UNIT_SET = {UNIT_TYPE.ZERG_HATCHERY.value,
-                            UNIT_TYPE.ZERG_LAIR.value,
-                            UNIT_TYPE.ZERG_SPAWNINGPOOL.value,
-                            UNIT_TYPE.ZERG_ROACHWARREN.value,
-                            UNIT_TYPE.ZERG_HYDRALISKDEN.value,
-                            UNIT_TYPE.ZERG_EXTRACTOR.value,
-                            UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value,
-                            UNIT_TYPE.NEUTRAL_MINERALFIELD.value,
-                            UNIT_TYPE.NEUTRAL_MINERALFIELD750.value,
-                            UNIT_TYPE.NEUTRAL_VESPENEGEYSER.value}
-
-AIR_COMBAT_UNIT_SET = {}
-LAND_COMBAT_UNIT_SET = {UNIT_TYPE.ZERG_ROACH.value,
-                        UNIT_TYPE.ZERG_ZERGLING.value}
-AIR_LAND_COMBAT_UNIT_SET = {UNIT_TYPE.ZERG_HYDRALISK.value}
-
-
-class ZergData(object):
-    def __init__(self):
-        self._units = []
-        self._player_info = None
-        self._raw_data = None
-        self._attacking_tags = set()
-        self._historical_tags = set()
-        self._data = DataContext()
-
-    def update(self, observation):
-        for u in self._units:
-            self._historical_tags.add(u.tag)
-        self._units = observation['units']
-        self._player_info = observation['player']
-        self._raw_data = observation['raw_data']
-        self._data.update(observation)
-
-    def reset(self, observation):
-        self._historical_tags.clear()
-        self._attacking_tags.clear()
-        self.update(observation)
-        self._init_base_pos = (self.bases[0].float_attr.pos_x,
-                               self.bases[0].float_attr.pos_y)
-
-    def label_attack_status(self, units):
-        for u in units:
-            self._attacking_tags.add(u.tag)
-
-    def get_pos_to_build(self, margin):
-        cand_pos = []
-        for h in self.mature_bases:
-            region = (h.float_attr.pos_x - 10, h.float_attr.pos_y - 10,
-                      10 * 2, 10 * 2)
-            cand_pos.extend(self._find_empty_place(
-                region, margin=margin, remove_corner=True))
-        return random.choice(cand_pos) if len(cand_pos) > 0 else None
-
-    def get_pos_to_base(self):
-        unexploited_minerals = [
-            u for u in self.minerals
-            if self._closest_distance(u, self.bases) > 20]
-        if len(unexploited_minerals) == 0:
-            return None
-        mineral_seed = self._closest_units(
-            self._init_base_pos, unexploited_minerals, num=1)[0]
-        resources_in_range = self._units_in_range(
-            mineral_seed, self.minerals + self.vespenes, max_distance=15)
-        x_list = [u.float_attr.pos_x for u in resources_in_range]
-        y_list = [u.float_attr.pos_y for u in resources_in_range]
-        x_mean = sum(x_list) / len(x_list)
-        y_mean = sum(y_list) / len(y_list)
-        x_center = (max(x_list) + min(x_list)) / 2
-        y_center = (max(y_list) + min(y_list)) / 2
-        x_offset = -2 if x_mean < x_center else -6
-        y_offset = -2 if y_mean < y_center else -6
-        topdown = [min(x_list) + x_offset, min(y_list) + y_offset]
-        size = [max(x_list) - min(x_list) + 8, max(y_list) - min(y_list) + 8]
-        region = topdown + size
-        cand_pos = self._find_empty_place(region, margin=5)
-        return self._closest_units((x_center, y_center), cand_pos, num=1)[0] \
-               if len(cand_pos) > 0 else None
-
-    def closest_drones(self, unit, num=1):
-        return self._closest_units(unit, self.drones, num=num)
-
-    def closest_hatcheries(self, unit, num=1):
-        return self._closest_units(unit, self.hatcheries, num=num)
-
-    def closest_mature_hatcheries(self, unit, num=1):
-        return self._closest_units(unit, self.mature_hatcheries, num=num)
-
-    def closest_bases(self, unit, num=1):
-        return self._closest_units(unit, self.bases, num=num)
-
-    def closest_mature_bases(self, unit, num=1):
-        return self._closest_units(unit, self.mature_bases, num=num)
-
-    def closest_minerals(self, unit, num=1):
-        return self._closest_units(unit, self.minerals, num=num)
-
-    def closest_enemy_units(self, unit, num=1):
-        return self._closest_units(unit, self.enemy_units, num=num)
-
-    def closest_enemy_groups(self, unit, num=1):
-        assert num >= 1
-        return sorted(
-            self.enemy_groups,
-            key=lambda g: self._distance(unit, self._centroid(g)))[:num]
-
-    def unrallied_idle_combat_units(self, rally_point):
-        return [u for u in self.idle_combat_units
-                if self._distance(u, rally_point) > 12]
-
-    @property
-    def upgraded_techs(self):
-        return set(self._raw_data.player.upgrade_ids)
-
-    @property
-    def init_base_pos(self):
-        return self._init_base_pos
-
-    @property
-    def mineral_count(self):
-        return self._player_info[PLAYERINFO_MINERAL_COUNT]
-
-    @property
-    def vespene_count(self):
-        return self._player_info[PLAYERINFO_VESPENE_COUNT]
-
-    @property
-    def resources(self):
-        return minerals + vespenes
-
-    @property
-    def minerals(self):
-        return [u for u in self._units
-                if (u.unit_type == UNIT_TYPE.NEUTRAL_MINERALFIELD.value or
-                    u.unit_type == UNIT_TYPE.NEUTRAL_MINERALFIELD750.value)]
-
-    @property
-    def vespenes(self):
-        return [u for u in self._units
-                if u.unit_type == UNIT_TYPE.NEUTRAL_VESPENEGEYSER.value]
-
-    @property
-    def exploitable_vespenes(self):
-        extractors = self.extractors + self.enemy_extractors
-        bases = self.mature_bases
-        return [u for u in self.vespenes
-                if (self._closest_distance(u, bases) < 10 and
-                    self._closest_distance(u, extractors) > 3)]
-
-    @property
-    def larvas(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_LARVA.value)
-
-    @property
-    def drones(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
-
-    @property
-    def idle_drones(self):
-        return [u for u in self.drones if len(u.orders) == 0]
-
-    @property
-    def hatcheries(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
-
-    @property
-    def mature_hatcheries(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
-
-    @property
-    def idle_hatcheries(self):
-        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_HATCHERY.value)
-
-    @property
-    def lairs(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_LAIR.value)
-
-    @property
-    def idle_lairs(self):
-        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_LAIR.value)
-
-    @property
-    def bases(self):
-        return self.hatcheries + self.lairs
-
-    @property
-    def mature_bases(self):
-        return self.mature_hatcheries + self.lairs
-
-    @property
-    def idle_bases(self):
-        return self.idle_hatcheries + self.idle_lairs
-
-    @property
-    def overlords(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_OVERLORD.value)
-
-    @property
-    def zerglings(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_ZERGLING.value)
-
-    @property
-    def roaches(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_ROACH.value)
-
-    @property
-    def hydralisks(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_HYDRALISK.value)
-
-    @property
-    def queens(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_QUEEN.value)
-
-    @property
-    def larva_injectable_queens(self):
-        return [u for u in self.queens if u.float_attr.energy >= 25]
-
-    @property
-    def combat_units(self):
-        return self.zerglings + self.roaches + self.hydralisks
-
-    @property
-    def newly_produced_combat_units(self):
-        return [u for u in self.combat_units
-                if u.tag not in self._historical_tags]
-
-    @property
-    def idle_combat_units(self):
-        return [u for u in self.combat_units if len(u.orders) == 0]
-
-    @property
-    def air_combat_units(self):
-        return []
-
-    @property
-    def land_combat_units(self):
-        return self.zerglings + self.roaches
-
-    @property
-    def air_land_combat_units(self):
-        return self.hydralisks
-
-    @property
-    def attacking_combat_units(self):
-        return [u for u in self.combat_units if u.tag in self._attacking_tags]
-
-    @property
-    def food(self):
-        return self._player_info[PLAYERINFO_FOOD_CAP] - \
-            self._player_info[PLAYERINFO_FOOD_USED]
-
-    @property
-    def has_drone_move_to_build_hatchery(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_HATCHERY.value):
-                return True
-        return False
-
-    @property
-    def has_drone_move_to_build_spawning_pool(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_SPAWNINGPOOL.value):
-                return True
-        return False
-
-    @property
-    def has_drone_move_to_build_extractor(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_EXTRACTOR.value):
-                return True
-        return False
-
-    @property
-    def has_drone_move_to_build_roach_warren(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_ROACHWARREN.value):
-                return True
-        return False
-
-    @property
-    def has_drone_move_to_build_hydraliskden(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_HYDRALISKDEN.value):
-                return True
-        return False
-
-    @property
-    def has_drone_move_to_build_evolution_chamber(self):
-        for u in self.drones:
-            if (len(u.orders) > 0 and
-                u.orders[0].ability_id == ABILITY.BUILD_EVOLUTIONCHAMBER.value):
-                return True
-        return False
-
-    @property
-    def extractors(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
-
-    @property
-    def mature_extractors(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
-
-    @property
-    def notbusy_extractors(self):
-        return [u for u in self.mature_extractors
-                if u.int_attr.ideal_harvesters - u.int_attr.assigned_harvesters]
-
-    @property
-    def spawning_pools(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_SPAWNINGPOOL.value)
-
-    @property
-    def mature_spawning_pools(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_SPAWNINGPOOL.value)
-
-    @property
-    def roach_warrens(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_ROACHWARREN.value)
-
-    @property
-    def mature_roach_warrens(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_ROACHWARREN.value)
-
-    @property
-    def hydraliskdens(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_HYDRALISKDEN.value)
-
-    @property
-    def mature_hydraliskdens(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_HYDRALISKDEN.value)
-
-    @property
-    def evolution_chambers(self):
-        return self._data.units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
-
-    @property
-    def mature_evolution_chambers(self):
-        return self._data.mature_units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
-
-    @property
-    def idle_evolution_chambers(self):
-        return self._data.idle_units_of_type(UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value)
-
-    @property
-    def is_any_unit_selected(self):
-        for u in self._units:
-            if u.bool_attr.is_selected:
-                return True
-        return False
-
-    @property
-    def enemy_extractors(self):
-        return [u for u in self._units
-                if (u.int_attr.alliance == ALLY_TYPE.ENEMY.value and
-                    u.unit_type == UNIT_TYPE.ZERG_EXTRACTOR.value)]
-
-    @property
-    def enemy_units(self):
-        return [u for u in self._units
-                if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
-
-    @property
-    def enemy_groups(self):
-        groups = defaultdict(list)
-        for u in self.enemy_units:
-            grid_x, grid_y = u.float_attr.pos_x // 30, u.float_attr.pos_y // 30
-            groups[(grid_x, grid_y)].append(u)
-        return list(groups.values())
-
-    def _closest_units(self, unit, target_units, num=1):
-        assert num >= 1
-        if num == 1:
-            return [min(target_units, key=lambda u: self._distance(unit, u))] \
-                   if len(target_units) > 0 else []
-        else:
-            return sorted(target_units,
-                          key=lambda u: self._distance(unit, u))[:num]
-
-    def _closest_distance(self, unit, target_units):
-        return min(self._distance(unit, u) for u in target_units) \
-               if len(target_units) > 0 else float('inf')
-
-    def _units_in_range(self, unit, target_units, max_distance):
-        return [u for u in target_units
-                if self._distance(unit, u) <= max_distance]
-
-    def _distance(self, a, b):
-        if isinstance(a, Unit) and isinstance(b, Unit):
-            return ((a.float_attr.pos_x - b.float_attr.pos_x) ** 2 +
-                    (a.float_attr.pos_y - b.float_attr.pos_y) ** 2) ** 0.5
-        elif not isinstance(a, Unit) and isinstance(b, Unit):
-            return ((a[0] - b.float_attr.pos_x) ** 2 +
-                    (a[1] - b.float_attr.pos_y) ** 2) ** 0.5
-        elif isinstance(a, Unit) and not isinstance(b, Unit):
-            return ((a.float_attr.pos_x - b[0]) ** 2 +
-                    (a.float_attr.pos_y - b[1]) ** 2) ** 0.5
-        else:
-            return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
-
-    def _centroid(self, units):
-        assert len(units) > 0
-        return (sum(u.float_attr.pos_x for u in units) / len(units),
-                sum(u.float_attr.pos_y for u in units) / len(units))
-
-    def _find_empty_place(self, search_region, margin=0, remove_corner=False):
-        bottomleft = tuple(map(int, search_region[:2]))
-        size = tuple(map(int, search_region[2:]))
-        grids = np.zeros(size).astype(np.int)
-        if remove_corner:
-            cx, cy = size[0] / 2.0, size[1] / 2.0
-            r = max(cx, cy)
-            for x in range(size[0]):
-                for y in range(size[1]):
-                    if (x - cx) ** 2 + (y - cy) ** 2 > r ** 2:
-                        grids[x, y] = 1
-        for u in self._units:
-            if u.unit_type in PLACE_COLLISION_UNIT_SET:
-                radius = (u.float_attr.radius // 0.5) * 0.5 + margin
-                xl = int(math.floor(u.float_attr.pos_x - radius)) - bottomleft[0]
-                xr = int(math.ceil(u.float_attr.pos_x + radius)) - bottomleft[0]
-                yu = int(math.floor(u.float_attr.pos_y - radius)) - bottomleft[1]
-                yd = int(math.ceil(u.float_attr.pos_y + radius)) - bottomleft[1]
-                for x in range(max(xl, 0), min(xr, size[0])):
-                    for y in range(max(yu, 0), min(yd, size[1])):
-                        grids[x, y] = 1
-        x, y = np.nonzero(1 - grids)
-        #np.set_printoptions(threshold=np.nan, linewidth=300)
-        #print(grids)
-        return list(zip(x + bottomleft[0] + 0.5, y + bottomleft[1] + 0.5))
-
-
-Function = namedtuple('Function', ['name', 'function', 'is_valid'])
-
-
-class ActionCreator(object):
-
-    @staticmethod
-    def attack(who, target=None, pos=None):
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = ABILITY.ATTACK.value
-        if target is not None:
-            action.action_raw.unit_command.target_unit_tag = target.tag
-        if pos is not None:
-            action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-            action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        return action
-
-    @staticmethod
-    def move(who, pos):
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = ABILITY.MOVE.value
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        return action
-
-    @staticmethod
-    def harvest_gather(who, target):
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.extend([u.tag for u in who])
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.HARVEST_GATHER_DRONE.value
-        action.action_raw.unit_command.target_unit_tag = target.tag
-        return action
+from envs.wrappers.utils import Function
 
 
 class ZergActionWrapper(gym.Wrapper):
@@ -513,7 +24,7 @@ class ZergActionWrapper(gym.Wrapper):
     def __init__(self, env):
         super(ZergActionWrapper, self).__init__(env)
         assert isinstance(env.observation_space, PySC2RawObservation)
-        self._data = ZergData()
+
         self._dc = DataContext()
         self._produce_mgr = ProduceManager()
         self._build_mgr = BuildManager()
@@ -523,14 +34,7 @@ class ZergActionWrapper(gym.Wrapper):
         self._combat_mgr = CombatManager()
 
         self._actions = [
-            Function(
-                name='idle', # 0
-                function=self._idle,
-                is_valid=self._is_valid_idle),
-            #Function(
-                #name='build_extractor', # 1
-                #function=self._build_extractor,
-                #is_valid=self._is_valid_build_extractor),
+            self._action_do_nothing(),
             self._build_mgr.action(
                 "build_extractor", UNIT_TYPE.ZERG_EXTRACTOR.value),
             self._build_mgr.action(
@@ -541,22 +45,6 @@ class ZergActionWrapper(gym.Wrapper):
                 "build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
             self._build_mgr.action(
                 "build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
-            #Function(
-                #name='build_spawning_pool', # 2
-                #function=self._build_spawning_pool,
-                #is_valid=self._is_valid_build_spawning_pool),
-            #Function(
-                #name='build_roach_warren', # 3
-                #function=self._build_roach_warren,
-                #is_valid=self._is_valid_build_roach_warren),
-            #Function(
-                #name='build_hydraliskden', # 4
-                #function=self._build_hydraliskden,
-                #is_valid=self._is_valid_build_hydraliskden),
-            #Function(
-                #name='build_hatchery', # 5
-                #function=self._build_hatchery,
-                #is_valid=self._is_valid_build_hatchery),
             self._produce_mgr.action(
                 "produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
             self._produce_mgr.action(
@@ -569,71 +57,15 @@ class ZergActionWrapper(gym.Wrapper):
                 "produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
             self._produce_mgr.action(
                 "produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
-            #Function(
-                #name='produce_overlord', # 6
-                #function=self._produce_overlord,
-                #is_valid=self._is_valid_produce_overlord),
-            #Function(
-                #name='produce_drone', # 7
-                #function=self._produce_drone,
-                #is_valid=self._is_valid_produce_drone),
-            #Function(
-                #name='produce_zergling', # 8
-                #function=self._produce_zergling,
-                #is_valid=self._is_valid_produce_zergling),
-            #Function(
-                #name='produce_roach', # 9
-                #function=self._produce_roach,
-                #is_valid=self._is_valid_produce_roach),
-            #Function(
-                #name='produce_queen', # 10
-                #function=self._produce_queen,
-                #is_valid=self._is_valid_produce_queen),
-            #Function(
-                #name='produce_hydralisk', # 11
-                #function=self._produce_hydralisk,
-                #is_valid=self._is_valid_produce_hydralisk),
             self._resource_mgr.action_queens_inject_larva,
-            #Function(
-                #name='inject_larva', # 12
-                #function=self._inject_larva,
-                #is_valid=self._is_valid_inject_larva),
             self._resource_mgr.action_some_workers_gather_gas,
-            #Function(
-                #name='assign_drones_to_extractor', # 13
-                ##function=self._assign_drones_to_extractor,
-                #is_valid=self._is_valid_assign_drones_to_extractor),
             self._morph_mgr.action(
                 "morph_lair", UNIT_TYPE.ZERG_LAIR.value),
-            #Function(
-                #name='morph_lair', # 14
-                #function=self._morph_lair,
-                #is_valid=self._is_valid_morph_lair),
-            #Function(
-                #name='rally_idle_combat_units', # 15
-                #function=self._rally_idle_combat_units,
-                #is_valid=self._is_valid_rally_idle_combat_units),
             self._combat_mgr.action_rally_idle_combat_units_to_midfield,
             self._combat_mgr.action_all_attack_30,
             self._combat_mgr.action_all_attack_20,
-            #Function(
-                #name='rally_idle_combat_units_to_B', # 15
-                #function=self._rally_idle_combat_units_to_B,
-                #is_valid=self._is_valid_rally_idle_combat_units_to_B),
-            #Function(
-                #name='attack_closest_unit_30', # 16
-                #function=self._attack_closest_unit,
-                #is_valid=self._is_valid_attack_30),
-            #Function(
-                #name='attack_closest_unit_20', # 17
-                #function=self._attack_closest_unit,
-                #is_valid=self._is_valid_attack_20),
             self._build_mgr.action(
                 "build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
-            #Function(
-                #name='build_evolution_chamber', # 18
-                #function=self._build_evolution_chamber,
-                #is_valid=self._is_valid_build_evolution_chamber),
             self._upgrade_mgr.action(
                 "upgrade_melee_attack_1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
             self._upgrade_mgr.action(
@@ -645,124 +77,73 @@ class ZergActionWrapper(gym.Wrapper):
             self._upgrade_mgr.action(
                 "upgrade_ground_armor_1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
             self._upgrade_mgr.action(
-                "upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value),
-            #Function(
-                #name='research_melee_level1', # 19
-                #function=self._research_melee_level1,
-                #is_valid=self._is_valid_research_melee_level1),
-            #Function(
-                #name='research_melee_level2', # 20
-                #function=self._research_melee_level2,
-                #is_valid=self._is_valid_research_melee_level2),
-            #Function(
-                #name='research_missile_level1', # 21
-                #function=self._research_missile_level1,
-                #is_valid=self._is_valid_research_missile_level1),
-            #Function(
-                #name='research_missile_level2', # 22
-                #function=self._research_missile_level2,
-                #is_valid=self._is_valid_research_missile_level2),
-            #Function(
-                #name='research_ground_armor_level1', # 23
-                #function=self._research_ground_armor_level1,
-                #is_valid=self._is_valid_research_ground_armor_level1),
-            #Function(
-                #name='research_ground_armor_level2', # 24
-                #function=self._research_ground_armor_level2,
-                #is_valid=self._is_valid_research_ground_armor_level2),
+                "upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
-        self._upgrades_in_progress = set()
 
     def step(self, action):
-        '''
-        if self._action_mask[action] == 0:
-            print("%s Not Available" % self._actions[action].name)
-            print("Availables:")
-            for i, act in enumerate(self._actions):
-                if self._action_mask[i] == 1:
-                    print("%d %s", (i, act.name))
-            action = 0
-        '''
         assert self._action_mask[action] == 1
-        if action in {1,2,3,4,5, 6, 7, 8, 9, 10, 11,12,13,14,15,16,17,18, 19, 20, 21, 22, 23, 24}:
-        #if action in {1, 2, 3, 4, 5, 6, 7, 8, 9,10, 11}:
-            actions = self._actions[action].function(self._dc)
-        else:
-            actions = self._actions[action].function()
-        #if self._is_valid_assign_idle_drones_to_minerals():
-            #actions = self._assign_idle_drones_to_minerals() + actions
-        func = self._resource_mgr.action_idle_workers_gather_minerals
-        if func.is_valid(self._dc):
-            actions = func.function(self._dc) + actions
-        if platform.system() != 'Linux' and not self._data.is_any_unit_selected:
-            actions = self._select_all() + actions
-        #if self._is_valid_rally_new_combat_units():
-            #actions.extend(self._rally_new_combat_units_to_A())
-        func = self._combat_mgr.action_rally_new_combat_units
-        if func.is_valid(self._dc):
-            actions.extend(func.function(self._dc))
-        func = self._combat_mgr.action_universal_micro_attack
-        if func.is_valid(self._dc):
-            actions.extend(func.function(self._dc))
-        #actions.extend(self._micro_attack(self._data.attacking_combat_units,
-                                          #self._data.enemy_units))
-        observation, reward, done, info = self.env.step(actions)
-        self._data.update(observation)
+        actions = self._actions[action].function(self._dc)
+        actions_before, actions_after = self._extended_actions()
+        final_actions = actions_before + actions + actions_after
+        observation, reward, done, info = self.env.step(final_actions)
         self._dc.update(observation)
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask), reward, done, info
 
     def reset(self):
         self._combat_mgr.reset()
-        self._upgrades_in_progress.clear()
         observation = self.env.reset()
-        self._data.reset(observation)
         self._dc.reset(observation)
-        self._set_rally_position()
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask)
 
+    def print_actions(self):
+        for action_id, action in enumerate(self._actions):
+            print("Action ID: %d	Action Name: %s" % (action_id, action.name))
+
     @property
     def player_position(self):
-        if self._data.init_base_pos[0] < 100:
+        if self._dc.init_base_pos[0] < 100:
             return 0
         else:
             return 1
 
+    def _extended_actions(self):
+        actions_before = []
+        # TODO(@xinghai) : remove this hack
+        has_any_unit_selected = any([u.bool_attr.is_selected
+                                     for u in self._dc.units])
+        if platform.system() != 'Linux' and not has_any_unit_selected:
+            actions_before.extend(self._action_select_units_for_mac())
+        fn = self._resource_mgr.action_idle_workers_gather_minerals
+        if fn.is_valid(self._dc):
+            actions_before.extend(fn.function(self._dc))
+
+        actions_after = []
+        fn = self._combat_mgr.action_rally_new_combat_units
+        if fn.is_valid(self._dc):
+            actions_after.extend(fn.function(self._dc))
+        fn = self._combat_mgr.action_universal_micro_attack
+        if fn.is_valid(self._dc):
+            actions_after.extend(fn.function(self._dc))
+
+        return actions_before, actions_after
+
     def _get_valid_action_mask(self):
-        ids = []
-        for i, action in enumerate(self._actions):
-            if i in {1,2,3,4,5, 6, 7, 8, 9, 10, 11,12,13,14,15,16,17,18, 19, 20, 21, 22, 23, 24}:
-            #if i in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
-                if action.is_valid(self._dc):
-                    ids.append(i)
-            else:
-                if action.is_valid():
-                    ids.append(i)
-        #ids = [i for i, action in enumerate(self._actions) if action.is_valid()]
+        ids = [i for i, action in enumerate(self._actions)
+               if action.is_valid(self._dc)]
         mask = np.zeros(self.action_space.n)
         mask[ids] = 1
         return mask
 
-    def _set_rally_position(self):
-        if self.player_position == 0:
-            self._rally_pos_A = (68, 108)
-            #self._rally_pos_B = (121, 57)
-            self._rally_pos_B = (100, 78)
-        else:
-            self._rally_pos_A = (133, 36)
-            #self._rally_pos_B = (94, 88)
-            self._rally_pos_B = (100, 78)
+    def _action_do_nothing(self):
+        return Function(name='do_nothing',
+                        function=lambda dc: [],
+                        is_valid=lambda dc: True)
 
-    def _idle(self):
-        return []
-
-    def _is_valid_idle(self):
-        return True
-
-    def _select_all(self):
-        actions = []
+    # TODO(@xinghai) : remove this hack
+    def _action_select_units_for_mac(self):
         action = sc_pb.Action()
         action.action_raw.unit_command.ability_id = 0
         select = action.action_feature_layer.unit_selection_rect
@@ -770,569 +151,4 @@ class ZergActionWrapper(gym.Wrapper):
         point.Point(0, 0).assign_to(out_rect.p0)
         point.Point(32, 32).assign_to(out_rect.p1)
         select.selection_add = True
-        actions.append(action)
-        return actions
-
-    def _build_extractor(self):
-        vespene = random.choice(self._data.exploitable_vespenes)
-        drone = self._data.closest_drones(vespene, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_EXTRACTOR.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_unit_tag = vespene.tag
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_extractor(self):
-        if (len(self._data.exploitable_vespenes) > 0 and
-            not self._data.has_drone_move_to_build_extractor and
-            self._data.mineral_count >= 25 and
-            len(self._data.drones) >= 1):
-            return True
-        else:
-            return False
-
-    def _build_spawning_pool(self):
-        pos = self._data.get_pos_to_build(margin=2)
-        drone = self._data.closest_drones(pos, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_SPAWNINGPOOL.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_spawning_pool(self):
-        if (len(self._data.spawning_pools) == 0 and
-            not self._data.has_drone_move_to_build_spawning_pool and
-            self._data.mineral_count >= 200 and
-            self._data.get_pos_to_build(margin=2) is not None and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _build_hatchery(self):
-        pos = self._data.get_pos_to_base()
-        drone = self._data.closest_drones(pos, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_HATCHERY.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_hatchery(self):
-        if (self._data.mineral_count >= 300 and
-            not self._data.has_drone_move_to_build_hatchery and
-            self._data.get_pos_to_base() is not None and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _build_roach_warren(self):
-        pos = self._data.get_pos_to_build(margin=2)
-        drone = self._data.closest_drones(pos, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_ROACHWARREN.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_roach_warren(self):
-        if (len(self._data.mature_spawning_pools) > 0 and
-            len(self._data.roach_warrens) == 0 and
-            not self._data.has_drone_move_to_build_roach_warren and
-            self._data.mineral_count >= 150 and
-            self._data.get_pos_to_build(margin=2) is not None and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _build_evolution_chamber(self):
-        pos = self._data.get_pos_to_build(margin=2)
-        drone = self._data.closest_drones(pos, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_EVOLUTIONCHAMBER.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_evolution_chamber(self):
-        if (len(self._data.evolution_chambers) < 3 and
-            not self._data.has_drone_move_to_build_evolution_chamber and
-            self._data.mineral_count >= 75 and
-            self._data.get_pos_to_build(margin=2) is not None and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _build_hydraliskden(self):
-        pos = self._data.get_pos_to_build(margin=2)
-        drone = self._data.closest_drones(pos, num=1)[0]
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.BUILD_HYDRALISKDEN.value
-        action.action_raw.unit_command.unit_tags.append(drone.tag)
-        action.action_raw.unit_command.target_world_space_pos.x = pos[0]
-        action.action_raw.unit_command.target_world_space_pos.y = pos[1]
-        actions.append(action)
-        return actions
-
-    def _is_valid_build_hydraliskden(self):
-        if (len(self._data.lairs) > 0 and
-            len(self._data.hydraliskdens) == 0 and
-            not self._data.has_drone_move_to_build_hydraliskden and
-            self._data.mineral_count >= 100 and
-            self._data.vespene_count >= 100 and
-            self._data.get_pos_to_build(margin=2) is not None and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_drone(self):
-        actions = []
-        larva = random.choice(self._data.larvas)
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = ABILITY.TRAIN_DRONE.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_drone(self):
-        if (self._data.mineral_count >= 50 and
-            self._data.food >= 1 and
-            len(self._data.larvas) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_overlord(self):
-        larva = random.choice(self._data.larvas)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.TRAIN_OVERLORD.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_overlord(self):
-        if (self._data.mineral_count >= 100 and
-            len(self._data.larvas) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_zergling(self):
-        larva = random.choice(self._data.larvas)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.TRAIN_ZERGLING.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_zergling(self):
-        if (self._data.mineral_count >= 50 and
-            len(self._data.larvas) > 0 and
-            self._data.food >= 1 and
-            len(self._data.mature_spawning_pools) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_roach(self):
-        larva = random.choice(self._data.larvas)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.TRAIN_ROACH.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_roach(self):
-        if (self._data.mineral_count >= 75 and
-            self._data.vespene_count >= 25 and
-            len(self._data.larvas) > 0 and
-            self._data.food >= 2 and
-            len(self._data.mature_roach_warrens) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_hydralisk(self):
-        larva = random.choice(self._data.larvas)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(larva.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.TRAIN_HYDRALISK.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_hydralisk(self):
-        if (self._data.mineral_count >= 100 and
-            self._data.vespene_count >= 50 and
-            len(self._data.larvas) > 0 and
-            self._data.food >= 2 and
-            len(self._data.mature_hydraliskdens) > 0):
-            return True
-        else:
-            return False
-
-    def _assign_drones_to_extractor(self):
-        actions = []
-        extractor = random.choice(self._data.notbusy_extractors)
-        num_need = extractor.int_attr.ideal_harvesters - \
-            extractor.int_attr.assigned_harvesters
-        assert num_need > 0
-        drones = self._data.closest_drones(extractor, num=num_need)
-        assert len(drones) > 0
-        actions.append(ActionCreator.harvest_gather(drones, extractor))
-        return actions
-
-    def _is_valid_assign_drones_to_extractor(self):
-        if (len(self._data.notbusy_extractors) > 0 and
-            len(self._data.drones) > 0):
-            return True
-        else:
-            return False
-
-    def _assign_idle_drones_to_minerals(self):
-        actions = []
-        for drone in self._data.idle_drones:
-            mineral = self._data.closest_minerals(drone, num=1)[0]
-            actions.append(ActionCreator.harvest_gather([drone], mineral))
-        return actions
-
-    def _is_valid_assign_idle_drones_to_minerals(self):
-        if (len(self._data.idle_drones) > 0 and
-            len(self._data.minerals) > 0):
-            return True
-        else:
-            return False
-
-    def _produce_queen(self):
-        base = random.choice(self._data.idle_bases)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(base.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.TRAIN_QUEEN.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_produce_queen(self):
-        if (self._data.mineral_count >= 150 and
-            self._data.food >= 2 and
-            len(self._data.idle_bases) > 0 and
-            len(self._data.mature_spawning_pools) > 0):
-            return True
-        else:
-            return False
-
-    def _inject_larva(self):
-        actions = []
-        for queen in self._data.larva_injectable_queens:
-            action = sc_pb.Action()
-            action.action_raw.unit_command.unit_tags.append(queen.tag)
-            action.action_raw.unit_command.ability_id = \
-                ABILITY.EFFECT_INJECTLARVA.value
-            base = self._data.closest_mature_bases(queen, num=1)[0]
-            action.action_raw.unit_command.target_unit_tag = base.tag
-            actions.append(action)
-        return actions
-
-    def _is_valid_inject_larva(self):
-        if (len(self._data.mature_bases) > 0 and
-            len(self._data.larva_injectable_queens) > 0):
-            return True
-        else:
-            return False
-
-    def _morph_lair(self):
-        hatchery = random.choice(self._data.idle_hatcheries)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(hatchery.tag)
-        action.action_raw.unit_command.ability_id = ABILITY.MORPH_LAIR.value
-        actions.append(action)
-        return actions
-
-    def _is_valid_morph_lair(self):
-        if (self._data.mineral_count >= 150 and
-            self._data.vespene_count >= 100 and
-            len(self._data.mature_spawning_pools) > 0 and
-            len(self._data.idle_hatcheries) > 0):
-            return True
-        else:
-            return False
-
-    def _research_melee_level1(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGMELEEWEAPONSLEVEL1.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGMELEEWEAPONSLEVEL1.value)
-        return actions
-
-    def _is_valid_research_melee_level1(self):
-        if (self._data.mineral_count >= 100 and
-            self._data.vespene_count >= 100 and
-            UPGRADE.ZERGMELEEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _research_melee_level2(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGMELEEWEAPONSLEVEL2.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGMELEEWEAPONSLEVEL2.value)
-        return actions
-
-    def _is_valid_research_melee_level2(self):
-        if (self._data.mineral_count >= 150 and
-            self._data.vespene_count >= 150 and
-            UPGRADE.ZERGMELEEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE.ZERGMELEEWEAPONSLEVEL1.value in self._data.upgraded_techs and
-            len(self._data.lairs) > 0 and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _research_missile_level1(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGMISSILEWEAPONSLEVEL1.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value)
-        return actions
-
-    def _is_valid_research_missile_level1(self):
-        if (self._data.mineral_count >= 100 and
-            self._data.vespene_count >= 100 and
-            UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value not in self._upgrades_in_progress and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _research_missile_level2(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGMISSILEWEAPONSLEVEL2.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value)
-        return actions
-
-    def _is_valid_research_missile_level2(self):
-        if (self._data.mineral_count >= 150 and
-            self._data.vespene_count >= 150 and
-            UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value in self._data.upgraded_techs and
-            len(self._data.lairs) > 0 and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _research_ground_armor_level1(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGGROUNDARMORLEVEL1.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGGROUNDARMORSLEVEL1.value)
-        return actions
-
-    def _is_valid_research_ground_armor_level1(self):
-        if (self._data.mineral_count >= 150 and
-            self._data.vespene_count >= 150 and
-            UPGRADE.ZERGGROUNDARMORSLEVEL1.value not in self._upgrades_in_progress and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _research_ground_armor_level2(self):
-        chamber = random.choice(self._data.idle_evolution_chambers)
-        actions = []
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.append(chamber.tag)
-        action.action_raw.unit_command.ability_id = \
-            ABILITY.RESEARCH_ZERGGROUNDARMORLEVEL2.value
-        actions.append(action)
-        self._upgrades_in_progress.add(UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
-        return actions
-
-    def _is_valid_research_ground_armor_level2(self):
-        if (self._data.mineral_count >= 225 and
-            self._data.vespene_count >= 225 and
-            UPGRADE.ZERGGROUNDARMORSLEVEL2.value not in self._upgrades_in_progress and
-            UPGRADE.ZERGGROUNDARMORSLEVEL1.value in self._data.upgraded_techs and
-            len(self._data.lairs) > 0 and
-            len(self._data.idle_evolution_chambers) > 0):
-            return True
-        else:
-            return False
-
-    def _attack_closest_unit(self):
-        return self._start_attack(self._data.combat_units)
-
-    def _is_valid_attack_30(self):
-        if (len(self._data.combat_units) > 30 and
-            len(self._data.enemy_units) > 0):
-            return True
-        else:
-            return False
-
-    def _is_valid_attack_20(self):
-        if (len(self._data.combat_units) > 20 and
-            len(self._data.enemy_units) > 0):
-            return True
-        else:
-            return False
-
-    def _rally_idle_combat_units(self):
-        if self.player_position == 0:
-            rally_pos = (65, 113)
-        else:
-            rally_pos = (138, 36)
-        return [ActionCreator.attack(self._data.idle_combat_units,
-                                     pos=rally_pos)]
-
-    def _is_valid_rally_idle_combat_units(self):
-        if len(self._data.idle_combat_units) > 0:
-            return True
-        else:
-            return False
-
-    def _rally_new_combat_units_to_A(self):
-        return [ActionCreator.attack(self._data.newly_produced_combat_units,
-                                     pos=self._rally_pos_A)]
-
-    def _rally_idle_combat_units_to_B(self):
-        return [ActionCreator.attack(
-            self._data.unrallied_idle_combat_units(self._rally_pos_B),
-            pos=self._rally_pos_B)]
-
-    def _is_valid_rally_idle_combat_units_to_B(self):
-        if len(self._data.unrallied_idle_combat_units(self._rally_pos_B)) > 10:
-            return True
-        else:
-            return False
-
-    def _is_valid_rally_new_combat_units(self):
-        if len(self._data.newly_produced_combat_units) > 0:
-            return True
-        else:
-            return False
-
-    def _start_attack(self, units):
-        self._data.label_attack_status(units)
-        return []
-
-    def _micro_attack(self, self_units, enemy_units):
-
-        def flee_or_fight(unit, target_units):
-            assert len(target_units) > 0
-            closest_target = self._closest_units(unit, target_units, 1)[0]
-            closest_dist = self._closest_dist(unit, enemy_units)
-            strongest_health = self._strongest_health(self_units)
-            if (closest_dist < 5.0 and
-                unit.float_attr.health / unit.float_attr.health_max < 0.3 and
-                strongest_health > 0.9):
-                x = unit.float_attr.pos_x + (unit.float_attr.pos_x - \
-                    closest_target.float_attr.pos_x) * 0.2
-                y = unit.float_attr.pos_y + (unit.float_attr.pos_y - \
-                    closest_target.float_attr.pos_y) * 0.2
-                return ActionCreator.move([unit], pos=(x, y))
-            else:
-                return ActionCreator.attack([unit], target=closest_target)
-
-        air_combat_units = [u for u in self_units
-                            if u.unit_type in AIR_COMBAT_UNIT_SET]
-        land_combat_units = [u for u in self_units
-                             if u.unit_type in LAND_COMBAT_UNIT_SET]
-        air_land_combat_units = [u for u in self_units
-                                 if u.unit_type in AIR_LAND_COMBAT_UNIT_SET]
-        air_enemy_units = [u for u in enemy_units if u.bool_attr.is_flying]
-        land_enemy_units = [u for u in enemy_units if not u.bool_attr.is_flying]
-        actions = []
-        for unit in air_combat_units:
-            if len(air_enemy_units) > 0:
-                actions.append(flee_or_fight(unit, air_enemy_units))
-        for unit in land_combat_units:
-            if len(land_enemy_units) > 0:
-                actions.append(flee_or_fight(unit, land_enemy_units))
-        for unit in air_land_combat_units:
-            if len(enemy_units) > 0:
-                actions.append(
-                    flee_or_fight(unit, air_enemy_units + land_enemy_units))
-        return actions
-
-    def _closest_units(self, unit, target_units, num=1):
-        assert num >= 1
-        if num == 1:
-            return [min(target_units, key=lambda u: self._distance(unit, u))] \
-                   if len(target_units) > 0 else []
-        else:
-            return sorted(target_units,
-                          key=lambda u: self._distance(unit, u))[:num]
-
-    def _closest_dist(self, unit, target_units):
-        return min(self._distance(unit, u) for u in target_units) \
-               if len(target_units) > 0 else float('inf')
-
-    def _strongest_health(self, units):
-        return max(u.float_attr.health / u.float_attr.health_max for u in units)
-
-    def _weakest_unit(self, unit, target_units):
-        assert len(target_units) > 0
-        return min(target_units, key=lambda u: u.float_attr.health)
-
-    def _distance(self, a, b):
-        return ((a.float_attr.pos_x - b.float_attr.pos_x) ** 2 +
-                (a.float_attr.pos_y - b.float_attr.pos_y) ** 2) ** 0.5
+        return [action]

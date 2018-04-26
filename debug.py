@@ -53,6 +53,9 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
+    print("----------------------------- Actions -----------------------------")
+    env.print_actions()
+    print("-------------------------------------------------------------------")
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
 
@@ -106,7 +109,6 @@ def train():
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
                 print(step_id, action)
-                '''
                 assert step_id != 4 or action == 1
                 assert step_id != 30 or action == 7
                 assert step_id != 52 or action == 18
@@ -133,7 +135,6 @@ def train():
                 assert step_id != 348 or action == 14
                 if step_id >= 350:
                     break
-                '''
                 step_id += 1
             print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
                   (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
