@@ -6,9 +6,9 @@ from absl import app
 from absl import flags
 
 from envs.sc2_env import StarCraftIIEnv
-from envs.wrappers.zerg_action_wrappers import ZergActionWrapper
-from envs.wrappers.zerg_observation_wrappers import ZergObservationWrapper
-from envs.wrappers.reward_wrappers import RewardShapingWrapperV2
+from envs.actions.zerg_action_wrappers import ZergActionWrapper
+from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent

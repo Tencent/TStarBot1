@@ -4,13 +4,13 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
-import envs.wrappers.utils as utils
-from envs.wrappers.utils import Function
-from envs.wrappers.const import ATTACK_FORCE
-from envs.wrappers.const import ALLY_TYPE
+from envs.actions.function import Function
+import envs.common.utils as utils
+from envs.common.const import ATTACK_FORCE
+from envs.common.const import ALLY_TYPE
 
 
-class CombatManager(object):
+class CombatActions(object):
 
     def __init__(self):
         #TODO: add more combat types

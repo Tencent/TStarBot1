@@ -1,9 +1,4 @@
-from collections import namedtuple
-
 from pysc2.lib.unit_controls import Unit
-
-
-Function = namedtuple('Function', ['name', 'function', 'is_valid'])
 
 
 def distance(a, b):

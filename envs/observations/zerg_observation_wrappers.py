@@ -1,12 +1,11 @@
 import numpy as np
+import gym
+from gym import spaces
 from enum import Enum, unique
 
 from pysc2.lib.features import SCREEN_FEATURES
 from pysc2.lib.features import MINIMAP_FEATURES
 from pysc2.lib.features import FeatureType
-
-import gym
-from gym import spaces
 from pysc2.lib.typeenums import UNIT_TYPEID
 
 from envs.space import PySC2RawObservation

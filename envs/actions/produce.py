@@ -3,11 +3,11 @@ import random
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.tech_tree import TechTree
 
-from envs.wrappers.utils import Function
-from envs.wrappers.const import MAXIMUM_NUM
+from envs.actions.function import Function
+from envs.common.const import MAXIMUM_NUM
 
 
-class ProduceManager(object):
+class ProduceActions(object):
     def __init__(self):
         self._tech_tree = TechTree()
 

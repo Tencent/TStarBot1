@@ -7,13 +7,13 @@ from pysc2.lib.tech_tree import TechTree
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.unit_controls import Unit
 
-import envs.wrappers.utils as utils
-from envs.wrappers.utils import Function
-from envs.wrappers.const import AREA_COLLISION_BUILDINGS
-from envs.wrappers.const import MAXIMUM_NUM
+from envs.actions.function import Function
+import envs.common.utils as utils
+from envs.common.const import AREA_COLLISION_BUILDINGS
+from envs.common.const import MAXIMUM_NUM
 
 
-class BuildManager(object):
+class BuildActions(object):
     def __init__(self):
         self._spatial_planner = SpatialPlanner()
         self._tech_tree = TechTree()

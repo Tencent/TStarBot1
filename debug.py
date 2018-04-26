@@ -8,9 +8,9 @@ import numpy as np
 import random
 
 from envs.sc2_env import StarCraftIIEnv
-from envs.wrappers.zerg_action_wrappers import ZergActionWrapper
-from envs.wrappers.zerg_observation_wrappers import ZergObservationWrapper
-from envs.wrappers.reward_wrappers import RewardShapingWrapperV2
+from envs.actions.zerg_action_wrappers import ZergActionWrapper
+from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent
@@ -109,32 +109,42 @@ def train():
                 observation, reward, done, _ = env.step(action)
                 cum_return += reward
                 print(step_id, action)
-                assert step_id != 4 or action == 1
-                assert step_id != 30 or action == 7
-                assert step_id != 52 or action == 18
-                assert step_id != 53 or action == 13
-                assert step_id != 69 or action == 6
-                assert step_id != 76 or action == 21
-                assert step_id != 110 or action == 19
-                assert step_id != 121 or action == 23
-                assert step_id != 147 or action == 2
-                assert step_id != 173 or action == 5
-                assert step_id != 186 or action == 10
-                assert step_id != 189 or action == 8
-                assert step_id != 211 or action == 10
-                assert step_id != 212 or action == 12
-                assert step_id != 217 or action == 8
-                assert step_id != 227 or action == 5
-                assert step_id != 234 or action == 1
-                assert step_id != 235 or action == 12
-                assert step_id != 237 or action == 12
-                assert step_id != 258 or action == 9
-                assert step_id != 280 or action == 17
-                assert step_id != 290 or action == 17
-                assert step_id != 340 or action == 16
-                assert step_id != 348 or action == 14
-                if step_id >= 350:
-                    break
+                if i == 0:
+                    assert step_id != 4 or action == 1
+                    assert step_id != 30 or action == 7
+                    assert step_id != 52 or action == 18
+                    assert step_id != 53 or action == 13
+                    assert step_id != 69 or action == 6
+                    assert step_id != 76 or action == 21
+                    assert step_id != 110 or action == 19
+                    assert step_id != 121 or action == 23
+                    assert step_id != 147 or action == 2
+                    assert step_id != 173 or action == 5
+                    assert step_id != 186 or action == 10
+                    assert step_id != 189 or action == 8
+                    assert step_id != 211 or action == 10
+                    assert step_id != 212 or action == 12
+                    assert step_id != 217 or action == 8
+                    assert step_id != 227 or action == 5
+                    assert step_id != 234 or action == 1
+                    assert step_id != 235 or action == 12
+                    assert step_id != 237 or action == 12
+                    assert step_id != 258 or action == 9
+                    assert step_id != 280 or action == 17
+                    assert step_id != 290 or action == 17
+                    assert step_id != 340 or action == 16
+                    assert step_id != 348 or action == 14
+                elif i == 1:
+                    assert step_id != 361 or action == 6
+                    assert step_id != 362 or action == 9
+                    assert step_id != 363 or action == 7
+                    assert step_id != 364 or action == 8
+                    assert step_id != 369 or action == 17
+                    assert step_id != 370 or action == 0
+                    assert step_id != 371 or action == 9
+                    assert step_id != 372 or action == 12
+                    assert step_id != 373 or action == 9
+                    assert step_id != 374 or action == 7
                 step_id += 1
             print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
                   (i + 1, FLAGS.num_episodes, cum_return / (i + 1),

@@ -4,11 +4,11 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
-import envs.wrappers.utils as utils
-from envs.wrappers.utils import Function
+from envs.actions.function import Function
+import envs.common.utils as utils
 
 
-class ResourceManager(object):
+class ResourceActions(object):
 
     @property
     def action_queens_inject_larva(self):

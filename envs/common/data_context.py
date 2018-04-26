@@ -2,8 +2,8 @@ import itertools
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from envs.wrappers.const import ALLY_TYPE, PLAYER_FEATURE
-import envs.wrappers.utils as utils
+from envs.common.const import ALLY_TYPE, PLAYER_FEATURE
+import envs.common.utils as utils
 
 
 class DataContext(object):

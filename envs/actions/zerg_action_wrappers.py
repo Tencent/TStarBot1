@@ -9,14 +9,14 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 
 from envs.space import PySC2RawObservation
 from envs.space import MaskableDiscrete
-from envs.wrappers.data_context import DataContext
-from envs.wrappers.produce_mgr import ProduceManager
-from envs.wrappers.build_mgr import BuildManager
-from envs.wrappers.upgrade_mgr import UpgradeManager
-from envs.wrappers.morph_mgr import MorphManager
-from envs.wrappers.resource_mgr import ResourceManager
-from envs.wrappers.combat_mgr import CombatManager
-from envs.wrappers.utils import Function
+from envs.common.data_context import DataContext
+from envs.actions.function import Function
+from envs.actions.produce import ProduceActions
+from envs.actions.build import BuildActions
+from envs.actions.upgrade import UpgradeActions
+from envs.actions.morph import MorphActions
+from envs.actions.resource import ResourceActions
+from envs.actions.combat import CombatActions
 
 
 class ZergActionWrapper(gym.Wrapper):
@@ -26,12 +26,12 @@ class ZergActionWrapper(gym.Wrapper):
         assert isinstance(env.observation_space, PySC2RawObservation)
 
         self._dc = DataContext()
-        self._produce_mgr = ProduceManager()
-        self._build_mgr = BuildManager()
-        self._upgrade_mgr = UpgradeManager()
-        self._morph_mgr = MorphManager()
-        self._resource_mgr = ResourceManager()
-        self._combat_mgr = CombatManager()
+        self._produce_mgr = ProduceActions()
+        self._build_mgr = BuildActions()
+        self._upgrade_mgr = UpgradeActions()
+        self._morph_mgr = MorphActions()
+        self._resource_mgr = ResourceActions()
+        self._combat_mgr = CombatActions()
 
         self._actions = [
             self._action_do_nothing(),
