@@ -16,7 +16,9 @@ class CombatActions(object):
         #TODO: add more combat types
         self._combat_types = [UNIT_TYPE.ZERG_ZERGLING.value,
                               UNIT_TYPE.ZERG_ROACH.value,
-                              UNIT_TYPE.ZERG_HYDRALISK.value]
+                              UNIT_TYPE.ZERG_HYDRALISK.value,
+                              UNIT_TYPE.ZERG_MUTALISK.value,
+                              UNIT_TYPE.ZERG_INFESTOR.value]
 
         self._attack_unit_tags = set()
 
@@ -165,28 +167,35 @@ class CombatActions(object):
                     closest_target.tag
                 return action
 
-        air_combat_units = [u for u in combat_units
-                            if (ATTACK_FORCE[u.unit_type].can_attack_air and
-                                not ATTACK_FORCE[u.unit_type].can_attack_land)]
-        land_combat_units = [u for u in combat_units
-                             if (not ATTACK_FORCE[u.unit_type].can_attack_air and
-                                 ATTACK_FORCE[u.unit_type].can_attack_land)]
-        air_land_combat_units = [u for u in combat_units
-                                 if (ATTACK_FORCE[u.unit_type].can_attack_air and
-                                     ATTACK_FORCE[u.unit_type].can_attack_land)]
+        air_combat_units = [
+            u for u in combat_units
+            if (ATTACK_FORCE[u.unit_type].can_attack_air and
+                not ATTACK_FORCE[u.unit_type].can_attack_ground)
+        ]
+        ground_combat_units = [
+            u for u in combat_units
+            if (not ATTACK_FORCE[u.unit_type].can_attack_air and
+                ATTACK_FORCE[u.unit_type].can_attack_ground)
+        ]
+        air_ground_combat_units = [
+            u for u in combat_units
+            if (ATTACK_FORCE[u.unit_type].can_attack_air and
+                ATTACK_FORCE[u.unit_type].can_attack_ground)
+        ]
         air_enemy_units = [u for u in enemy_units if u.bool_attr.is_flying]
-        land_enemy_units = [u for u in enemy_units if not u.bool_attr.is_flying]
+        ground_enemy_units = [u for u in enemy_units
+                              if not u.bool_attr.is_flying]
         actions = []
         for unit in air_combat_units:
             if len(air_enemy_units) > 0:
                 actions.append(flee_or_fight(unit, air_enemy_units))
-        for unit in land_combat_units:
-            if len(land_enemy_units) > 0:
-                actions.append(flee_or_fight(unit, land_enemy_units))
-        for unit in air_land_combat_units:
+        for unit in ground_combat_units:
+            if len(ground_enemy_units) > 0:
+                actions.append(flee_or_fight(unit, ground_enemy_units))
+        for unit in air_ground_combat_units:
             if len(enemy_units) > 0:
                 actions.append(
-                    flee_or_fight(unit, air_enemy_units + land_enemy_units))
+                    flee_or_fight(unit, air_enemy_units + ground_enemy_units))
         return actions
 
     def _set_attack_status(self, units):

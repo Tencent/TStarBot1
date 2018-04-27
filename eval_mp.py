@@ -51,15 +51,21 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
-    print("----------------------------- Actions -----------------------------")
-    env.print_actions()
-    print("-------------------------------------------------------------------")
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
 
 
+def print_actions(env):
+    print("----------------------------- Actions -----------------------------")
+    for action_id, action_name in enumerate(env.action_names):
+        print("Action ID: %d	Action Name: %s" % (action_id, action_name))
+    print("-------------------------------------------------------------------")
+
+
 def train(pid):
     env = create_env()
+    print_actions(env)
+
     network = SC2DuelingQNetV3(
         resolution=env.observation_space.spaces[0].shape[1],
         n_channels=env.observation_space.spaces[0].shape[0],

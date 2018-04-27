@@ -1,7 +1,6 @@
 import numpy as np
 import gym
 from gym import spaces
-from enum import Enum, unique
 
 from pysc2.lib.features import SCREEN_FEATURES
 from pysc2.lib.features import MINIMAP_FEATURES
@@ -10,13 +9,7 @@ from pysc2.lib.typeenums import UNIT_TYPEID
 
 from envs.space import PySC2RawObservation
 from envs.space import MaskableDiscrete
-
-@unique
-class AllianceType(Enum):
-    SELF = 1
-    ALLY = 2
-    NEUTRAL = 3
-    ENEMY = 4
+from envs.common.const import ALLY_TYPE
 
 
 class UnitType3DFeature(object):
@@ -28,9 +21,9 @@ class UnitType3DFeature(object):
 
     def features(self, observation):
         self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == AllianceType.SELF.value]
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
         enemy_units = [u for u in observation['units']
-                       if u.int_attr.alliance == AllianceType.ENEMY.value]
+                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
         self_features = self._generate_features(self_units)
         enemy_features = self._generate_features(enemy_units)
         return np.concatenate((self_features, enemy_features))
@@ -62,11 +55,11 @@ class PlayerRelative3DFeature(object):
 
     def features(self, observation):
         self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == AllianceType.SELF.value]
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
         enemy_units = [u for u in observation['units']
-                       if u.int_attr.alliance == AllianceType.ENEMY.value]
+                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
         neutral_units = [u for u in observation['units']
-                         if u.int_attr.alliance == AllianceType.NEUTRAL.value]
+                         if u.int_attr.alliance == ALLY_TYPE.NEUTRAL.value]
         self_features = self._generate_features(self_units)
         enemy_features = self._generate_features(enemy_units)
         neutral_features = self._generate_features(neutral_units)
@@ -134,9 +127,9 @@ class UnitCount1DFeature(object):
 
     def features(self, observation):
         self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == AllianceType.SELF.value]
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
         enemy_units = [u for u in observation['units']
-                       if u.int_attr.alliance == AllianceType.ENEMY.value]
+                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
         self_features = self._generate_features(self_units)
         enemy_features = self._generate_features(enemy_units)
         features = np.concatenate((self_features, enemy_features))
@@ -164,7 +157,7 @@ class UnitHasOrNotFeature(object):
 
     def features(self, observation):
         self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == AllianceType.SELF.value]
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
         features = self._generate_features(self_units)
         return features
 
@@ -185,10 +178,10 @@ class UnitStat1DFeature(object):
 
     def features(self, observation):
         self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == AllianceType.SELF.value]
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
         self_flying_units = [u for u in self_units if u.bool_attr.is_flying]
         enemy_units = [u for u in observation['units']
-                       if u.int_attr.alliance == AllianceType.ENEMY.value]
+                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
         enemy_flying_units = [u for u in enemy_units if u.bool_attr.is_flying]
 
         features = np.array([len(self_units),
@@ -331,6 +324,18 @@ class ZergObservationWrapper(gym.Wrapper):
         self._action_seq_feature.reset()
         return self._observation(observation)
 
+    @property
+    def action_names(self):
+        if not hasattr(self.env, 'action_names'):
+            raise NotImplementedError
+        return self.env.action_names
+
+    @property
+    def player_position(self):
+        if not hasattr(self.env, 'player_position'):
+            raise NotImplementedError
+        return self.env.player_position
+
     def _observation(self, observation):
         if isinstance(self.env.action_space, MaskableDiscrete):
             observation, action_mask = observation
@@ -370,7 +375,3 @@ class ZergObservationWrapper(gym.Wrapper):
             return np.flip(np.flip(feature, axis=1), axis=2).copy()
         else:
             return feature
-
-    @property
-    def player_position(self):
-        return self.env.player_position

@@ -4,6 +4,9 @@ import os
 import traceback
 from absl import app
 from absl import flags
+from absl import logging
+import numpy as np
+import time
 
 from envs.sc2_env import StarCraftIIEnv
 from envs.actions.zerg_action_wrappers import ZergActionWrapper
@@ -48,15 +51,29 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
-    print("----------------------------- Actions -----------------------------")
-    env.print_actions()
-    print("-------------------------------------------------------------------")
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     return env
 
 
+def print_actions(env):
+    print("----------------------------- Actions -----------------------------")
+    for action_id, action_name in enumerate(env.action_names):
+        print("Action ID: %d	Action Name: %s" % (action_id, action_name))
+    print("-------------------------------------------------------------------")
+
+
+def print_action_distribution(env, action_counts):
+    print("----------------------- Action Distribution -----------------------")
+    for action_id, action_name in enumerate(env.action_names):
+        print("Action ID: %d	Count: %d	Name: %s" %
+              (action_id, action_counts[action_id], action_name))
+    print("-------------------------------------------------------------------")
+
+
 def train():
     env = create_env()
+    print_actions(env)
+
     network = SC2DuelingQNetV3(
         resolution=env.observation_space.spaces[0].shape[1],
         n_channels=env.observation_space.spaces[0].shape[0],
@@ -99,12 +116,17 @@ def train():
             observation = env.reset()
             done = False
             step_id = 0
+            action_counts = [0] * env.action_space.n
             while not done:
                 action = agent.act(observation, eps=FLAGS.epsilon)
-                print(step_id, action, observation[-1])
+                print("Step ID: %d	Take Action: %d	Available Mask: %s" %
+                      (step_id, action, observation[-1]))
                 observation, reward, done, _ = env.step(action)
+                action_counts[action] += 1
+                #time.sleep(20)
                 cum_return += reward
                 step_id += 1
+            print_action_distribution(env, action_counts)
             print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
                   (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
@@ -116,7 +138,9 @@ def train():
 
 
 def main(argv):
+    logging.set_verbosity(logging.ERROR)
     print_arguments(FLAGS)
+    np.set_printoptions(threshold=np.nan, linewidth=300)
     train()
 
 

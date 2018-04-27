@@ -39,8 +39,9 @@ class MorphActions(object):
             has_required_upgrades = any([t in dc.upgraded_techs
                                          for t in tech.requiredUpgrades]) \
                                     if len(tech.requiredUpgrades) > 0 else True
-            # TODO(@xinghai): add units_with_task here
-            overquota = len(dc.units_of_type(type_id)) >= MAXIMUM_NUM[type_id] \
+            current_num = len(dc.units_of_type(type_id)) + \
+                len(dc.units_with_task(tech.buildAbility))
+            overquota = current_num >= MAXIMUM_NUM[type_id] \
                 if type_id in MAXIMUM_NUM else False
             if (dc.mineral_count >= tech.mineralCost and
                 dc.gas_count >= tech.gasCost and

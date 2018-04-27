@@ -40,25 +40,69 @@ class ZergActionWrapper(gym.Wrapper):
             self._build_mgr.action("build_roach_warren", UNIT_TYPE.ZERG_ROACHWARREN.value),
             self._build_mgr.action("build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
             self._build_mgr.action("build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
-            self._produce_mgr.action("produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
+            self._build_mgr.action("build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
+            self._build_mgr.action("build_baneling_nest", UNIT_TYPE.ZERG_BANELINGNEST.value),
+            self._build_mgr.action("build_infestation_pit", UNIT_TYPE.ZERG_INFESTATIONPIT.value),
+            self._build_mgr.action("build_spire", UNIT_TYPE.ZERG_SPIRE.value),
+            self._build_mgr.action("build_ultralisk_cavern", UNIT_TYPE.ZERG_ULTRALISKCAVERN.value),
+            self._build_mgr.action("build_nydus_network", UNIT_TYPE.ZERG_NYDUSNETWORK.value),
+            self._build_mgr.action("build_spine_crawler", UNIT_TYPE.ZERG_SPINECRAWLER.value),
+            self._build_mgr.action("build_spore_crawler", UNIT_TYPE.ZERG_SPORECRAWLER.value),
+            self._build_mgr.action("build_lurker_den", UNIT_TYPE.ZERG_LURKERDENMP.value),
+            self._morph_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
+            self._morph_mgr.action("morph_hive", UNIT_TYPE.ZERG_HIVE.value),
+            self._morph_mgr.action("morph_greater_spire", UNIT_TYPE.ZERG_GREATERSPIRE.value),
             self._produce_mgr.action("produce_drone", UNIT_TYPE.ZERG_DRONE.value),
             self._produce_mgr.action("produce_zergling", UNIT_TYPE.ZERG_ZERGLING.value),
+            self._morph_mgr.action("morph_baneling", UNIT_TYPE.ZERG_BANELING.value),
             self._produce_mgr.action("produce_roach", UNIT_TYPE.ZERG_ROACH.value),
-            self._produce_mgr.action("produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
+            self._morph_mgr.action("morph_ravager", UNIT_TYPE.ZERG_RAVAGER.value),
             self._produce_mgr.action("produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
+            self._morph_mgr.action("morph_lurker", UNIT_TYPE.ZERG_LURKERMP.value),
+            self._produce_mgr.action("produce_viper", UNIT_TYPE.ZERG_VIPER.value),
+            self._produce_mgr.action("produce_mutalisk", UNIT_TYPE.ZERG_MUTALISK.value),
+            self._produce_mgr.action("produce_corruptor", UNIT_TYPE.ZERG_CORRUPTOR.value),
+            self._morph_mgr.action("morph_broodlord", UNIT_TYPE.ZERG_BROODLORD.value),
+            self._produce_mgr.action("produce_swarmhost", UNIT_TYPE.ZERG_SWARMHOSTMP.value),
+            self._produce_mgr.action("produce_infestor", UNIT_TYPE.ZERG_INFESTOR.value),
+            self._produce_mgr.action("produce_ultralisk", UNIT_TYPE.ZERG_ULTRALISK.value),
+            self._produce_mgr.action("produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
+            self._morph_mgr.action("morph_overseer", UNIT_TYPE.ZERG_OVERSEER.value),
+            self._produce_mgr.action("produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
+            self._produce_mgr.action("produce_nydus_worm", UNIT_TYPE.ZERG_NYDUSCANAL.value),
+            self._upgrade_mgr.action("upgrade_burrow", UPGRADE.BURROW.value),
+            self._upgrade_mgr.action("upgrade_centrifical_hooks", UPGRADE.CENTRIFICALHOOKS.value),
+            self._upgrade_mgr.action("upgrade_chitions_plating", UPGRADE.CHITINOUSPLATING.value),
+            self._upgrade_mgr.action("upgrade_evolve_grooved_spines", UPGRADE.EVOLVEGROOVEDSPINES.value),
+            self._upgrade_mgr.action("upgrade_evolve_muscular_augments", UPGRADE.EVOLVEMUSCULARAUGMENTS.value),
+            self._upgrade_mgr.action("upgrade_gliare_constitution", UPGRADE.GLIALRECONSTITUTION.value),
+            self._upgrade_mgr.action("upgrade_infestor_energy_upgrade", UPGRADE.INFESTORENERGYUPGRADE.value),
+            self._upgrade_mgr.action("upgrade_neural_parasite", UPGRADE.NEURALPARASITE.value),
+            self._upgrade_mgr.action("upgrade_overlord_speed", UPGRADE.OVERLORDSPEED.value),
+            self._upgrade_mgr.action("upgrade_tunneling_claws", UPGRADE.TUNNELINGCLAWS.value),
+            self._upgrade_mgr.action("upgrade_flyer_armors_level1", UPGRADE.ZERGFLYERARMORSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_flyer_armors_level2", UPGRADE.ZERGFLYERARMORSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_flyer_armors_level3", UPGRADE.ZERGFLYERARMORSLEVEL3.value),
+            self._upgrade_mgr.action("upgrade_flyer_weapons_level1", UPGRADE.ZERGFLYERWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_flyer_weapons_level2", UPGRADE.ZERGFLYERWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_flyer_weapons_level3", UPGRADE.ZERGFLYERWEAPONSLEVEL3.value),
+            self._upgrade_mgr.action("upgrade_ground_armors_level1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_ground_armors_level2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_ground_armors_level3", UPGRADE.ZERGGROUNDARMORSLEVEL3.value),
+            self._upgrade_mgr.action("upgrade_zergling_attack_speed", UPGRADE.ZERGLINGATTACKSPEED.value),
+            self._upgrade_mgr.action("upgrade_zergling_moving_speed", UPGRADE.ZERGLINGMOVEMENTSPEED.value),
+            self._upgrade_mgr.action("upgrade_melee_weapons_level1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_melee_weapons_level2", UPGRADE.ZERGMELEEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_melee_weapons_level3", UPGRADE.ZERGMELEEWEAPONSLEVEL3.value),
+            self._upgrade_mgr.action("upgrade_missile_weapons_level1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
+            self._upgrade_mgr.action("upgrade_missile_weapons_level2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
+            self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
             self._resource_mgr.action_queens_inject_larva,
             self._resource_mgr.action_some_workers_gather_gas,
-            self._morph_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
             self._combat_mgr.action_rally_idle_combat_units_to_midfield,
             self._combat_mgr.action_all_attack_30,
-            self._combat_mgr.action_all_attack_20,
-            self._build_mgr.action("build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
-            self._upgrade_mgr.action("upgrade_melee_attack_1", UPGRADE.ZERGMELEEWEAPONSLEVEL1.value),
-            self._upgrade_mgr.action("upgrade_melee_attack_2", UPGRADE.ZERGMELEEWEAPONSLEVEL2.value),
-            self._upgrade_mgr.action("upgrade_missile_attack_1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
-            self._upgrade_mgr.action("upgrade_missile_attack_2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
-            self._upgrade_mgr.action("upgrade_ground_armor_1", UPGRADE.ZERGGROUNDARMORSLEVEL1.value),
-            self._upgrade_mgr.action("upgrade_ground_armor_2", UPGRADE.ZERGGROUNDARMORSLEVEL2.value)
+            self._combat_mgr.action_all_attack_20
+            # ZERG_LOCUST, ZERG_CHANGELING not included
         ]
         self.action_space = MaskableDiscrete(len(self._actions))
 
@@ -79,9 +123,9 @@ class ZergActionWrapper(gym.Wrapper):
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask)
 
-    def print_actions(self):
-        for action_id, action in enumerate(self._actions):
-            print("Action ID: %d	Action Name: %s" % (action_id, action.name))
+    @property
+    def action_names(self):
+        return [action.name for action in self._actions]
 
     @property
     def player_position(self):

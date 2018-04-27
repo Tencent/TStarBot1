@@ -1,34 +1,12 @@
 import gym
 from gym import spaces
-from enum import Enum, unique
 import numpy as np
 
 from pysc2.lib.typeenums import UNIT_TYPEID
 
 from envs.space import PySC2RawObservation
 from envs.space import PySC2RawAction
-
-
-@unique
-class AllianceType(Enum):
-    SELF = 1
-    ALLY = 2
-    NEUTRAL = 3
-    ENEMY = 4
-
-
-class RewardClipWrapper(gym.RewardWrapper):
-
-    def __init__(self, env):
-        super(RewardClipWrapper, self).__init__(env)
-
-    def _reward(self, reward):
-        if reward > 1.0:
-            return 1.0
-        elif reward < -1.0:
-            return -1.0
-        else:
-            return reward
+from envs.common.const import ALLY_TYPE
 
 
 class RewardShapingWrapperV1(gym.Wrapper):
@@ -59,22 +37,34 @@ class RewardShapingWrapperV1(gym.Wrapper):
         self._n_self_combats = n_self_combats
         return observation, reward, done, info
 
-    def _get_unit_counts(self, observation):
-        num_enemy_units = 0
-        num_self_combat_units = 0
-        for u in observation['units']:
-            if u.int_attr.alliance == AllianceType.ENEMY.value:
-                num_enemy_units += 1
-            elif u.int_attr.alliance == AllianceType.SELF.value:
-                if u.unit_type in self._combat_unit_types:
-                    num_self_combat_units += 1
-        return num_enemy_units, num_self_combat_units
-
     def reset(self):
         observation = self.env.reset()
         self._n_enemies, self._n_self_combats = self._get_unit_counts(
             observation)
         return observation
+
+    @property
+    def action_names(self):
+        if not hasattr(self.env, 'action_names'):
+            raise NotImplementedError
+        return self.env.action_names
+
+    @property
+    def player_position(self):
+        if not hasattr(self.env, 'player_position'):
+            raise NotImplementedError
+        return self.env.player_position
+
+    def _get_unit_counts(self, observation):
+        num_enemy_units = 0
+        num_self_combat_units = 0
+        for u in observation['units']:
+            if u.int_attr.alliance == ALLY_TYPE.ENEMY.value:
+                num_enemy_units += 1
+            elif u.int_attr.alliance == ALLY_TYPE.SELF.value:
+                if u.unit_type in self._combat_unit_types:
+                    num_self_combat_units += 1
+        return num_enemy_units, num_self_combat_units
 
 
 class RewardShapingWrapperV2(gym.Wrapper):
@@ -102,19 +92,31 @@ class RewardShapingWrapperV2(gym.Wrapper):
         self._n_selves = n_selves
         return observation, reward, done, info
 
-    def _get_unit_counts(self, observation):
-        num_enemy_units = 0
-        num_self_units = 0
-        for u in observation['units']:
-            if u.int_attr.alliance == AllianceType.ENEMY.value:
-                if u.unit_type in self._combat_unit_types:
-                    num_enemy_units += 1
-            elif u.int_attr.alliance == AllianceType.SELF.value:
-                if u.unit_type in self._combat_unit_types:
-                    num_self_units += 1
-        return num_enemy_units, num_self_units
-
     def reset(self):
         observation = self.env.reset()
         self._n_enemies, self._n_selves = self._get_unit_counts(observation)
         return observation
+
+    @property
+    def action_names(self):
+        if not hasattr(self.env, 'action_names'):
+            raise NotImplementedError
+        return self.env.action_names
+
+    @property
+    def player_position(self):
+        if not hasattr(self.env, 'player_position'):
+            raise NotImplementedError
+        return self.env.player_position
+
+    def _get_unit_counts(self, observation):
+        num_enemy_units = 0
+        num_self_units = 0
+        for u in observation['units']:
+            if u.int_attr.alliance == ALLY_TYPE.ENEMY.value:
+                if u.unit_type in self._combat_unit_types:
+                    num_enemy_units += 1
+            elif u.int_attr.alliance == ALLY_TYPE.SELF.value:
+                if u.unit_type in self._combat_unit_types:
+                    num_self_units += 1
+        return num_enemy_units, num_self_units
