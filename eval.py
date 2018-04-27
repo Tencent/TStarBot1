@@ -112,11 +112,11 @@ def train():
 
     try:
         cum_return = 0.0
+        action_counts = [0] * env.action_space.n
         for i in range(FLAGS.num_episodes):
             observation = env.reset()
             done = False
             step_id = 0
-            action_counts = [0] * env.action_space.n
             while not done:
                 action = agent.act(observation, eps=FLAGS.epsilon)
                 print("Step ID: %d	Take Action: %d	Available Mask: %s" %

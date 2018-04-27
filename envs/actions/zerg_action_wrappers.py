@@ -14,7 +14,6 @@ from envs.actions.function import Function
 from envs.actions.produce import ProduceActions
 from envs.actions.build import BuildActions
 from envs.actions.upgrade import UpgradeActions
-from envs.actions.morph import MorphActions
 from envs.actions.resource import ResourceActions
 from envs.actions.combat import CombatActions
 
@@ -26,10 +25,9 @@ class ZergActionWrapper(gym.Wrapper):
         assert isinstance(env.observation_space, PySC2RawObservation)
 
         self._dc = DataContext()
-        self._produce_mgr = ProduceActions()
         self._build_mgr = BuildActions()
+        self._produce_mgr = ProduceActions()
         self._upgrade_mgr = UpgradeActions()
-        self._morph_mgr = MorphActions()
         self._resource_mgr = ResourceActions()
         self._combat_mgr = CombatActions()
 
@@ -49,25 +47,25 @@ class ZergActionWrapper(gym.Wrapper):
             self._build_mgr.action("build_spine_crawler", UNIT_TYPE.ZERG_SPINECRAWLER.value),
             self._build_mgr.action("build_spore_crawler", UNIT_TYPE.ZERG_SPORECRAWLER.value),
             self._build_mgr.action("build_lurker_den", UNIT_TYPE.ZERG_LURKERDENMP.value),
-            self._morph_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
-            self._morph_mgr.action("morph_hive", UNIT_TYPE.ZERG_HIVE.value),
-            self._morph_mgr.action("morph_greater_spire", UNIT_TYPE.ZERG_GREATERSPIRE.value),
+            self._produce_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
+            self._produce_mgr.action("morph_hive", UNIT_TYPE.ZERG_HIVE.value),
+            self._produce_mgr.action("morph_greater_spire", UNIT_TYPE.ZERG_GREATERSPIRE.value),
             self._produce_mgr.action("produce_drone", UNIT_TYPE.ZERG_DRONE.value),
             self._produce_mgr.action("produce_zergling", UNIT_TYPE.ZERG_ZERGLING.value),
-            self._morph_mgr.action("morph_baneling", UNIT_TYPE.ZERG_BANELING.value),
+            self._produce_mgr.action("morph_baneling", UNIT_TYPE.ZERG_BANELING.value),
             self._produce_mgr.action("produce_roach", UNIT_TYPE.ZERG_ROACH.value),
-            self._morph_mgr.action("morph_ravager", UNIT_TYPE.ZERG_RAVAGER.value),
+            self._produce_mgr.action("morph_ravager", UNIT_TYPE.ZERG_RAVAGER.value),
             self._produce_mgr.action("produce_hydralisk", UNIT_TYPE.ZERG_HYDRALISK.value),
-            self._morph_mgr.action("morph_lurker", UNIT_TYPE.ZERG_LURKERMP.value),
+            self._produce_mgr.action("morph_lurker", UNIT_TYPE.ZERG_LURKERMP.value),
             self._produce_mgr.action("produce_viper", UNIT_TYPE.ZERG_VIPER.value),
             self._produce_mgr.action("produce_mutalisk", UNIT_TYPE.ZERG_MUTALISK.value),
             self._produce_mgr.action("produce_corruptor", UNIT_TYPE.ZERG_CORRUPTOR.value),
-            self._morph_mgr.action("morph_broodlord", UNIT_TYPE.ZERG_BROODLORD.value),
+            self._produce_mgr.action("morph_broodlord", UNIT_TYPE.ZERG_BROODLORD.value),
             self._produce_mgr.action("produce_swarmhost", UNIT_TYPE.ZERG_SWARMHOSTMP.value),
             self._produce_mgr.action("produce_infestor", UNIT_TYPE.ZERG_INFESTOR.value),
             self._produce_mgr.action("produce_ultralisk", UNIT_TYPE.ZERG_ULTRALISK.value),
             self._produce_mgr.action("produce_overlord", UNIT_TYPE.ZERG_OVERLORD.value),
-            self._morph_mgr.action("morph_overseer", UNIT_TYPE.ZERG_OVERSEER.value),
+            self._produce_mgr.action("morph_overseer", UNIT_TYPE.ZERG_OVERSEER.value),
             self._produce_mgr.action("produce_queen", UNIT_TYPE.ZERG_QUEEN.value),
             self._produce_mgr.action("produce_nydus_worm", UNIT_TYPE.ZERG_NYDUSCANAL.value),
             self._upgrade_mgr.action("upgrade_burrow", UPGRADE.BURROW.value),
