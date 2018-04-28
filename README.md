@@ -1,36 +1,43 @@
-# SC2LAB: StarCraftII Lab
+# SC2Learner: StarCraft-II Reinforcement Learning Environment
+
+## Overview
+
+<p align="center">
+<img src="docs/images/overview.png" width=800>
+<br/>Overview of SC2Learner.
+</p>
 
 ## Installation
 
-Python 3.6 required.
+Python 3.5 required.
 
 ```bash
 pip3 install -r requirements.txt
 ```
-## Examples
 
-- Test Envs, e.g.
+## Quick Start
+
+- Run a random agent, e.g.
 ```bash
-python3 -m tests.test_sc2_env
+python3 -u eval.py --agent random --difficulty '1'
 ```
 
-- Train CartPoleV0, e.g.
+- Train a dqn agent, e.g.
 ```bash
-CUDA_VISIBLE_DEVICES= python -u train_cartpole_dqn.py --agent dqn
+CUDA_VISIBLE_DEVICES=0 python3 -u train.py --difficulty '2'
 ```
 
-- Train StarCraftII, e.g.
+- Evaluate a dqn agent with multi-processes, e.g.
 ```bash
-CUDA_VISIBLE_DEVICES=0 python3 -u train_sc2_terran_dqn.py --agent dqn
+CUDA_VISIBLE_DEVICES=0 python3 -u eval_mp.py \
+--agent dqn \
+--difficulty '2' \
+--init_model_path checkpoints/REPLACED_WITH_YOUR_MODEL_NAME
 ```
 
-- Evaluate StarCraftII, e.g.
+- For more help, please:
 ```bash
-CUDA_VISIBLE_DEVICES= python3 -u evaluate_sc2_terran.py --agent random --difficulty '2'
-CUDA_VISIBLE_DEVICES=0 python3 -u evaluate_sc2_terran.py --agent dqn --difficulty '2' --init_model_path checkpoints/REPLACED_WITH_YOUR_MODEL_NAME
-```
-
-- Play StarCraftII with Keyboard, e.g.
-```bash
-CUDA_VISIBLE_DEVICES= python3 -u evaluate_sc2_terran.py --agent keyboard --race 'T' --difficulty '1'
+python3 eval.py --help
+python3 eval_mp.py --help
+python3 train.py --help
 ```

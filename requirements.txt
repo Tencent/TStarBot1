@@ -1,5 +1,5 @@
 futures==3.1.1
 gym==0.9.4
 pysc2
-scipy
+https://github.com/Tencent-Game-AI/pysc2.git
 http://download.pytorch.org/whl/cu80/torch-0.3.1-cp36-cp36m-linux_x86_64.whl
