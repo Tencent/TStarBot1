@@ -97,11 +97,16 @@ class ZergActionWrapper(gym.Wrapper):
             self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
             self._resource_mgr.action_queens_inject_larva,
             self._resource_mgr.action_some_workers_gather_gas,
-            self._combat_mgr.action_rally_idle_combat_units_to_midfield,
-            self._combat_mgr.action_all_attack_30,
-            self._combat_mgr.action_all_attack_20
             # ZERG_LOCUST, ZERG_CHANGELING not included
-        ]
+            #self._combat_mgr.action_rally_idle_combat_units_to_midfield, # deprecated
+            #self._combat_mgr.action_all_attack_30, # deprecated
+            #self._combat_mgr.action_all_attack_20 # deprecated
+        ] + [
+            self._combat_mgr.action(units_region_id, target_region_id)
+            for units_region_id in range(self._combat_mgr.num_regions)
+            for target_region_id in range(self._combat_mgr.num_regions)
+        ] # 100 macro combat actions
+
         self.action_space = MaskableDiscrete(len(self._actions))
 
     def step(self, action):
@@ -147,7 +152,7 @@ class ZergActionWrapper(gym.Wrapper):
         fn = self._combat_mgr.action_rally_new_combat_units
         if fn.is_valid(self._dc):
             actions_after.extend(fn.function(self._dc))
-        fn = self._combat_mgr.action_universal_micro_attack
+        fn = self._combat_mgr.action_framewise_rally_and_attack
         if fn.is_valid(self._dc):
             actions_after.extend(fn.function(self._dc))
 

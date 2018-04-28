@@ -140,7 +140,7 @@ def train():
 def main(argv):
     logging.set_verbosity(logging.ERROR)
     print_arguments(FLAGS)
-    np.set_printoptions(threshold=np.nan, linewidth=300)
+    np.set_printoptions(threshold=np.nan, linewidth=500)
     train()
 
 

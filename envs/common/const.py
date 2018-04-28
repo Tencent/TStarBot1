@@ -1,4 +1,5 @@
 from enum import Enum, unique
+from collections import namedtuple
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
@@ -68,11 +69,8 @@ MAXIMUM_NUM = {
 }
 
 
-class AttackAttr(object):
+AttackAttr = namedtuple('AttackAttr', ('can_attack_ground', 'can_attack_air'))
 
-    def __init__(self, can_attack_ground, can_attack_air):
-        self.can_attack_ground = can_attack_ground
-        self.can_attack_air = can_attack_air
 
 ATTACK_FORCE = {
     UNIT_TYPE.ZERG_LARVA.value: AttackAttr(False, False),
