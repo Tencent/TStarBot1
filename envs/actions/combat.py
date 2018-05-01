@@ -349,6 +349,7 @@ class CombatActionsV0(object):
             closest_target = utils.closest_unit(unit, target_units)
             closest_dist = utils.closest_distance(unit, enemy_units)
             strongest_health = utils.strongest_health(combat_units)
+            # TODO: is this neccessary, or even do harm?
             if (closest_dist < 5.0 and
                 unit.float_attr.health / unit.float_attr.health_max < 0.3 and
                 strongest_health > 0.9):
@@ -368,10 +369,13 @@ class CombatActionsV0(object):
                 action.action_raw.unit_command.unit_tags.append(unit.tag)
                 action.action_raw.unit_command.ability_id = \
                     ABILITY.ATTACK_ATTACK.value
-                action.action_raw.unit_command.target_unit_tag = \
-                    closest_target.tag
+                action.action_raw.unit_command.target_world_space_pos.x = \
+                    closest_target.float_attr.pos_x
+                action.action_raw.unit_command.target_world_space_pos.y = \
+                    closest_target.float_attr.pos_y
                 return action
 
+        # TODO: add attacking priority
         air_combat_units = [
             u for u in combat_units
             if (ATTACK_FORCE[u.unit_type].can_attack_air and

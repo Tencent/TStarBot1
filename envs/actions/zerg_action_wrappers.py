@@ -95,7 +95,6 @@ class ZergActionWrapper(gym.Wrapper):
             self._upgrade_mgr.action("upgrade_missile_weapons_level1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
             self._upgrade_mgr.action("upgrade_missile_weapons_level2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
             self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
-            self._resource_mgr.action_queens_inject_larva,
             self._resource_mgr.action_some_workers_gather_gas,
             # ZERG_LOCUST, ZERG_CHANGELING not included
             #self._combat_mgr.action_rally_idle_combat_units_to_midfield, # deprecated
@@ -105,16 +104,21 @@ class ZergActionWrapper(gym.Wrapper):
             self._combat_mgr.action(units_region_id, target_region_id)
             for units_region_id in range(self._combat_mgr.num_regions)
             for target_region_id in range(self._combat_mgr.num_regions)
-        ] # 100 macro combat actions
+        ]
+
+        self._required_pre_actions = [self._resource_mgr.action_idle_workers_gather_minerals,
+                                      self._resource_mgr.action_queens_inject_larva]
+        self._required_post_actions = [self._combat_mgr.action_rally_new_combat_units,
+                                       self._combat_mgr.action_framewise_rally_and_attack]
 
         self.action_space = MaskableDiscrete(len(self._actions))
 
     def step(self, action):
         assert self._action_mask[action] == 1
         actions = self._actions[action].function(self._dc)
-        actions_before, actions_after = self._extended_actions()
-        final_actions = actions_before + actions + actions_after
-        observation, reward, done, info = self.env.step(final_actions)
+        pre_actions, post_actions = self._required_actions()
+        observation, reward, done, info = self.env.step(
+            pre_actions + actions + post_actions)
         self._dc.update(observation)
         self._action_mask = self._get_valid_action_mask()
         return (observation, self._action_mask), reward, done, info
@@ -137,26 +141,24 @@ class ZergActionWrapper(gym.Wrapper):
         else:
             return 1
 
-    def _extended_actions(self):
-        actions_before = []
-        # TODO(@xinghai) : remove this hack
+    def _required_actions(self):
+        pre_actions = []
+        # TODO(@xinghai) : remove this hacking trick
         has_any_unit_selected = any([u.bool_attr.is_selected
                                      for u in self._dc.units])
         if platform.system() != 'Linux' and not has_any_unit_selected:
-            actions_before.extend(self._action_select_units_for_mac())
-        fn = self._resource_mgr.action_idle_workers_gather_minerals
-        if fn.is_valid(self._dc):
-            actions_before.extend(fn.function(self._dc))
+            pre_actions.extend(self._action_select_units_for_mac())
 
-        actions_after = []
-        fn = self._combat_mgr.action_rally_new_combat_units
-        if fn.is_valid(self._dc):
-            actions_after.extend(fn.function(self._dc))
-        fn = self._combat_mgr.action_framewise_rally_and_attack
-        if fn.is_valid(self._dc):
-            actions_after.extend(fn.function(self._dc))
+        for fn in self._required_pre_actions:
+            if fn.is_valid(self._dc):
+                pre_actions.extend(fn.function(self._dc))
 
-        return actions_before, actions_after
+        post_actions = []
+        for fn in self._required_post_actions:
+            if fn.is_valid(self._dc):
+                post_actions.extend(fn.function(self._dc))
+
+        return pre_actions, post_actions
 
     def _get_valid_action_mask(self):
         ids = [i for i, action in enumerate(self._actions)
