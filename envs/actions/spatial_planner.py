@@ -29,7 +29,7 @@ class SpatialPlanner(object):
             areas = self._constructable_areas(2, dc)
             # TODO(@xinghai): to be replaced
             if len(areas) > 0: random.choice(areas)
-            return len(self._constructable_areas(2, dc)) > 0
+            return len(areas) > 0
 
     def _constructable_areas(self, margin, dc):
         areas = []
@@ -37,10 +37,10 @@ class SpatialPlanner(object):
                                           UNIT_TYPE.ZERG_LAIR.value,
                                           UNIT_TYPE.ZERG_HIVE.value])
         for base in bases:
-            search_region = (base.float_attr.pos_x - 10,
-                             base.float_attr.pos_y - 10,
-                             10 * 2,
-                             10 * 2)
+            search_region = (base.float_attr.pos_x - 11,
+                             base.float_attr.pos_y - 11,
+                             11 * 2,
+                             11 * 2)
             areas.extend(self._search_areas(
                 search_region, dc, margin=margin, remove_corner=True))
         return areas
@@ -91,6 +91,7 @@ class SpatialPlanner(object):
                     for y in range(max(yu, 0), min(yd, size[1])):
                         grids[x, y] = 1
         x, y = np.nonzero(1 - grids)
-        #np.set_printoptions(threshold=np.nan, linewidth=300)
-        #print(grids)
+        #if remove_corner == True:
+            #np.set_printoptions(threshold=np.nan, linewidth=300)
+            #print(grids)
         return list(zip(x + bottomleft[0] + 0.5, y + bottomleft[1] + 0.5))

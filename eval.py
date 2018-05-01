@@ -124,6 +124,7 @@ def train():
                 observation, reward, done, _ = env.step(action)
                 action_counts[action] += 1
                 #time.sleep(20)
+                #time.sleep(0.2)
                 cum_return += reward
                 step_id += 1
             print_action_distribution(env, action_counts)

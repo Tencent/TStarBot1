@@ -127,13 +127,14 @@ class CombatActions(object):
                 ]
                 if len(target_enemies) > 0:
                     actions.extend(self._micro_attack(units_with_task,
-                                                      target_enemies))
+                                                      target_enemies,
+                                                      dc))
                 else:
                     actions.extend(self._micro_rally(
                         units_with_task, self._regions[region_id].rally_point))
         return actions
 
-    def _micro_attack(self, combat_units, enemy_units):
+    def _micro_attack(self, combat_units, enemy_units, dc):
 
         def flee_or_fight(unit, target_units):
             assert len(target_units) > 0
@@ -153,15 +154,9 @@ class CombatActions(object):
                 action.action_raw.unit_command.ability_id = ABILITY.MOVE.value
                 action.action_raw.unit_command.target_world_space_pos.x = x
                 action.action_raw.unit_command.target_world_space_pos.y = y
-                return action
+                return [action]
             else:
-                action = sc_pb.Action()
-                action.action_raw.unit_command.unit_tags.append(unit.tag)
-                action.action_raw.unit_command.ability_id = \
-                    ABILITY.ATTACK_ATTACK.value
-                action.action_raw.unit_command.target_unit_tag = \
-                    closest_target.tag
-                return action
+                return self._unit_attack(unit, closest_target, dc)
 
         air_combat_units = [
             u for u in combat_units
@@ -184,13 +179,13 @@ class CombatActions(object):
         actions = []
         for unit in air_combat_units:
             if len(air_enemy_units) > 0:
-                actions.append(flee_or_fight(unit, air_enemy_units))
+                actions.extend(flee_or_fight(unit, air_enemy_units))
         for unit in ground_combat_units:
             if len(ground_enemy_units) > 0:
-                actions.append(flee_or_fight(unit, ground_enemy_units))
+                actions.extend(flee_or_fight(unit, ground_enemy_units))
         for unit in air_ground_combat_units:
             if len(enemy_units) > 0:
-                actions.append(
+                actions.extend(
                     flee_or_fight(unit, air_enemy_units + ground_enemy_units))
         return actions
 
@@ -201,6 +196,39 @@ class CombatActions(object):
         action.action_raw.unit_command.target_world_space_pos.x = rally_point[0]
         action.action_raw.unit_command.target_world_space_pos.y = rally_point[1]
         return [action]
+
+    def _unit_attack(self, unit, target_unit, dc):
+        if unit.unit_type == UNIT_TYPE.ZERG_RAVAGER.value:
+            return self._ravager_unit_attack(unit, target_unit, dc)
+        else:
+            return self._normal_unit_attack(unit, target_unit)
+
+    def _normal_unit_attack(self, unit, target_unit):
+        action = sc_pb.Action()
+        action.action_raw.unit_command.unit_tags.append(unit.tag)
+        action.action_raw.unit_command.ability_id = \
+            ABILITY.ATTACK_ATTACK.value
+        action.action_raw.unit_command.target_world_space_pos.x = \
+            target_unit.float_attr.pos_x
+        action.action_raw.unit_command.target_world_space_pos.y = \
+            target_unit.float_attr.pos_y
+        return [action]
+
+    def _ravager_unit_attack(self, unit, target_unit, dc):
+        actions = self._normal_unit_attack(unit, target_unit)
+        action = sc_pb.Action()
+        if len(utils.units_nearby(target_unit,
+                                  dc.units_of_alliance(ALLY_TYPE.SELF.value),
+                                  max_distance=2)) == 0:
+            action.action_raw.unit_command.unit_tags.append(unit.tag)
+            action.action_raw.unit_command.ability_id = \
+                ABILITY.EFFECT_CORROSIVEBILE.value
+            action.action_raw.unit_command.target_world_space_pos.x = \
+                target_unit.float_attr.pos_x
+            action.action_raw.unit_command.target_world_space_pos.y = \
+                target_unit.float_attr.pos_y
+            actions.append(action)
+        return actions
 
     def _set_attack_task(self, units, target_region_id):
         for u in units:
