@@ -73,11 +73,15 @@ class DataContext(object):
 
     @property
     def unexploited_minerals(self):
-        bases = self.units_of_types([UNIT_TYPE.ZERG_HATCHERY.value,
-                                     UNIT_TYPE.ZERG_LAIR.value,
-                                     UNIT_TYPE.ZERG_HIVE.value])
+        self_bases = self.units_of_types([UNIT_TYPE.ZERG_HATCHERY.value,
+                                          UNIT_TYPE.ZERG_LAIR.value,
+                                          UNIT_TYPE.ZERG_HIVE.value])
+        enemy_bases = self.units_of_types([UNIT_TYPE.ZERG_HATCHERY.value,
+                                           UNIT_TYPE.ZERG_LAIR.value,
+                                           UNIT_TYPE.ZERG_HIVE.value],
+                                          ALLY_TYPE.ENEMY.value)
         return [u for u in self.minerals
-                if utils.closest_distance(u, bases) > 20]
+                if utils.closest_distance(u, self_bases + enemy_bases) > 15]
 
     @property
     def gas(self):
