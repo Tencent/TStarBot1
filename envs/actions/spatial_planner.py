@@ -93,7 +93,6 @@ class SpatialPlanner(object):
         if remove_corner:
             cx, cy = size[0] / 2.0, size[1] / 2.0
             r = max(size[0] / 2.0, size[1] / 2.0)
-            print(cx, cy, r)
             for x in range(size[0]):
                 for y in range(size[1]):
                     if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > (r - 0.5) ** 2:

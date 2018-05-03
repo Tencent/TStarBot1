@@ -63,8 +63,8 @@ MAXIMUM_NUM = {
     UNIT_TYPE.ZERG_ULTRALISKCAVERN.value: 1,
     UNIT_TYPE.ZERG_NYDUSNETWORK.value: 1,
     UNIT_TYPE.ZERG_LURKERDENMP.value: 1,
-    UNIT_TYPE.ZERG_LAIR.value: 10,
-    UNIT_TYPE.ZERG_HIVE.value: 10,
+    UNIT_TYPE.ZERG_LAIR.value: 1,
+    UNIT_TYPE.ZERG_HIVE.value: 1,
     UNIT_TYPE.ZERG_GREATERSPIRE.value: 1
 }
 
@@ -78,16 +78,18 @@ ATTACK_FORCE = {
     UNIT_TYPE.ZERG_ZERGLING.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_BANELING.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_ROACH.value: AttackAttr(True, False),
+    UNIT_TYPE.ZERG_ROACHBURROWED.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_RAVAGER.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_HYDRALISK.value: AttackAttr(True, True),
-    UNIT_TYPE.ZERG_LURKERMP.value: AttackAttr(True, False), #TODO
-    UNIT_TYPE.ZERG_VIPER.value: AttackAttr(False, False), #TODO
+    UNIT_TYPE.ZERG_LURKERMP.value: AttackAttr(True, False),
+    UNIT_TYPE.ZERG_LURKERMPBURROWED.value: AttackAttr(True, False),
+    UNIT_TYPE.ZERG_VIPER.value: AttackAttr(False, False),
     UNIT_TYPE.ZERG_MUTALISK.value: AttackAttr(True, True),
     UNIT_TYPE.ZERG_CORRUPTOR.value: AttackAttr(False, True),
     UNIT_TYPE.ZERG_BROODLORD.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_SWARMHOSTMP.value: AttackAttr(False, False),
     UNIT_TYPE.ZERG_LOCUSTMP.value: AttackAttr(True, False),
-    UNIT_TYPE.ZERG_INFESTOR.value: AttackAttr(False, False), #TODO
+    UNIT_TYPE.ZERG_INFESTOR.value: AttackAttr(False, False),
     UNIT_TYPE.ZERG_ULTRALISK.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_BROODLING.value: AttackAttr(True, False),
     UNIT_TYPE.ZERG_OVERLORD.value: AttackAttr(False, False),

@@ -4,6 +4,7 @@ from collections import namedtuple
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
+from pysc2.lib.typeenums import UPGRADE_ID as UPGRADE
 
 from envs.actions.function import Function
 import envs.common.utils as utils
@@ -21,9 +22,11 @@ class CombatActions(object):
             UNIT_TYPE.ZERG_ZERGLING.value,
             UNIT_TYPE.ZERG_BANELING.value,
             UNIT_TYPE.ZERG_ROACH.value,
+            UNIT_TYPE.ZERG_ROACHBURROWED.value,
             UNIT_TYPE.ZERG_RAVAGER.value,
             UNIT_TYPE.ZERG_HYDRALISK.value,
             UNIT_TYPE.ZERG_LURKERMP.value,
+            UNIT_TYPE.ZERG_LURKERMPBURROWED.value,
             UNIT_TYPE.ZERG_MUTALISK.value,
             UNIT_TYPE.ZERG_CORRUPTOR.value,
             UNIT_TYPE.ZERG_BROODLORD.value,
@@ -81,8 +84,7 @@ class CombatActions(object):
         def act(dc):
             combat_unit = [u for u in dc.units_of_types(self._combat_types)
                            if self._is_in_region(u, combat_region_id)]
-            self._set_attack_task(dc.units_of_types(self._combat_types),
-                                  target_region_id)
+            self._set_attack_task(combat_unit, target_region_id)
             return []
 
         return act
@@ -92,19 +94,19 @@ class CombatActions(object):
         def is_valid(dc):
             combat_unit = [u for u in dc.units_of_types(self._combat_types)
                            if self._is_in_region(u, combat_region_id)]
-            return len(combat_unit) >= 5
+            return len(combat_unit) >= 4
 
         return is_valid
 
 
     def _rally_new_combat_units(self, dc):
-        if dc.init_base_pos[0] < 100:
-            rally_pos = (68, 108)
-        else:
-            rally_pos = (133, 36)
         new_combat_units = [u for u in dc.units_of_types(self._combat_types)
                             if dc.is_new_unit(u)]
-        return self._micro_rally(new_combat_units, rally_pos)
+        if dc.init_base_pos[0] < 100:
+            self._set_attack_task(new_combat_units, 1)
+        else:
+            self._set_attack_task(new_combat_units, 9)
+        return []
 
     def _is_valid_rally_new_combat_units(self, dc):
         new_combat_units = [u for u in dc.units_of_types(self._combat_types)
@@ -126,12 +128,15 @@ class CombatActions(object):
                     if self._is_in_region(u, region_id)
                 ]
                 if len(target_enemies) > 0:
-                    actions.extend(self._micro_attack(units_with_task,
-                                                      target_enemies,
-                                                      dc))
+                    actions.extend(self._micro_attack(
+                        units_with_task,
+                        target_enemies,
+                        dc))
                 else:
                     actions.extend(self._micro_rally(
-                        units_with_task, self._regions[region_id].rally_point))
+                        units_with_task,
+                        self._regions[region_id].rally_point,
+                        dc))
         return actions
 
     def _micro_attack(self, combat_units, enemy_units, dc):
@@ -148,15 +153,12 @@ class CombatActions(object):
                     closest_target.float_attr.pos_x) * 0.2
                 y = unit.float_attr.pos_y + (unit.float_attr.pos_y - \
                     closest_target.float_attr.pos_y) * 0.2
-                action = sc_pb.Action()
-                action.action_raw.unit_command.unit_tags.append(unit.tag)
-                # TODO: --> ATTACK_ATTACK ?
-                action.action_raw.unit_command.ability_id = ABILITY.MOVE.value
-                action.action_raw.unit_command.target_world_space_pos.x = x
-                action.action_raw.unit_command.target_world_space_pos.y = y
-                return [action]
+                target_pos = (x, y)
+                return self._unit_move(unit, target_pos, dc)
             else:
-                return self._unit_attack(unit, closest_target, dc)
+                target_pos = (closest_target.float_attr.pos_x,
+                              closest_target.float_attr.pos_y)
+                return self._unit_attack(unit, target_pos, dc)
 
         air_combat_units = [
             u for u in combat_units
@@ -185,49 +187,123 @@ class CombatActions(object):
                 actions.extend(flee_or_fight(unit, ground_enemy_units))
         for unit in air_ground_combat_units:
             if len(enemy_units) > 0:
-                actions.extend(
-                    flee_or_fight(unit, air_enemy_units + ground_enemy_units))
+                actions.extend(flee_or_fight(unit, enemy_units))
         return actions
 
-    def _micro_rally(self, units, rally_point):
-        action = sc_pb.Action()
-        action.action_raw.unit_command.unit_tags.extend([u.tag for u in units])
-        action.action_raw.unit_command.ability_id = ABILITY.ATTACK_ATTACK.value
-        action.action_raw.unit_command.target_world_space_pos.x = rally_point[0]
-        action.action_raw.unit_command.target_world_space_pos.y = rally_point[1]
-        return [action]
+    def _micro_rally(self, units, rally_point, dc):
+        actions = []
+        for unit in units:
+            actions.extend(self._unit_attack(unit, rally_point, dc))
+        return actions
 
-    def _unit_attack(self, unit, target_unit, dc):
+    def _unit_attack(self, unit, target_pos, dc):
+        # move with attack
         if unit.unit_type == UNIT_TYPE.ZERG_RAVAGER.value:
-            return self._ravager_unit_attack(unit, target_unit, dc)
+            return self._ravager_unit_attack(unit, target_pos, dc)
+        elif (unit.unit_type == UNIT_TYPE.ZERG_ROACH.value or
+              unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value):
+            return self._roach_unit_attack(unit, target_pos, dc)
+        elif (unit.unit_type == UNIT_TYPE.ZERG_LURKERMP.value or
+              unit.unit_type == UNIT_TYPE.ZERG_LURKERMPBURROWED.value):
+            return self._lurker_unit_attack(unit, target_pos, dc)
         else:
-            return self._normal_unit_attack(unit, target_unit)
+            return self._normal_unit_attack(unit, target_pos)
 
-    def _normal_unit_attack(self, unit, target_unit):
+    def _unit_move(self, unit, target_pos, dc):
+        # move without attack
+        if unit.unit_type == UNIT_TYPE.ZERG_LURKERMPBURROWED.value:
+            return self._lurker_unit_move(unit, target_pos)
+        elif unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value:
+            return self._roach_unit_move(unit, target_pos, dc)
+        else:
+            return self._normal_unit_move(unit, target_pos)
+
+    def _normal_unit_attack(self, unit, target_pos):
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.append(unit.tag)
         action.action_raw.unit_command.ability_id = \
             ABILITY.ATTACK_ATTACK.value
-        action.action_raw.unit_command.target_world_space_pos.x = \
-            target_unit.float_attr.pos_x
-        action.action_raw.unit_command.target_world_space_pos.y = \
-            target_unit.float_attr.pos_y
+        action.action_raw.unit_command.target_world_space_pos.x = target_pos[0]
+        action.action_raw.unit_command.target_world_space_pos.y = target_pos[1]
         return [action]
 
-    def _ravager_unit_attack(self, unit, target_unit, dc):
-        actions = self._normal_unit_attack(unit, target_unit)
+    def _normal_unit_move(self, unit, target_pos):
         action = sc_pb.Action()
-        if len(utils.units_nearby(target_unit,
-                                  dc.units_of_alliance(ALLY_TYPE.SELF.value),
+        action.action_raw.unit_command.unit_tags.append(unit.tag)
+        action.action_raw.unit_command.ability_id = ABILITY.MOVE.value
+        action.action_raw.unit_command.target_world_space_pos.x = target_pos[0]
+        action.action_raw.unit_command.target_world_space_pos.y = target_pos[1]
+        return [action]
+
+    def _roach_unit_attack(self, unit, target_pos, dc):
+        actions = []
+        ground_enemies = [u for u in dc.units_of_alliance(ALLY_TYPE.ENEMY.value)
+                          if not u.bool_attr.is_flying]
+        if len(utils.units_nearby(unit, ground_enemies, max_distance=4)) > 0:
+            if unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value:
+                action = sc_pb.Action()
+                action.action_raw.unit_command.unit_tags.append(unit.tag)
+                action.action_raw.unit_command.ability_id = \
+                    ABILITY.BURROWUP_ROACH.value
+                actions.append(action)
+            actions.extend(self._normal_unit_attack(unit, target_pos))
+        else:
+            actions.extend(self._roach_unit_move(unit, target_pos, dc))
+        return actions
+
+    def _roach_unit_move(self, unit, target_pos, dc):
+        actions = []
+        if (UPGRADE.TUNNELINGCLAWS.value in dc.upgraded_techs and
+            UPGRADE.BURROW.value in dc.upgraded_techs and
+            unit.unit_type == UNIT_TYPE.ZERG_ROACH.value):
+            action = sc_pb.Action()
+            action.action_raw.unit_command.unit_tags.append(unit.tag)
+            action.action_raw.unit_command.ability_id = \
+                ABILITY.BURROWDOWN_ROACH.value
+            actions.append(action)
+        actions.extend(self._normal_unit_move(unit, target_pos))
+        return actions
+
+    def _lurker_unit_attack(self, unit, target_pos, dc):
+        actions = []
+        ground_enemies = [u for u in dc.units_of_alliance(ALLY_TYPE.ENEMY.value)
+                          if not u.bool_attr.is_flying]
+        if len(utils.units_nearby(unit, ground_enemies, max_distance=8)) > 0:
+            if unit.unit_type == UNIT_TYPE.ZERG_LURKERMP.value:
+                action = sc_pb.Action()
+                action.action_raw.unit_command.unit_tags.append(unit.tag)
+                action.action_raw.unit_command.ability_id = \
+                    ABILITY.BURROWDOWN_LURKER.value
+                actions.append(action)
+        else:
+            actions.extend(self._lurker_unit_move(unit, target_pos))
+        return actions
+
+    def _lurker_unit_move(self, unit, target_pos):
+        actions = []
+        if unit.unit_type == UNIT_TYPE.ZERG_LURKERMPBURROWED.value:
+            action = sc_pb.Action()
+            action.action_raw.unit_command.unit_tags.append(unit.tag)
+            action.action_raw.unit_command.ability_id = \
+                ABILITY.BURROWUP_LURKER.value
+            actions.append(action)
+        actions.extend(self._normal_unit_move(unit, target_pos))
+        return actions
+
+    def _ravager_unit_attack(self, unit, target_pos, dc):
+        actions = []
+        ground_units = [u for u in dc.units_of_alliance(ALLY_TYPE.SELF.value)
+                        if not u.bool_attr.is_flying]
+        if len(utils.units_nearby(target_pos, ground_units,
                                   max_distance=2)) == 0:
+            action = sc_pb.Action()
             action.action_raw.unit_command.unit_tags.append(unit.tag)
             action.action_raw.unit_command.ability_id = \
                 ABILITY.EFFECT_CORROSIVEBILE.value
-            action.action_raw.unit_command.target_world_space_pos.x = \
-                target_unit.float_attr.pos_x
-            action.action_raw.unit_command.target_world_space_pos.y = \
-                target_unit.float_attr.pos_y
+            action.action_raw.unit_command.target_world_space_pos.x = target_pos[0]
+            action.action_raw.unit_command.target_world_space_pos.y = target_pos[1]
             actions.append(action)
+        actions.extend(self._normal_unit_attack(unit, target_pos))
         return actions
 
     def _set_attack_task(self, units, target_region_id):
