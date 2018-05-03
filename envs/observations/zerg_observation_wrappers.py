@@ -178,7 +178,7 @@ class ZergObservationWrapper(gym.Wrapper):
 
 class ZergNonspatialObservationWrapper(gym.Wrapper):
 
-    def __init__(self, env)
+    def __init__(self, env):
         super(ZergNonspatialObservationWrapper, self).__init__(env)
         assert isinstance(env.observation_space, PySC2RawObservation)
 
