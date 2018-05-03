@@ -9,7 +9,7 @@
 
 ## Installation
 
-Python 3.5 required.
+Python 3.5 and SC2-v3.16.1 required.
 
 ```bash
 pip3 install -r requirements.txt

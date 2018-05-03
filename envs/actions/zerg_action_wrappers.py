@@ -46,7 +46,7 @@ class ZergActionWrapper(gym.Wrapper):
             self._build_mgr.action("build_nydus_network", UNIT_TYPE.ZERG_NYDUSNETWORK.value),
             self._build_mgr.action("build_spine_crawler", UNIT_TYPE.ZERG_SPINECRAWLER.value),
             self._build_mgr.action("build_spore_crawler", UNIT_TYPE.ZERG_SPORECRAWLER.value),
-            self._build_mgr.action("build_lurker_den", UNIT_TYPE.ZERG_LURKERDENMP.value),
+            self._produce_mgr.action("morph_lurker_den", UNIT_TYPE.ZERG_LURKERDENMP.value),
             self._produce_mgr.action("morph_lair", UNIT_TYPE.ZERG_LAIR.value),
             self._produce_mgr.action("morph_hive", UNIT_TYPE.ZERG_HIVE.value),
             self._produce_mgr.action("morph_greater_spire", UNIT_TYPE.ZERG_GREATERSPIRE.value),
