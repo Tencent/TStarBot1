@@ -34,10 +34,3 @@ CUDA_VISIBLE_DEVICES=0 python3 -u eval_mp.py \
 --difficulty '2' \
 --init_model_path checkpoints/REPLACED_WITH_YOUR_MODEL_NAME
 ```
-
-- For more help, please:
-```bash
-python3 eval.py --help
-python3 eval_mp.py --help
-python3 train.py --help
-```
