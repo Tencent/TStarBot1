@@ -1,132 +1,173 @@
 import numpy as np
 
 from envs.common.const import ALLY_TYPE
+from envs.common.const import COMBAT_TYPES
 
 
-class Player1DFeature(object):
+class PlayerFeature(object):
 
     def features(self, observation):
         player_features = observation["player"][1:-1].astype(np.float32)
         food_unused = player_features[3] - player_features[2]
         player_features[-1] = food_unused if food_unused >= 0 else 0
-        scale = np.array([1000, 1000, 10, 10, 10, 10, 10, 10, 10])
+        scale = np.array([2000, 2000, 20, 20, 20, 20, 20, 20, 20])
         scaled_features = (player_features / scale).astype(np.float32)
         log_features = np.log10(player_features + 1).astype(np.float32)
 
-        additional_features = np.zeros(10, dtype=np.float32)
-        if food_unused <= 0:
-            additional_features[0] = 1
-        elif food_unused <= 3:
-            additional_features[1] = 1
-        elif food_unused <= 6:
-            additional_features[2] = 1
-        elif food_unused <= 9:
-            additional_features[3] = 1
-        elif food_unused <= 12:
-            additional_features[4] = 1
-        elif food_unused <= 15:
-            additional_features[5] = 1
-        elif food_unused <= 18:
-            additional_features[6] = 1
-        elif food_unused <= 21:
-            additional_features[7] = 1
-        elif food_unused <= 24:
-            additional_features[8] = 1
-        else:
-            additional_features[9] = 1
-        return np.concatenate((scaled_features, log_features,
-                               additional_features))
+        bins_food_unused = np.zeros(10, dtype=np.float32)
+        bin_id = int((food_unused - 1) // 3 + 1) if food_unused <= 27 else 9
+        bins_food_unused[bin_id] = 1
+        return np.concatenate((scaled_features, log_features, bins_food_unused))
 
     @property
     def num_dims(self):
         return 9 * 2 + 10
 
 
-class UnitCount1DFeature(object):
+class UnitTypeCountFeature(object):
 
     def __init__(self, type_list):
         self._type_list = type_list
+        self._regions = [
+            (0, 0, 200, 176),
+            (0, 88, 80, 176),
+            (80, 88, 120, 176),
+            (120, 88, 200, 176),
+            (0, 55, 80, 88),
+            (80, 55, 120, 88),
+            (120, 55, 200, 88),
+            (0, 0, 80, 55),
+            (80, 0, 120, 55),
+            (120, 0, 200, 55)
+        ]
 
     def features(self, observation):
-        self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
-        enemy_units = [u for u in observation['units']
-                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
-        self_features = self._generate_features(self_units)
-        enemy_features = self._generate_features(enemy_units)
-        features = np.concatenate((self_features, enemy_features))
-        scaled_features = features / 10
-        log_features = np.log10(features + 1)
-        return np.concatenate((scaled_features, log_features))
-
+        feature_list = []
+        for region in self._regions:
+            units_in_region = [u for u in observation['units']
+                               if self._is_in_region(u, region)]
+            feature_list.append(self._generate_features(units_in_region))
+        return np.concatenate(feature_list)
 
     @property
     def num_dims(self):
-        return len(self._type_list) * 2 * 2
+        return len(self._type_list) * len(self._regions) * 2 * 5
 
     def _generate_features(self, units):
+        self_units = [u for u in units
+                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
+        enemy_units = [u for u in units
+                       if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
+        self_features = self._get_counts(self_units)
+        enemy_features = self._get_counts(enemy_units)
+        features = np.concatenate((self_features, enemy_features))
+
+        scaled_features = features / 20
+        log_features = np.log10(features + 1)
+        gt1_features = (features >= 1).astype(np.float32)
+        gt5_features = (features >= 5).astype(np.float32)
+        gt15_features = (features >= 15).astype(np.float32)
+
+        return np.concatenate((scaled_features,
+                               log_features,
+                               gt1_features,
+                               gt5_features,
+                               gt15_features))
+
+    def _get_counts(self, units):
         count = {t: 0 for t in self._type_list}
         for u in units:
             if u.unit_type in count:
                 count[u.unit_type] += 1
         return np.array(list(count.values()), dtype=np.float32)
 
+    def _is_in_region(self, unit, region):
+        return (unit.float_attr.pos_x >= region[0] and
+                unit.float_attr.pos_x < region[2] and
+                unit.float_attr.pos_y >= region[1] and
+                unit.float_attr.pos_y < region[3])
 
-class UnitHasOrNotFeature(object):
 
-    def __init__(self, type_list):
-        self._type_list = type_list
+class UnitStatCountFeature(object):
+
+    def __init__(self):
+        self._regions = [
+            (0, 0, 200, 176),
+            (0, 88, 80, 176),
+            (80, 88, 120, 176),
+            (120, 88, 200, 176),
+            (0, 55, 80, 88),
+            (80, 55, 120, 88),
+            (120, 55, 200, 88),
+            (0, 0, 80, 55),
+            (80, 0, 120, 55),
+            (120, 0, 200, 55)
+        ]
 
     def features(self, observation):
-        self_units = [u for u in observation['units']
-                      if u.int_attr.alliance == ALLY_TYPE.SELF.value]
-        features = self._generate_features(self_units)
-        return features
-
+        feature_list = []
+        for region in self._regions:
+            units_in_region = [u for u in observation['units']
+                               if self._is_in_region(u, region)]
+            feature_list.append(self._generate_features(units_in_region))
+        return np.concatenate(feature_list)
 
     @property
     def num_dims(self):
-        return len(self._type_list)
+        return len(self._regions) * 2 * 4 * 5
 
     def _generate_features(self, units):
-        count = {t: 0 for t in self._type_list}
-        for u in units:
-            if u.unit_type in count:
-                count[u.unit_type] = 1
-        return np.array(list(count.values()), dtype=np.float32)
-
-
-class UnitStat1DFeature(object):
-
-    def features(self, observation):
-        self_units = [u for u in observation['units']
+        self_units = [u for u in units
                       if u.int_attr.alliance == ALLY_TYPE.SELF.value]
-        self_flying_units = [u for u in self_units if u.bool_attr.is_flying]
-        enemy_units = [u for u in observation['units']
+        enemy_units = [u for u in units
                        if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
-        enemy_flying_units = [u for u in enemy_units if u.bool_attr.is_flying]
+        self_combats = [u for u in self_units if u.unit_type in COMBAT_TYPES]
+        enemy_combats = [u for u in enemy_units if u.unit_type in COMBAT_TYPES]
+        self_air_units = [u for u in self_units if u.bool_attr.is_flying]
+        enemy_air_units = [u for u in enemy_units if u.bool_attr.is_flying]
+        self_ground_units = [u for u in self_units if not u.bool_attr.is_flying]
+        enemy_ground_units = [u for u in enemy_units if not u.bool_attr.is_flying]
 
         features = np.array([len(self_units),
-                             len(self_flying_units),
+                             len(self_combats),
+                             len(self_ground_units),
+                             len(self_air_units),
                              len(enemy_units),
-                             len(enemy_flying_units)], dtype=np.float32)
-        scaled_features = features / 50
-        log_features = np.log10(features + 1)
-        return np.concatenate((scaled_features, log_features))
+                             len(enemy_combats),
+                             len(enemy_ground_units),
+                             len(enemy_air_units)], dtype=np.float32)
 
-    @property
-    def num_dims(self):
-        return 4 * 2
+        scaled_features = features / 20
+        log_features = np.log10(features + 1)
+        gt1_features = (features >= 1).astype(np.float32)
+        gt10_features = (features >= 10).astype(np.float32)
+        gt20_features = (features >= 20).astype(np.float32)
+        return np.concatenate((scaled_features,
+                               log_features,
+                               gt1_features,
+                               gt10_features,
+                               gt20_features))
+
+    def _is_in_region(self, unit, region):
+        return (unit.float_attr.pos_x >= region[0] and
+                unit.float_attr.pos_x < region[2] and
+                unit.float_attr.pos_y >= region[1] and
+                unit.float_attr.pos_y < region[3])
 
 
 class GameProgressFeature(object):
 
     def features(self, observation):
         game_loop = observation["game_loop"][0]
+        features_60 = self._onehot(game_loop, 60)
         features_20 = self._onehot(game_loop, 20)
         features_8 = self._onehot(game_loop, 8)
-        features_5 = self._onehot(game_loop, 5)
-        return np.concatenate([features_20, features_8, features_5])
+        features_4 = self._onehot(game_loop, 4)
+
+        return np.concatenate([features_60,
+                               features_20,
+                               features_8,
+                               features_4])
 
     def _onehot(self, value, n_bins):
         bin_width = 24000 // n_bins
@@ -138,7 +179,7 @@ class GameProgressFeature(object):
 
     @property
     def num_dims(self):
-        return 20 + 8 + 5
+        return 60 + 20 + 8 + 4
 
 
 class ActionSeqFeature(object):

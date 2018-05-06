@@ -9,9 +9,11 @@ import random
 from envs.sc2_env import StarCraftIIEnv
 from envs.actions.zerg_action_wrappers import ZergActionWrapper
 from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
 from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.fast_dqn_agent import FastDQNAgent
-from agents.models.sc2_networks import SC2DuelingQNetV3
+from agents.models.sc2_networks import DuelingQNet
+from agents.models.sc2_networks import NonspatialDuelingQNet
 from utils.utils import print_arguments
 
 
@@ -46,6 +48,7 @@ flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
+flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
 flags.FLAGS(sys.argv)
 
 
@@ -65,7 +68,10 @@ def create_env():
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
-    env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
+    if FLAGS.use_spatial_features:
+        env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
+    else:
+        env = ZergNonspatialObservationWrapper(env)
     return env, difficulty
 
 
@@ -74,12 +80,17 @@ def train():
         os.makedirs(FLAGS.save_model_dir)
 
     env, _ = create_env()
-    network = SC2DuelingQNetV3(
-        resolution=env.observation_space.spaces[0].shape[1],
-        n_channels=env.observation_space.spaces[0].shape[0],
-        n_dims=env.observation_space.spaces[1].shape[0],
-        n_out=env.action_space.n,
-        batchnorm=FLAGS.use_batchnorm)
+    if FLAGS.use_spatial_features:
+        network = DuelingQNet(
+            resolution=env.observation_space.spaces[0].shape[1],
+            n_channels=env.observation_space.spaces[0].shape[0],
+            n_dims=env.observation_space.spaces[1].shape[0],
+            n_out=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
+    else:
+        network = NonspatialDuelingQNet(
+            n_dims=env.observation_space.shape[0],
+            n_out=env.action_space.n)
 
     agent = FastDQNAgent(
         observation_space=env.observation_space,

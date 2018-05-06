@@ -1,14 +1,14 @@
 import numpy as np
 
 from envs.common.const import ALLY_TYPE
+from envs.common.const import MAP
 
 
-class UnitType3DFeature(object):
+class UnitTypeCountMapFeature(object):
 
-    def __init__(self, type_map, resolution, world_size=(200.0, 176.0)):
+    def __init__(self, type_map, resolution):
         self._type_map = type_map
         self._resolution = resolution
-        self._world_size = world_size
 
     def features(self, observation):
         self_units = [u for u in observation['units']
@@ -27,22 +27,22 @@ class UnitType3DFeature(object):
         num_channels = max(self._type_map.values()) + 1
         features = np.zeros((num_channels, self._resolution, self._resolution),
                             dtype=np.float32)
-        grid_width = self._world_size[0] / self._resolution
-        grid_height = self._world_size[1] / self._resolution
+        grid_width = (MAP.WIDTH - MAP.LEFT - MAP.RIGHT) / self._resolution
+        grid_height = (MAP.HEIGHT - MAP.TOP - MAP.BOTTOM) / self._resolution
         for u in units:
             if u.unit_type in self._type_map:
                 c = self._type_map[u.unit_type]
-                x = u.float_attr.pos_x // grid_width
-                y = self._resolution - 1 - u.float_attr.pos_y // grid_height
+                x = (u.float_attr.pos_x - MAP.LEFT) // grid_width
+                y = self._resolution - 1 - \
+                    (u.float_attr.pos_y - MAP.BOTTOM) // grid_height
                 features[c, int(y), int(x)] += 1.0
         return features
 
 
-class PlayerRelative3DFeature(object):
+class AllianceCountMapFeature(object):
 
-    def __init__(self, resolution, world_size=(200.0, 176.0)):
+    def __init__(self, resolution):
         self._resolution = resolution
-        self._world_size = world_size
 
     def features(self, observation):
         self_units = [u for u in observation['units']
@@ -63,10 +63,11 @@ class PlayerRelative3DFeature(object):
     def _generate_features(self, units):
         features = np.zeros((1, self._resolution, self._resolution),
                              dtype=np.float32)
-        grid_width = self._world_size[0] / self._resolution
-        grid_height = self._world_size[1] / self._resolution
+        grid_width = (MAP.WIDTH - MAP.LEFT - MAP.RIGHT) / self._resolution
+        grid_height = (MAP.HEIGHT - MAP.TOP - MAP.BOTTOM) / self._resolution
         for u in units:
-            x = u.float_attr.pos_x // grid_width
-            y = self._resolution - 1 - u.float_attr.pos_y // grid_height
+            x = (u.float_attr.pos_x - MAP.LEFT) // grid_width
+            y = self._resolution - 1 - \
+                (u.float_attr.pos_y - MAP.BOTTOM) // grid_height
             features[0, int(y), int(x)] += 1.0
         return features
