@@ -14,6 +14,7 @@ from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.fast_dqn_agent import FastDQNAgent
 from agents.models.sc2_networks import DuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingQNet
+from agents.models.sc2_networks import NonspatialDuelingLinearQNet
 from utils.utils import print_arguments
 
 
@@ -49,6 +50,7 @@ flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
 flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
+flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
@@ -75,12 +77,9 @@ def create_env():
     return env, difficulty
 
 
-def train():
-    if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
-        os.makedirs(FLAGS.save_model_dir)
-
-    env, _ = create_env()
+def create_network(env):
     if FLAGS.use_spatial_features:
+        assert FLAGS.use_nonlinear_model
         network = DuelingQNet(
             resolution=env.observation_space.spaces[0].shape[1],
             n_channels=env.observation_space.spaces[0].shape[0],
@@ -88,9 +87,23 @@ def train():
             n_out=env.action_space.n,
             batchnorm=FLAGS.use_batchnorm)
     else:
-        network = NonspatialDuelingQNet(
-            n_dims=env.observation_space.shape[0],
-            n_out=env.action_space.n)
+        if FLAGS.use_nonlinear_model:
+            network = NonspatialDuelingQNet(
+                n_dims=env.observation_space.shape[0],
+                n_out=env.action_space.n)
+        else:
+            network = NonspatialDuelingLinearQNet(
+                n_dims=env.observation_space.shape[0],
+                n_out=env.action_space.n)
+    return network
+
+
+def train():
+    if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
+        os.makedirs(FLAGS.save_model_dir)
+
+    env, _ = create_env()
+    network = create_network(env)
 
     agent = FastDQNAgent(
         observation_space=env.observation_space,

@@ -2,7 +2,9 @@ import itertools
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from envs.common.const import ALLY_TYPE, PLAYER_FEATURE
+from envs.common.const import ALLY_TYPE
+from envs.common.const import PLAYER_FEATURE
+from envs.common.const import COMBAT_TYPES
 import envs.common.utils as utils
 
 
@@ -19,6 +21,7 @@ class DataContext(object):
         self._units = observation['units']
         self._player = observation['player']
         self._raw_data = observation['raw_data']
+        self._combat_units = self.units_of_types(COMBAT_TYPES)
 
     def reset(self, observation):
         self._existed_tags.clear()
@@ -43,16 +46,17 @@ class DataContext(object):
                 if len(u.orders) == 0]
 
     def units_of_types(self, type_list, ally=ALLY_TYPE.SELF.value):
-        return list(itertools.chain(
-            *[self.units_of_type(type_id, ally) for type_id in type_list]))
+        type_set = set(type_list)
+        return [u for u in self.units_of_alliance(ally)
+                if u.unit_type in type_set]
 
     def mature_units_of_types(self, type_list, ally=ALLY_TYPE.SELF.value):
-        return list(itertools.chain(
-            *[self.mature_units_of_type(type_id, ally) for type_id in type_list]))
+        return [u for u in self.units_of_types(type_list, ally)
+                if u.float_attr.build_progress >= 1.0]
 
     def idle_units_of_types(self, type_list, ally=ALLY_TYPE.SELF.value):
-        return list(itertools.chain(
-            *[self.idle_units_of_type(type_id, ally) for type_id in type_list]))
+        return [u for u in self.units_of_types(type_list, ally)
+                if len(u.orders) == 0]
 
     def units_with_task(self, ability_id, ally=ALLY_TYPE.SELF.value):
         return [u for u in self.units_of_alliance(ally)
@@ -64,6 +68,10 @@ class DataContext(object):
     @property
     def units(self):
         return self._units
+
+    @property
+    def combat_units(self):
+        return self._combat_units
 
     @property
     def minerals(self):

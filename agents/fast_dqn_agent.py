@@ -72,13 +72,10 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
                 return action_space.sample()
 
     episode_id = 0
-    env, difficulty = env_create_fn()
     while True:
         episode_id += 1
         cum_return = 0.0
-        if episode_id % 5 == 0:
-            env.close()
-            env, difficulty = env_create_fn()
+        env, difficulty = env_create_fn()
         observation = env.reset()
         done = False
         n_frames = 0
@@ -89,6 +86,7 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
             observation = next_observation
             cum_return += reward
             n_frames += 1
+        env.close()
         print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
               "Epsilon: %f Return: %f." %
               (pid, episode_id, n_frames, difficulty,
@@ -298,9 +296,11 @@ class FastDQNAgent(object):
         for process in self._actor_processes:
             process.daemon = True
             process.start()
+            time.sleep(3.0)
         for thread in self._batch_thread:
             thread.daemon = True
             thread.start()
+            time.sleep(0.2)
 
     def _prepare_batch(self, tid):
         memory = ReplayMemory(int(self._memory_size / self._num_threads))

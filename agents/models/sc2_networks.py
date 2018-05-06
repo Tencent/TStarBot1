@@ -81,8 +81,8 @@ class NonspatialDuelingQNet(nn.Module):
                  n_dims,
                  n_out):
         super(NonspatialDuelingQNet, self).__init__()
-        self.fc1 = nn.Linear(n_dims, 2048)
-        self.fc2 = nn.Linear(2048, 1024)
+        self.fc1 = nn.Linear(n_dims, 1024)
+        self.fc2 = nn.Linear(1024, 1024)
 
         self.value_fc1 = nn.Linear(1024, 1024)
         self.value_fc2 = nn.Linear(1024, 512)
@@ -106,5 +106,21 @@ class NonspatialDuelingQNet(nn.Module):
         adv = torch.cat((adv, x), 1)
         adv = self.adv_fc3(adv)
 
+        adv_subtract = adv - adv.mean(dim=1, keepdim=True)
+        return value + adv_subtract
+
+
+class NonspatialDuelingLinearQNet(nn.Module):
+
+    def __init__(self,
+                 n_dims,
+                 n_out):
+        super(NonspatialDuelingLinearQNet, self).__init__()
+        self.value_fc = nn.Linear(n_dims, 1)
+        self.adv_fc = nn.Linear(n_dims, n_out)
+
+    def forward(self, x):
+        value = self.value_fc(x)
+        adv = self.adv_fc(x)
         adv_subtract = adv - adv.mean(dim=1, keepdim=True)
         return value + adv_subtract
