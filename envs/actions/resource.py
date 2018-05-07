@@ -93,14 +93,20 @@ class ResourceActions(object):
         extractor = random.choice(idle_extractors)
         num_workers_need = extractor.int_attr.ideal_harvesters - \
             extractor.int_attr.assigned_harvesters
-        # TODO(@xinghai): random workers better?
-        workers = utils.closest_units(
-            extractor,
-            dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value),
-            num=num_workers_need)
+        extractor_tags = set(u.tag for u in dc.units_of_type(
+                             UNIT_TYPE.ZERG_EXTRACTOR.value))
+        workers = [
+            u for u in dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
+            if (len(u.orders) == 0 or
+                (u.orders[0].ability_id == \
+                    ABILITY.HARVEST_GATHER_DRONE.value and
+                 u.orders[0].target_tag not in extractor_tags))
+        ]
+        assigned_workers = utils.closest_units(
+            extractor, workers, num_workers_need)
         action = sc_pb.Action()
         action.action_raw.unit_command.unit_tags.extend(
-            [u.tag for u in workers])
+            [u.tag for u in assigned_workers])
         action.action_raw.unit_command.ability_id = \
             ABILITY.HARVEST_GATHER_DRONE.value
         action.action_raw.unit_command.target_unit_tag = extractor.tag
@@ -111,8 +117,17 @@ class ResourceActions(object):
             u for u in dc.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
             if u.int_attr.ideal_harvesters - u.int_attr.assigned_harvesters > 0
         ]
+        extractor_tags = set(u.tag for u in dc.units_of_type(
+                             UNIT_TYPE.ZERG_EXTRACTOR.value))
+        workers = [
+            u for u in dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
+            if (len(u.orders) == 0 or
+                (u.orders[0].ability_id == \
+                    ABILITY.HARVEST_GATHER_DRONE.value and
+                 u.orders[0].target_tag not in extractor_tags))
+        ]
         if (len(idle_extractors) > 0 and
-            len(dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)) > 0):
+            len(workers) > 0):
             return True
         else:
             return False

@@ -1,6 +1,8 @@
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.tech_tree import TechTree
 from pysc2.lib.unit_controls import Unit
+from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
+from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
 from envs.actions.function import Function
 from envs.actions.spatial_planner import SpatialPlanner
@@ -23,7 +25,21 @@ class BuildActions(object):
         def act(dc):
             tech = self._tech_tree.getUnitData(type_id)
             pos = self._spatial_planner.get_building_position(type_id, dc)
-            builder = utils.closest_unit(pos, dc.units_of_types(tech.whatBuilds))
+            extractor_tags = set(u.tag for u in dc.units_of_type(
+                                 UNIT_TYPE.ZERG_EXTRACTOR.value))
+            builders = dc.units_of_types(tech.whatBuilds)
+            prefered_builders = [
+                u for u in builders
+                if (u.unit_type != UNIT_TYPE.ZERG_DRONE.value or
+                    len(u.orders) == 0 or
+                    (u.orders[0].ability_id == \
+                        ABILITY.HARVEST_GATHER_DRONE.value and
+                     u.orders[0].target_tag not in extractor_tags))
+            ]
+            if len(prefered_builders) > 0:
+                builder = utils.closest_unit(pos, prefered_builders)
+            else:
+                builder = utils.closest_unit(pos, builders)
             action = sc_pb.Action()
             action.action_raw.unit_command.unit_tags.append(builder.tag)
             action.action_raw.unit_command.ability_id = tech.buildAbility
@@ -40,23 +56,22 @@ class BuildActions(object):
 
         def is_valid(dc):
             tech = self._tech_tree.getUnitData(type_id)
-            # TODO(@xinghai): check requiredUnits and requiredUpgrads
             has_required_units = any([len(dc.mature_units_of_type(u)) > 0
                                       for u in tech.requiredUnits]) \
                                  if len(tech.requiredUnits) > 0 else True
-            has_required_upgrades = any([t in dc.upgraded_techs
-                                         for t in tech.requiredUpgrades]) \
-                                    if len(tech.requiredUpgrades) > 0 else True
+            has_required_upgrades = all([t in dc.upgraded_techs
+                                         for t in tech.requiredUpgrades])
             current_num = len(dc.units_of_type(type_id)) + \
                 len(dc.units_with_task(tech.buildAbility))
             overquota = current_num >= MAXIMUM_NUM[type_id] \
                 if type_id in MAXIMUM_NUM else False
-            if (dc.mineral_count >= tech.mineralCost and
-                dc.gas_count >= tech.gasCost and
-                dc.supply_count >= tech.supplyCost and
-                has_required_units and
+
+            if (has_required_units and
                 has_required_upgrades and
                 not overquota and
+                dc.mineral_count >= tech.mineralCost and
+                dc.gas_count >= tech.gasCost and
+                dc.supply_count >= tech.supplyCost and
                 len(dc.units_of_types(tech.whatBuilds)) > 0 and
                 len(dc.units_with_task(tech.buildAbility)) == 0 and
                 self._spatial_planner.can_build(type_id, dc)):

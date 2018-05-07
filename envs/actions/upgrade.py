@@ -31,20 +31,19 @@ class UpgradeActions(object):
 
         def is_valid(dc):
             tech = self._tech_tree.getUpgradeData(upgrade_id)
-            # TODO(@xinghai): check requiredUnits and requiredUpgrads
             has_required_units = any([len(dc.mature_units_of_type(u)) > 0
                                       for u in tech.requiredUnits]) \
                                  if len(tech.requiredUnits) > 0 else True
-            has_required_upgrades = any([t in dc.upgraded_techs
-                                         for t in tech.requiredUpgrades]) \
-                                    if len(tech.requiredUpgrades) > 0 else True
-            if (upgrade_id not in dc.upgraded_techs and
+            has_required_upgrades = all([t in dc.upgraded_techs
+                                         for t in tech.requiredUpgrades])
+
+            if (has_required_units and
+                has_required_upgrades and
+                upgrade_id not in dc.upgraded_techs and
                 len(dc.units_with_task(tech.buildAbility)) == 0 and
                 dc.mineral_count >= tech.mineralCost and
                 dc.gas_count >= tech.gasCost and
                 dc.supply_count >= tech.supplyCost and
-                has_required_units and
-                has_required_upgrades and
                 len(dc.idle_units_of_types(tech.whatBuilds)) > 0):
                 return True
             else:

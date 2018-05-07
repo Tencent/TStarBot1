@@ -18,22 +18,6 @@ Region = namedtuple('Region', ('ranges', 'rally_point'))
 class CombatActions(object):
 
     def __init__(self):
-        self._combat_types = [
-            UNIT_TYPE.ZERG_ZERGLING.value,
-            UNIT_TYPE.ZERG_BANELING.value,
-            UNIT_TYPE.ZERG_ROACH.value,
-            UNIT_TYPE.ZERG_ROACHBURROWED.value,
-            UNIT_TYPE.ZERG_RAVAGER.value,
-            UNIT_TYPE.ZERG_HYDRALISK.value,
-            UNIT_TYPE.ZERG_LURKERMP.value,
-            UNIT_TYPE.ZERG_LURKERMPBURROWED.value,
-            UNIT_TYPE.ZERG_MUTALISK.value,
-            UNIT_TYPE.ZERG_CORRUPTOR.value,
-            UNIT_TYPE.ZERG_BROODLORD.value,
-            UNIT_TYPE.ZERG_LOCUSTMP.value,
-            UNIT_TYPE.ZERG_ULTRALISK.value,
-            UNIT_TYPE.ZERG_BROODLING.value
-        ]
         self._regions = [
             Region([(0, 0, 200, 176)], (100, 71.5)),
             Region([(0, 88, 80, 176)], (68, 108)),
@@ -82,7 +66,7 @@ class CombatActions(object):
     def _attack_region(self, combat_region_id, target_region_id):
 
         def act(dc):
-            combat_unit = [u for u in dc.units_of_types(self._combat_types)
+            combat_unit = [u for u in dc.combat_units
                            if self._is_in_region(u, combat_region_id)]
             self._set_attack_task(combat_unit, target_region_id)
             return []
@@ -92,16 +76,15 @@ class CombatActions(object):
     def _is_valid_attack_region(self, combat_region_id, target_region_id):
 
         def is_valid(dc):
-            combat_unit = [u for u in dc.units_of_types(self._combat_types)
+            combat_unit = [u for u in dc.combat_units
                            if self._is_in_region(u, combat_region_id)]
-            return len(combat_unit) >= 4
+            return len(combat_unit) >= 3
 
         return is_valid
 
 
     def _rally_new_combat_units(self, dc):
-        new_combat_units = [u for u in dc.units_of_types(self._combat_types)
-                            if dc.is_new_unit(u)]
+        new_combat_units = [u for u in dc.combat_units if dc.is_new_unit(u)]
         if dc.init_base_pos[0] < 100:
             self._set_attack_task(new_combat_units, 1)
         else:
@@ -109,8 +92,7 @@ class CombatActions(object):
         return []
 
     def _is_valid_rally_new_combat_units(self, dc):
-        new_combat_units = [u for u in dc.units_of_types(self._combat_types)
-                            if dc.is_new_unit(u)]
+        new_combat_units = [u for u in dc.combat_units if dc.is_new_unit(u)]
         if len(new_combat_units) > 0:
             return True
         else:
@@ -119,7 +101,7 @@ class CombatActions(object):
     def _framewise_rally_and_attack(self, dc):
         actions = []
         for region_id in range(len(self._regions)):
-            units_with_task = [u for u in dc.units_of_types(self._combat_types)
+            units_with_task = [u for u in dc.combat_units
                                if (u.tag in self._attack_tasks and
                                    self._attack_tasks[u.tag] == region_id)]
             if len(units_with_task) > 0:
