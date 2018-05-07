@@ -75,7 +75,9 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
     while True:
         episode_id += 1
         cum_return = 0.0
-        env, difficulty = env_create_fn()
+        random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
+        print("Random Seed: %d" % random_seed)
+        env, difficulty = env_create_fn(random_seed)
         observation = env.reset()
         done = False
         n_frames = 0
@@ -149,7 +151,7 @@ class FastDQNAgent(object):
         self._print_freq = print_freq
         self._episode_idx = 0
         self._current_eps = multiprocessing.Value('d', eps_start)
-        self._num_threads = 8
+        self._num_threads = 4
 
         self._q_network = network
         self._q_network.share_memory()

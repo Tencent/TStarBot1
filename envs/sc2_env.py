@@ -18,7 +18,8 @@ class StarCraftIIEnv(gym.Env):
                  difficulty=None,
                  game_steps_per_episode=0,
                  score_index=None,
-                 visualize_feature_map=False):
+                 visualize_feature_map=False,
+                 random_seed=None):
         self._resolution = resolution
         self._sc2_env = pysc2.env.sc2_env.SC2Env(
             map_name=map_name,
@@ -31,7 +32,8 @@ class StarCraftIIEnv(gym.Env):
             screen_size_px=(resolution, resolution),
             minimap_size_px=(resolution, resolution),
             visualize=visualize_feature_map,
-            score_index=score_index)
+            score_index=score_index,
+            random_seed=random_seed)
         self.observation_space = PySC2RawObservation(
             self._sc2_env.observation_spec)
         self.action_space = None
