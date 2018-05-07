@@ -23,15 +23,15 @@ from utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_parallels", 4, "Parallel number.")
 flags.DEFINE_integer("num_episodes", 50, "Number of episodes to evaluate.")
-flags.DEFINE_float("epsilon", 0.05, "Epsilon for policy.")
+flags.DEFINE_float("epsilon", 0.01, "Epsilon for policy.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
-flags.DEFINE_enum("difficulty", '2',
+flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("agent", 'dqn', ['dqn', 'random', 'keyboard'], "Algorithm.")
+flags.DEFINE_enum("agent", 'random', ['dqn', 'random', 'keyboard'], "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
-flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
+flags.DEFINE_boolean("render", False, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
@@ -69,7 +69,7 @@ def print_actions(env):
 
 
 def train(pid):
-    env = create_env()
+    env = create_env(0)
     print_actions(env)
 
     if FLAGS.agent == 'dqn':
@@ -117,9 +117,8 @@ def train(pid):
     try:
         cum_return = 0.0
         for i in range(FLAGS.num_episodes):
-            if (i + 1) % 5 == 0:
-                env.close()
-                env = create_env()
+            random_seed =  (pid * 1e7 + int(time.time() * 1000)) & 0xFFFFFFFF
+            env = create_env(random_seed)
             observation = env.reset()
             done = False
             while not done:
@@ -131,6 +130,7 @@ def train(pid):
                   "Avg Winning Rate %f" %
                   (pid, i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
+            env.close()
     except KeyboardInterrupt:
         pass
     except:

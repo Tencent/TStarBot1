@@ -75,7 +75,8 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
     while True:
         episode_id += 1
         cum_return = 0.0
-        env, difficulty = env_create_fn()
+        random_seed =  (pid * 1e7 + int(time.time() * 1000)) & 0xFFFFFFFF
+        env, difficulty = env_create_fn(random_seed)
         observation = env.reset()
         done = False
         n_frames = 0

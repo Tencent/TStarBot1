@@ -23,9 +23,9 @@ from utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
-flags.DEFINE_float("epsilon", 0.05, "Epsilon for policy.")
+flags.DEFINE_float("epsilon", 0.01, "Epsilon for policy.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
-flags.DEFINE_enum("difficulty", '2',
+flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
@@ -39,7 +39,7 @@ flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
 flags.FLAGS(sys.argv)
 
 
-def create_env():
+def create_env(random_seed):
     env = StarCraftIIEnv(
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
@@ -50,7 +50,8 @@ def create_env():
         difficulty=FLAGS.difficulty,
         game_steps_per_episode=0,
         visualize_feature_map=FLAGS.render,
-        score_index=None)
+        score_index=None,
+        random_seed=random_seed)
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
@@ -77,7 +78,7 @@ def print_action_distribution(env, action_counts):
 
 
 def train():
-    env = create_env()
+    env = create_env(int(time.time()))
     print_actions(env)
 
     if FLAGS.agent == 'dqn':

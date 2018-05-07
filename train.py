@@ -20,19 +20,19 @@ from utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
-flags.DEFINE_integer("num_actor_workers", 16, "Game steps per agent step.")
+flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulty", '4', "Bot's strengths.")
-flags.DEFINE_integer("memory_size", 250000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 100000, "Experience replay init size.")
+flags.DEFINE_integer("memory_size", 1000000, "Experience replay size.")
+flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 5000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay", 10000000, "Greedy epsilon decay step.")
 flags.DEFINE_integer("eps_decay2", 30000000, "Greedy epsilon decay step.")
 flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam', 'sgd'],
                   "Optimizer.")
-flags.DEFINE_float("learning_rate", 3e-7, "Learning rate.")
+flags.DEFINE_float("learning_rate", 1e-7, "Learning rate.")
 flags.DEFINE_float("momentum", 0.9, "Momentum.")
 flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
 flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
@@ -44,7 +44,7 @@ flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
-flags.DEFINE_integer("print_freq", 5000, "Print train cost frequency.")
+flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
@@ -54,7 +54,7 @@ flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
-def create_env():
+def create_env(random_seed):
     difficulty = random.choice(FLAGS.difficulty.split(','))
     env = StarCraftIIEnv(
         map_name='AbyssalReef',
@@ -66,7 +66,8 @@ def create_env():
         disable_fog=FLAGS.disable_fog,
         game_steps_per_episode=0,
         visualize_feature_map=False,
-        score_index=None)
+        score_index=None,
+        random_seed=random_seed)
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
     env = ZergActionWrapper(env)
@@ -102,7 +103,7 @@ def train():
     if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
         os.makedirs(FLAGS.save_model_dir)
 
-    env, _ = create_env()
+    env, _ = create_env(0)
     network = create_network(env)
 
     agent = FastDQNAgent(
