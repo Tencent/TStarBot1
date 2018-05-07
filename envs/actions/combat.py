@@ -78,7 +78,7 @@ class CombatActions(object):
         def is_valid(dc):
             combat_unit = [u for u in dc.combat_units
                            if self._is_in_region(u, combat_region_id)]
-            return len(combat_unit) >= 4
+            return len(combat_unit) >= 3
 
         return is_valid
 

@@ -134,7 +134,7 @@ def train():
                 print("Step ID: %d	Take Action: %d	Available Mask: %s" %
                       (step_id, action, observation[-1]))
                 observation, reward, done, _ = env.step(action)
-                print(observation[0].shape, observation[1].shape)
+                #print(observation[0].shape, observation[1].shape)
                 action_counts[action] += 1
                 #time.sleep(20)
                 #time.sleep(0.3)

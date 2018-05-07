@@ -106,6 +106,26 @@ class ZergActionWrapper(gym.Wrapper):
             for target_region_id in range(self._combat_mgr.num_regions)
         ]
 
+        self._actions = [
+            self._action_do_nothing(),
+            #self._produce_mgr.action("produce_drone", UNIT_TYPE.ZERG_DRONE.value),
+            #self._build_mgr.action("build_extractor", UNIT_TYPE.ZERG_EXTRACTOR.value),
+            #self._build_mgr.action("build_spawning_pool", UNIT_TYPE.ZERG_SPAWNINGPOOL.value),
+            self._build_mgr.action("build_hatchery", UNIT_TYPE.ZERG_HATCHERY.value),
+            #self._build_mgr.action("build_roach_warren", UNIT_TYPE.ZERG_ROACHWARREN.value),
+            #self._build_mgr.action("build_hydraliskden", UNIT_TYPE.ZERG_HYDRALISKDEN.value),
+            #self._build_mgr.action("build_evolution_chamber", UNIT_TYPE.ZERG_EVOLUTIONCHAMBER.value),
+            #self._build_mgr.action("build_baneling_nest", UNIT_TYPE.ZERG_BANELINGNEST.value),
+            #self._build_mgr.action("build_infestation_pit", UNIT_TYPE.ZERG_INFESTATIONPIT.value),
+            #self._build_mgr.action("build_spire", UNIT_TYPE.ZERG_SPIRE.value),
+            #self._build_mgr.action("build_ultralisk_cavern", UNIT_TYPE.ZERG_ULTRALISKCAVERN.value),
+            #self._build_mgr.action("build_nydus_network", UNIT_TYPE.ZERG_NYDUSNETWORK.value),
+            #self._build_mgr.action("build_spine_crawler", UNIT_TYPE.ZERG_SPINECRAWLER.value),
+            #self._build_mgr.action("build_spore_crawler", UNIT_TYPE.ZERG_SPORECRAWLER.value),
+            #self._build_mgr.action("build_lurker_den", UNIT_TYPE.ZERG_LURKERDENMP.value),
+            self._resource_mgr.action_some_workers_gather_gas,
+        ]
+
         self._required_pre_actions = [self._resource_mgr.action_idle_workers_gather_minerals,
                                       self._resource_mgr.action_queens_inject_larva]
         self._required_post_actions = [self._combat_mgr.action_rally_new_combat_units,

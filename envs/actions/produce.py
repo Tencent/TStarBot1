@@ -41,7 +41,6 @@ class ProduceActions(object):
                 len(dc.units_with_task(tech.buildAbility))
             overquota = current_num >= MAXIMUM_NUM[type_id] \
                 if type_id in MAXIMUM_NUM else False
-
             if (has_required_units and
                 has_required_upgrades and
                 not overquota and

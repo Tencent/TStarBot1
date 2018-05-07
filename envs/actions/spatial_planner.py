@@ -98,8 +98,8 @@ class SpatialPlanner(object):
                     y_sqrt = (y + 0.5 - cy) ** 2
                     if x_sqrt + y_sqrt > r_sqrt:
                         grids[x, y] = 1
-        filter_range = (bottomleft[0] - 150, bottomleft[0] + size[0] + 150,
-                        bottomleft[1] - 150, bottomleft[1] + size[1] + 150)
+        filter_range = (bottomleft[0] - 10, bottomleft[0] + size[0] + 10,
+                        bottomleft[1] - 10, bottomleft[1] + size[1] + 10)
         sitted_units = [u for u in dc.units
                         if (u.unit_type in AREA_COLLISION_BUILDINGS and
                             u.float_attr.pos_x >= filter_range[0] and
@@ -111,28 +111,18 @@ class SpatialPlanner(object):
         margin_int = math.floor(margin)
         for u in sitted_units:
             if u.float_attr.radius <= 1.0:
-                if u.float_attr.pos_x % 1 == 0: r_x = 1
-                else: r_x = 0.5
-                if u.float_attr.pos_y % 1 == 0: r_y = 1
-                else: r_y = 0.5
-            elif u.float_attr.radius < 2.0:
-                if u.float_attr.pos_x % 1 == 0: r_x = 1
-                else: r_x = 1.5
-                if u.float_attr.pos_y % 1 == 0: r_y = 1
-                else: r_y = 1.5
-            elif u.float_attr.radius < 3.0:
-                if u.float_attr.pos_x % 1 == 0: r_x = 2
-                else: r_x = 2.5
-                if u.float_attr.pos_y % 1 == 0: r_y = 2
-                else: r_y = 2.5
-            else: raise NotImplementedError
+                r_x = r_y = 1.0
+                if u.float_attr.pos_x % 1 != 0: r_x -= 0.5
+                if u.float_attr.pos_y % 1 != 0: r_y -= 0.5
+            else:
+                r_x = r_y = float(int(u.float_attr.radius))
+                if u.float_attr.pos_x % 1 != 0: r_x += 0.5
+                if u.float_attr.pos_y % 1 != 0: r_y += 0.5
             if (shrink_mineral and
                 u.unit_type in {UNIT_TYPE.NEUTRAL_MINERALFIELD.value,
                                 UNIT_TYPE.NEUTRAL_MINERALFIELD750.value}):
-                if r_x == 1.5 and r_y == 1:
-                    r_x = 0.5
-                elif r_x == 1 and r_y == 1.5:
-                    r_y = 0.5
+                if r_x == 1.5 and r_y == 1: r_x = 0.5
+                elif r_x == 1 and r_y == 1.5: r_y = 0.5
             if (expand_mineral and
                 u.unit_type in {UNIT_TYPE.NEUTRAL_MINERALFIELD.value,
                                 UNIT_TYPE.NEUTRAL_MINERALFIELD750.value}):
@@ -144,6 +134,18 @@ class SpatialPlanner(object):
             xr = int(u.float_attr.pos_x + r_x - bottomleft[0])
             yu = int(u.float_attr.pos_y - r_y - bottomleft[1])
             yd = int(u.float_attr.pos_y + r_y - bottomleft[1])
+            grids[max(xl, 0) : max(min(xr, size[0]), 0),
+                  max(yu, 0) : max(min(yd, size[1]), 0)] = 1
+
+        slopes = [(76.5, 90.5), (73.5, 86.5), (123.5, 52.5), (126.5, 56.5),
+                  (131.5, 36.5), (68.5, 106.5)]
+        holes = [(124.5, 34.5), (76.5, 108.5), (154.5, 60.5), (45.5, 82.5)]
+        r = 2.5
+        for x, y in slopes + holes:
+            xl = int(x - r  - bottomleft[0])
+            xr = int(x + r - bottomleft[0])
+            yu = int(y - r - bottomleft[1])
+            yd = int(y + r - bottomleft[1])
             grids[max(xl, 0) : max(min(xr, size[0]), 0),
                   max(yu, 0) : max(min(yd, size[1]), 0)] = 1
         x, y = np.nonzero(1 - grids)
