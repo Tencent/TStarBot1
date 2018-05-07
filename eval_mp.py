@@ -117,7 +117,7 @@ def train(pid):
     try:
         cum_return = 0.0
         for i in range(FLAGS.num_episodes):
-            random_seed =  (pid * 1e7 + int(time.time() * 1000)) & 0xFFFFFFFF
+            random_seed =  int(time.time() * 1000) & 0xFFFFFFFF
             env = create_env(random_seed)
             observation = env.reset()
             done = False
