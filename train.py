@@ -21,7 +21,8 @@ from utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
-flags.DEFINE_string("difficulty", '4', "Bot's strengths.")
+flags.DEFINE_string("difficulty", '2,4,6,9,A', "Bot's strengths.")
+flags.DEFINE_float("winning_rate_threshold", 0.8, "Winning rate threshold.")
 flags.DEFINE_integer("memory_size", 125000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 125000, "Experience replay init size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
@@ -54,8 +55,7 @@ flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
-def create_env(random_seed=None):
-    difficulty = random.choice(FLAGS.difficulty.split(','))
+def create_env(difficulty, random_seed=None):
     env = StarCraftIIEnv(
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
@@ -75,7 +75,7 @@ def create_env(random_seed=None):
         env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     else:
         env = ZergNonspatialObservationWrapper(env)
-    return env, difficulty
+    return env
 
 
 def create_network(env):
@@ -103,7 +103,7 @@ def train():
     if FLAGS.save_model_dir and not os.path.exists(FLAGS.save_model_dir):
         os.makedirs(FLAGS.save_model_dir)
 
-    env, _ = create_env(0)
+    env = create_env('1', 0)
     network = create_network(env)
 
     agent = FastDQNAgent(
@@ -127,6 +127,8 @@ def train():
         gradient_clipping=FLAGS.gradient_clipping,
         double_dqn=True,
         target_update_freq=FLAGS.target_update_freq,
+        winning_rate_threshold=FLAGS.winning_rate_threshold,
+        difficulties=FLAGS.difficulty.strip().split(','),
         allow_eval_mode=True,
         loss_type=FLAGS.loss_type,
         init_model_path=FLAGS.init_model_path,

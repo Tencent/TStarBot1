@@ -8,6 +8,7 @@ from copy import deepcopy
 import queue
 import threading
 import multiprocessing
+from collections import deque
 
 import torch
 import torch.nn as nn
@@ -35,8 +36,9 @@ def tuple_variable(tensors, volatile=False):
         return Variable(tensors, volatile=volatile)
 
 
-def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
-                 allow_eval_mode, out_queue):
+def actor_worker(pid, env_create_fn, q_network, difficulties,
+                 current_eps, cur_difficulty_idx, action_space,
+                 allow_eval_mode, transition_queue, outcome_queue):
 
     def preprocess_observation(observation):
         action_mask = None
@@ -77,22 +79,25 @@ def actor_worker(pid, env_create_fn, q_network, current_eps, action_space,
         cum_return = 0.0
         random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
         print("Random Seed: %d" % random_seed)
-        env, difficulty = env_create_fn(random_seed)
+        cur_difficulty = difficulties[cur_difficulty_idx.value]
+        env = env_create_fn(cur_difficulty, random_seed)
         observation = env.reset()
         done = False
         n_frames = 0
         while not done:
             action = act(observation, eps=current_eps.value)
             next_observation, reward, done, _ = env.step(action)
-            out_queue.put((observation, action, reward, next_observation, done))
+            transition_queue.put(
+                (observation, action, reward, next_observation, done))
             observation = next_observation
             cum_return += reward
             n_frames += 1
+        outcome_queue.put(cum_return)
         env.close()
         print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
               "Epsilon: %f Return: %f." %
-              (pid, episode_id, n_frames, difficulty,
-               current_eps.value, cum_return))
+              (pid, episode_id, n_frames, cur_difficulty, current_eps.value,
+               cum_return))
         sys.stdout.flush()
 
 
@@ -120,6 +125,8 @@ class FastDQNAgent(object):
                  gradient_clipping,
                  double_dqn,
                  target_update_freq,
+                 winning_rate_threshold,
+                 difficulties,
                  allow_eval_mode=True,
                  loss_type='mse',
                  init_model_path=None,
@@ -152,6 +159,11 @@ class FastDQNAgent(object):
         self._episode_idx = 0
         self._current_eps = multiprocessing.Value('d', eps_start)
         self._num_threads = 4
+
+        self._winning_rate_threshold = winning_rate_threshold
+        self._difficulties = difficulties
+        self._cur_difficulty_idx = multiprocessing.Value('i', 0)
+        self._recent_outcomes = deque(maxlen=1000)
 
         self._q_network = network
         self._q_network.share_memory()
@@ -219,6 +231,7 @@ class FastDQNAgent(object):
             if steps % self._target_update_freq == 0:
                 self._update_target_network()
             self._current_eps.value = self._get_current_eps(steps)
+            self._update_curriculum_difficulty()
             loss_sum += self._optimize()
             steps += 1
             if self._save_model_dir and steps % self._save_model_freq == 0:
@@ -284,12 +297,14 @@ class FastDQNAgent(object):
 
     def _init_parallel_actors(self, create_env_fn, num_actor_workers):
         self._transition_queue = multiprocessing.Queue(8)
+        self._outcome_queue = multiprocessing.Queue(128)
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,
-                args=(pid, create_env_fn, self._q_network, self._current_eps,
+                args=(pid, create_env_fn, self._q_network, self._difficulties,
+                      self._current_eps, self._cur_difficulty_idx,
                       self._action_space, self._allow_eval_mode,
-                      self._transition_queue))
+                      self._transition_queue, self._outcome_queue))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch,
@@ -303,6 +318,23 @@ class FastDQNAgent(object):
             thread.daemon = True
             thread.start()
             time.sleep(0.2)
+
+    def _update_curriculum_difficulty(self):
+        has_new_outcome = False
+        while not self._outcome_queue.empty():
+            self._recent_outcomes.append(self._outcome_queue.get())
+            has_new_outcome = True
+        if (has_new_outcome and
+            len(self._recent_outcomes) == self._recent_outcomes.maxlen):
+            winning_rate = (float(sum(self._recent_outcomes)) / \
+                len(self._recent_outcomes) + 1.0) / 2.0
+            print("Difficulty: %s Winning_rate %f:" %
+                  (self._difficulties[self._cur_difficulty_idx.value],
+                   winning_rate))
+            if (winning_rate >= self._winning_rate_threshold and
+                len(self._difficulties) > self._cur_difficulty_idx.value + 1):
+                self._cur_difficulty_idx.value += 1
+                self._recent_outcomes.clear()
 
     def _prepare_batch(self, tid):
         memory = ReplayMemory(int(self._memory_size / self._num_threads))
