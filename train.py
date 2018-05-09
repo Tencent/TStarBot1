@@ -28,14 +28,14 @@ flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 10000000, "Greedy epsilon decay step.")
-flags.DEFINE_integer("eps_decay2", 30000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay", 20000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay2", 10000000000000, "Greedy epsilon decay step.")
 flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam', 'sgd'],
                   "Optimizer.")
 flags.DEFINE_float("learning_rate", 1e-7, "Learning rate.")
 flags.DEFINE_float("momentum", 0.9, "Momentum.")
 flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
-flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
+flags.DEFINE_float("gradient_clipping", 100.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 0.5, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_float("discount", 0.995, "Discount.")
@@ -54,7 +54,7 @@ flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
-def create_env(random_seed):
+def create_env(random_seed=None):
     difficulty = random.choice(FLAGS.difficulty.split(','))
     env = StarCraftIIEnv(
         map_name='AbyssalReef',

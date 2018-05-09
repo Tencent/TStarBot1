@@ -55,7 +55,7 @@ class DataContext(object):
                 if u.float_attr.build_progress >= 1.0]
 
     def idle_units_of_types(self, type_list, ally=ALLY_TYPE.SELF.value):
-        return [u for u in self.units_of_types(type_list, ally)
+        return [u for u in self.mature_units_of_types(type_list, ally)
                 if len(u.orders) == 0]
 
     def units_with_task(self, ability_id, ally=ALLY_TYPE.SELF.value):
