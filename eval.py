@@ -18,6 +18,7 @@ from agents.keyboard_agent import KeyboardAgent
 from agents.fast_dqn_agent import FastDQNAgent
 from agents.models.sc2_networks import DuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingQNet
+from agents.models.sc2_networks import NonspatialDuelingLinearQNet
 from utils.utils import print_arguments
 
 
@@ -36,10 +37,11 @@ flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
 flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
+flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
-def create_env(random_seed):
+def create_env(random_seed=None):
     env = StarCraftIIEnv(
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
@@ -62,6 +64,27 @@ def create_env(random_seed):
     return env
 
 
+def create_network(env):
+    if FLAGS.use_spatial_features:
+        assert FLAGS.use_nonlinear_model
+        network = DuelingQNet(
+            resolution=env.observation_space.spaces[0].shape[1],
+            n_channels=env.observation_space.spaces[0].shape[0],
+            n_dims=env.observation_space.spaces[1].shape[0],
+            n_out=env.action_space.n,
+            batchnorm=FLAGS.use_batchnorm)
+    else:
+        if FLAGS.use_nonlinear_model:
+            network = NonspatialDuelingQNet(
+                n_dims=env.observation_space.shape[0],
+                n_out=env.action_space.n)
+        else:
+            network = NonspatialDuelingLinearQNet(
+                n_dims=env.observation_space.shape[0],
+                n_out=env.action_space.n)
+    return network
+
+
 def print_actions(env):
     print("----------------------------- Actions -----------------------------")
     for action_id, action_name in enumerate(env.action_names):
@@ -82,18 +105,7 @@ def train():
     print_actions(env)
 
     if FLAGS.agent == 'dqn':
-        if FLAGS.use_spatial_features:
-            network = DuelingQNet(
-                resolution=env.observation_space.spaces[0].shape[1],
-                n_channels=env.observation_space.spaces[0].shape[0],
-                n_dims=env.observation_space.spaces[1].shape[0],
-                n_out=env.action_space.n,
-                batchnorm=FLAGS.use_batchnorm)
-        else:
-            network = NonspatialDuelingQNet(
-                n_dims=env.observation_space.shape[0],
-                n_out=env.action_space.n)
-
+        network = create_network(env)
         agent = FastDQNAgent(
             observation_space=env.observation_space,
             action_space=env.action_space,
