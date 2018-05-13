@@ -101,9 +101,10 @@ class ZergActionWrapper(gym.Wrapper):
             #self._combat_mgr.action_all_attack_30, # deprecated
             #self._combat_mgr.action_all_attack_20 # deprecated
         ] + [
-            self._combat_mgr.action(units_region_id, target_region_id)
-            for units_region_id in range(self._combat_mgr.num_regions)
-            for target_region_id in range(self._combat_mgr.num_regions)
+            self._combat_mgr.action(0, 0)
+            #self._combat_mgr.action(units_region_id, target_region_id)
+            #for units_region_id in range(self._combat_mgr.num_regions)
+            #for target_region_id in range(self._combat_mgr.num_regions)
         ]
 
         self._required_pre_actions = [self._resource_mgr.action_idle_workers_gather_minerals,

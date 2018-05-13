@@ -131,7 +131,7 @@ COMBAT_TYPES = {
 class MAP(object):
     WIDTH = 200.0
     HEIGHT = 176.0
-    LEFT = 25.0
-    RIGHT = 25.0
-    TOP = 38.0
-    BOTTOM = 5.0
+    LEFT = 24.0
+    RIGHT = 24.0
+    TOP = 37.0
+    BOTTOM = 4.0

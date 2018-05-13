@@ -36,8 +36,8 @@ flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
-flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
-flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
+flags.DEFINE_boolean("use_spatial_features", True, "Use spatial features.")
+flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
