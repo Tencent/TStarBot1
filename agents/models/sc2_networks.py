@@ -81,30 +81,26 @@ class NonspatialDuelingQNet(nn.Module):
                  n_dims,
                  n_out):
         super(NonspatialDuelingQNet, self).__init__()
-        self.fc1 = nn.Linear(n_dims, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
+        self.value_fc1 = nn.Linear(n_dims, 512)
+        self.value_fc2 = nn.Linear(512, 512)
+        self.value_fc3 = nn.Linear(512, 256)
+        self.value_fc4 = nn.Linear(256, 1)
 
-        self.value_fc1 = nn.Linear(1024, 1024)
-        self.value_fc2 = nn.Linear(1024, 512)
-        self.value_fc3 = nn.Linear(512 + n_dims, 1)
-
-        self.adv_fc1 = nn.Linear(1024, 1024)
-        self.adv_fc2 = nn.Linear(1024, 512)
-        self.adv_fc3 = nn.Linear(512 + n_dims, n_out)
+        self.adv_fc1 = nn.Linear(n_dims, 512)
+        self.adv_fc2 = nn.Linear(512, 512)
+        self.adv_fc3 = nn.Linear(512, 256)
+        self.adv_fc4 = nn.Linear(256, n_out)
 
     def forward(self, x):
-        s = F.relu(self.fc1(x))
-        s = F.relu(self.fc2(s))
-
-        value = F.relu(self.value_fc1(s))
+        value = F.relu(self.value_fc1(x))
         value = F.relu(self.value_fc2(value))
-        value = torch.cat((value, x), 1)
-        value = self.value_fc3(value)
+        value = F.relu(self.value_fc3(value))
+        value = self.value_fc4(value)
 
-        adv = F.relu(self.adv_fc1(s))
+        adv = F.relu(self.adv_fc1(x))
         adv = F.relu(self.adv_fc2(adv))
-        adv = torch.cat((adv, x), 1)
-        adv = self.adv_fc3(adv)
+        adv = F.relu(self.adv_fc3(adv))
+        adv = self.adv_fc4(adv)
 
         adv_subtract = adv - adv.mean(dim=1, keepdim=True)
         return value + adv_subtract
