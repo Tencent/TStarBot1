@@ -276,7 +276,7 @@ class MCAgent(object):
 
     def _init_parallel_actors(self, create_env_fn, num_actor_workers):
         self._transition_queue = multiprocessing.Queue(128)
-        self._outcome_queue = multiprocessing.Queue(128)
+        self._outcome_queue = multiprocessing.Queue(2000)
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,
@@ -351,6 +351,7 @@ class MCAgent(object):
                           for feat in zip(*obs_batch))
         action_batch = torch.LongTensor(action_batch)
         value_batch = torch.FloatTensor(value_batch)
+        value_batch = value_batch.unsqueeze(1)
 
         # move to cuda
         if torch.cuda.is_available():
