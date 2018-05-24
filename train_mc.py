@@ -46,6 +46,7 @@ flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
+flags.DEFINE_boolean("use_curriculum", True, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
@@ -137,7 +138,9 @@ def train():
         print_freq=FLAGS.print_freq)
 
     try:
-        agent.learn(create_env, FLAGS.num_actor_workers)
+        agent.learn(create_env,
+                    FLAGS.num_actor_workers,
+                    FLAGS.use_curriculum)
     except KeyboardInterrupt:
         pass
     except:

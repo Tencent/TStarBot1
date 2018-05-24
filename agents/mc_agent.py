@@ -38,7 +38,8 @@ def tuple_variable(tensors, volatile=False):
 
 def actor_worker(pid, env_create_fn, q_network, difficulties, discount,
                  current_eps, cur_difficulty_idx, action_space,
-                 allow_eval_mode, transition_queue, outcome_queue):
+                 allow_eval_mode, transition_queue, outcome_queue,
+                 use_curriculum):
 
     def preprocess_observation(observation):
         action_mask = None
@@ -79,7 +80,10 @@ def actor_worker(pid, env_create_fn, q_network, difficulties, discount,
         cum_return = 0.0
         random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
         print("Random Seed: %d" % random_seed)
-        cur_difficulty = difficulties[cur_difficulty_idx.value]
+        if use_curriculum:
+            cur_difficulty = difficulties[cur_difficulty_idx.value]
+        else:
+            cur_difficulty = random.choice(difficulties)
         env = env_create_fn(cur_difficulty, random_seed)
         observation = env.reset()
         done = False
@@ -225,8 +229,9 @@ class MCAgent(object):
             else:
                 return self._action_space.sample()
 
-    def learn(self, create_env_fn, num_actor_workers):
-        self._init_parallel_actors(create_env_fn, num_actor_workers)
+    def learn(self, create_env_fn, num_actor_workers, use_curriculum):
+        self._init_parallel_actors(
+            create_env_fn, num_actor_workers, use_curriculum)
         steps, loss_sum = 0, 0.0
         t = time.time()
         while True:
@@ -274,9 +279,10 @@ class MCAgent(object):
         self._optimizer.step()
         return loss.data[0]
 
-    def _init_parallel_actors(self, create_env_fn, num_actor_workers):
+    def _init_parallel_actors(self, create_env_fn, num_actor_workers,
+                              use_curriculum):
         self._transition_queue = multiprocessing.Queue(128)
-        self._outcome_queue = multiprocessing.Queue(2000)
+        self._outcome_queue = multiprocessing.Queue(200000)
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,
@@ -290,7 +296,8 @@ class MCAgent(object):
                       self._action_space,
                       self._allow_eval_mode,
                       self._transition_queue,
-                      self._outcome_queue))
+                      self._outcome_queue,
+                      use_curriculum))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [

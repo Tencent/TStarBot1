@@ -15,7 +15,8 @@ class PlayerFeature(object):
         log_features = np.log10(player_features + 1).astype(np.float32)
 
         bins_food_unused = np.zeros(10, dtype=np.float32)
-        bin_id = int((food_unused - 1) // 3 + 1) if food_unused <= 27 else 9
+        bin_id = int((max(food_unused, 0) - 1) // 3 + 1) \
+            if food_unused <= 27 else 9
         bins_food_unused[bin_id] = 1
         return np.concatenate((scaled_features, log_features, bins_food_unused))
 

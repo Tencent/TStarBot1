@@ -22,15 +22,15 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulty", '2,4,6,9,A', "Bot's strengths.")
-flags.DEFINE_float("winning_rate_threshold", 0.8, "Winning rate threshold.")
-flags.DEFINE_integer("memory_size", 125000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 125000, "Experience replay init size.")
+flags.DEFINE_float("winning_rate_threshold", 0.65, "Winning rate threshold.")
+flags.DEFINE_integer("memory_size", 5000000, "Experience replay size.")
+flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
-flags.DEFINE_integer("eps_decay2", 10000000000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay2", 50000000, "Greedy epsilon decay step.")
 flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam', 'sgd'],
                   "Optimizer.")
 flags.DEFINE_float("learning_rate", 3e-7, "Learning rate.")
@@ -46,11 +46,12 @@ flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
+flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
-flags.DEFINE_boolean("use_spatial_features", True, "Use spatial features.")
+flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
 flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
@@ -137,7 +138,9 @@ def train():
         print_freq=FLAGS.print_freq)
 
     try:
-        agent.learn(create_env, FLAGS.num_actor_workers)
+        agent.learn(create_env,
+                    FLAGS.num_actor_workers,
+                    FLAGS.use_curriculum)
     except KeyboardInterrupt:
         pass
     except:
