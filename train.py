@@ -21,7 +21,7 @@ from utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
-flags.DEFINE_string("difficulty", '2,4,6,9,A', "Bot's strengths.")
+flags.DEFINE_string("difficulty", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("winning_rate_threshold", 0.65, "Winning rate threshold.")
 flags.DEFINE_integer("memory_size", 5000000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
@@ -40,6 +40,8 @@ flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_float("discount", 0.995, "Discount.")
+flags.DEFINE_float("mmc_discount", 0.995, "Discount.")
+flags.DEFINE_float("mmc_beta", 0.9, "Discount.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
@@ -49,7 +51,7 @@ flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
 flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
-flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
+flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
 flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
 flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
@@ -130,6 +132,8 @@ def train():
         target_update_freq=FLAGS.target_update_freq,
         winning_rate_threshold=FLAGS.winning_rate_threshold,
         difficulties=FLAGS.difficulty.strip().split(','),
+        mmc_beta=FLAGS.mmc_beta,
+        mmc_discount=FLAGS.mmc_discount,
         allow_eval_mode=True,
         loss_type=FLAGS.loss_type,
         init_model_path=FLAGS.init_model_path,

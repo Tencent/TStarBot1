@@ -12,23 +12,24 @@ from envs.common.const import ATTACK_FORCE
 from envs.common.const import ALLY_TYPE
 
 
-Region = namedtuple('Region', ('ranges', 'rally_point'))
+Region = namedtuple('Region', ('ranges', 'rally_point_0', 'rally_point_1'))
 
 
 class CombatActions(object):
 
     def __init__(self):
         self._regions = [
-            Region([(0, 0, 200, 176)], (100, 71.5)),
-            Region([(0, 88, 80, 176)], (68, 108)),
-            Region([(80, 88, 120, 176)], (100, 113.5)),
-            Region([(120, 88, 200, 176)], (147.5, 113.5)),
-            Region([(0, 55, 80, 88)], (52.5, 71.5)),
-            Region([(80, 55, 120, 88)], (100, 71.5)),
-            Region([(120, 55, 200, 88)], (147.5, 71.5)),
-            Region([(0, 0, 80, 55)], (52.5, 30)),
-            Region([(80, 0, 120, 55)], (100, 30)),
-            Region([(120, 0, 200, 55)], (133, 36))
+            Region([(0, 0, 200, 176)], (161.5, 21.5), (38.5, 122.5)),
+            #Region([(0, 0, 200, 176)], (100, 71.5)),
+            Region([(0, 88, 80, 176)], (68, 108), (68, 108)),
+            Region([(80, 88, 120, 176)], (100, 113.5), (100, 113.5)),
+            Region([(120, 88, 200, 176)], (147.5, 113.5), (147.5, 113.5)),
+            Region([(0, 55, 80, 88)], (52.5, 71.5), (52.5, 71.5)),
+            Region([(80, 55, 120, 88)], (100, 71.5), (100, 71.5)),
+            Region([(120, 55, 200, 88)], (147.5, 71.5), (147.5, 71.5)),
+            Region([(0, 0, 80, 55)], (52.5, 30), (52.5, 30)),
+            Region([(80, 0, 120, 55)], (100, 30), (100, 30)),
+            Region([(120, 0, 200, 55)], (133, 36), (133, 36))
         ] # 3 x 3 splited regions of the map, together with the whole map.
         self._attack_tasks = {}
 
@@ -115,10 +116,16 @@ class CombatActions(object):
                         target_enemies,
                         dc))
                 else:
-                    actions.extend(self._micro_rally(
-                        units_with_task,
-                        self._regions[region_id].rally_point,
-                        dc))
+                    if dc.init_base_pos[0] < 100:
+                        actions.extend(self._micro_rally(
+                            units_with_task,
+                            self._regions[region_id].rally_point_0,
+                            dc))
+                    else:
+                        actions.extend(self._micro_rally(
+                            units_with_task,
+                            self._regions[region_id].rally_point_1,
+                            dc))
         return actions
 
     def _micro_attack(self, combat_units, enemy_units, dc):

@@ -9,6 +9,7 @@ import queue
 import threading
 import multiprocessing
 from collections import deque
+from gym.spaces import prng
 
 import torch
 import torch.nn as nn
@@ -39,7 +40,10 @@ def tuple_variable(tensors, volatile=False):
 def actor_worker(pid, env_create_fn, q_network, difficulties,
                  current_eps, cur_difficulty_idx, action_space,
                  allow_eval_mode, transition_queue, outcome_queue,
-                 use_curriculum):
+                 use_curriculum, discount):
+    np.random.seed(pid)
+    random.seed(pid)
+    prng.seed(pid)
 
     def preprocess_observation(observation):
         action_mask = None
@@ -76,33 +80,44 @@ def actor_worker(pid, env_create_fn, q_network, difficulties,
 
     episode_id = 0
     while True:
-        episode_id += 1
-        cum_return = 0.0
-        random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
-        print("Random Seed: %d" % random_seed)
-        if use_curriculum:
-            cur_difficulty = difficulties[cur_difficulty_idx.value]
-        else:
-            cur_difficulty = random.choice(difficulties)
-        env = env_create_fn(cur_difficulty, random_seed)
-        observation = env.reset()
-        done = False
-        n_frames = 0
-        while not done:
-            action = act(observation, eps=current_eps.value)
-            next_observation, reward, done, _ = env.step(action)
-            transition_queue.put(
-                (observation, action, reward, next_observation, done))
-            observation = next_observation
-            cum_return += reward
-            n_frames += 1
-        outcome_queue.put(cum_return)
-        env.close()
-        print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
-              "Epsilon: %f Return: %f." %
-              (pid, episode_id, n_frames, cur_difficulty, current_eps.value,
-               cum_return))
-        sys.stdout.flush()
+        try:
+            episode_id += 1
+            cum_return = 0.0
+            random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
+            print("Random Seed: %d" % random_seed)
+            if use_curriculum:
+                cur_difficulty = difficulties[cur_difficulty_idx.value]
+            else:
+                cur_difficulty = random.choice(difficulties)
+            env = env_create_fn(cur_difficulty, random_seed)
+            observation = env.reset()
+            done = False
+            n_frames = 0
+            transition_list = []
+            while not done:
+                action = act(observation, eps=current_eps.value)
+                next_observation, reward, done, _ = env.step(action)
+                transition_list.append(
+                    (observation, action, reward, next_observation, done))
+                observation = next_observation
+                cum_return += reward
+                n_frames += 1
+
+            discounted_return = 0
+            for transition in reversed(transition_list):
+                discounted_return = discounted_return * discount + transition[2]
+                transition_queue.put(transition + (discounted_return,))
+            outcome_queue.put(cum_return)
+            env.close()
+            print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
+                  "Epsilon: %f Return: %f." %
+                  (pid, episode_id, n_frames, cur_difficulty, current_eps.value,
+                   cum_return))
+            sys.stdout.flush()
+
+        except:
+            print("Expection occured in PID %d. Restart." % pid)
+            pass
 
 
 class FastDQNAgent(object):
@@ -128,6 +143,8 @@ class FastDQNAgent(object):
                  frame_step_ratio,
                  gradient_clipping,
                  double_dqn,
+                 mmc_beta,
+                 mmc_discount,
                  target_update_freq,
                  winning_rate_threshold,
                  difficulties,
@@ -160,6 +177,8 @@ class FastDQNAgent(object):
         self._allow_eval_mode = allow_eval_mode
         self._loss_type = loss_type
         self._print_freq = print_freq
+        self._mmc_beta = mmc_beta
+        self._mmc_discount = mmc_discount
         self._episode_idx = 0
         self._current_eps = multiprocessing.Value('d', eps_start)
         self._num_threads = 4
@@ -260,8 +279,8 @@ class FastDQNAgent(object):
 
     def _optimize(self):
         #print("Batch Queue Size: %d" % self._batch_queue.qsize())
-        next_obs_batch, obs_batch, reward_batch, action_batch, done_batch = \
-            self._batch_queue.get()
+        (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch,
+         return_batch) = self._batch_queue.get()
         next_obs_batch, action_mask = self._preprocess_observation(
             next_obs_batch)
         obs_batch, _ = self._preprocess_observation(obs_batch)
@@ -281,6 +300,8 @@ class FastDQNAgent(object):
             futures = q_next_target.max(dim=1)[0].view(-1, 1).squeeze()
         futures = futures * (1 - done_batch)
         target_q = reward_batch + self._discount * futures
+        target_q = target_q * self._mmc_beta + \
+            (1.0 - self._mmc_beta) * return_batch
         # define loss
         self._q_network.train()
         q = self._q_network(obs_batch).gather(
@@ -317,7 +338,8 @@ class FastDQNAgent(object):
                       self._allow_eval_mode,
                       self._transition_queue,
                       self._outcome_queue,
-                      use_curriculum))
+                      use_curriculum,
+                      self._mmc_discount))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
         self._batch_thread = [threading.Thread(target=self._prepare_batch,
@@ -386,6 +408,7 @@ class FastDQNAgent(object):
         reward_batch = torch.FloatTensor(batch.reward)
         action_batch = torch.LongTensor(batch.action)
         done_batch = torch.Tensor(batch.done)
+        return_batch = torch.FloatTensor(batch.mc_return)
 
         # move to cuda
         if torch.cuda.is_available():
@@ -394,6 +417,7 @@ class FastDQNAgent(object):
             reward_batch = tuple_cuda(reward_batch)
             action_batch = tuple_cuda(action_batch)
             done_batch = tuple_cuda(done_batch)
+            return_batch = tuple_cuda(return_batch)
 
         # create variables
         next_obs_batch = tuple_variable(next_obs_batch, volatile=True)
@@ -401,9 +425,10 @@ class FastDQNAgent(object):
         reward_batch = tuple_variable(reward_batch)
         action_batch = tuple_variable(action_batch)
         done_batch = tuple_variable(done_batch)
+        return_batch = tuple_variable(return_batch)
 
         return (next_obs_batch, obs_batch, reward_batch, action_batch,
-                done_batch)
+                done_batch, return_batch)
 
     def _update_target_network(self):
         self._target_q_network.load_state_dict(
