@@ -15,7 +15,7 @@ from envs.observations.zerg_observation_wrappers import ZergNonspatialObservatio
 from envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from agents.random_agent import RandomAgent
 from agents.keyboard_agent import KeyboardAgent
-from agents.fast_dqn_agent import FastDQNAgent
+from agents.dqn_agent import DDQNAgent
 from agents.models.sc2_networks import DuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingLinearQNet
@@ -106,7 +106,7 @@ def train():
 
     if FLAGS.agent == 'dqn':
         network = create_network(env)
-        agent = FastDQNAgent(
+        agent = DDQNAgent(
             observation_space=env.observation_space,
             action_space=env.action_space,
             network=network,
