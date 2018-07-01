@@ -3,7 +3,7 @@ import random
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.tech_tree import TechTree
 
-from envs.actions.function import Function
+from sc2learner.envs.actions.function import Function
 
 
 class UpgradeActions(object):

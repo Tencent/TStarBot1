@@ -2,10 +2,10 @@ import itertools
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from envs.common.const import ALLY_TYPE
-from envs.common.const import PLAYER_FEATURE
-from envs.common.const import COMBAT_TYPES
-import envs.common.utils as utils
+from sc2learner.envs.common.const import ALLY_TYPE
+from sc2learner.envs.common.const import PLAYER_FEATURE
+from sc2learner.envs.common.const import COMBAT_TYPES
+import sc2learner.envs.common.utils as utils
 
 
 class DataContext(object):

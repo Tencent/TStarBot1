@@ -3,7 +3,7 @@ import gym
 import pysc2.env.sc2_env
 from pysc2.lib import actions
 
-from envs.space import PySC2RawAction, PySC2RawObservation
+from sc2learner.envs.space import PySC2RawAction, PySC2RawObservation
 
 
 class StarCraftIIEnv(gym.Env):

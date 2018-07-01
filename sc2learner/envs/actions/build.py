@@ -4,10 +4,10 @@ from pysc2.lib.unit_controls import Unit
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
-from envs.actions.function import Function
-from envs.actions.spatial_planner import SpatialPlanner
-import envs.common.utils as utils
-from envs.common.const import MAXIMUM_NUM
+from sc2learner.envs.actions.function import Function
+from sc2learner.envs.actions.spatial_planner import SpatialPlanner
+import sc2learner.envs.common.utils as utils
+from sc2learner.envs.common.const import MAXIMUM_NUM
 
 
 class BuildActions(object):

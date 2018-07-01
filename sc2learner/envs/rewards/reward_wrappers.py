@@ -4,9 +4,9 @@ import numpy as np
 
 from pysc2.lib.typeenums import UNIT_TYPEID
 
-from envs.space import PySC2RawObservation
-from envs.space import PySC2RawAction
-from envs.common.const import ALLY_TYPE
+from sc2learner.envs.space import PySC2RawObservation
+from sc2learner.envs.space import PySC2RawAction
+from sc2learner.envs.common.const import ALLY_TYPE
 
 
 class RewardShapingWrapperV1(gym.Wrapper):

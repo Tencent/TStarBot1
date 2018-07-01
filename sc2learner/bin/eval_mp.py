@@ -4,35 +4,35 @@ import os
 import traceback
 from absl import app
 from absl import flags
-from absl import logging
-import numpy as np
+import multiprocessing
 import time
 
-from envs.sc2_env import StarCraftIIEnv
-from envs.actions.zerg_action_wrappers import ZergActionWrapper
-from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
-from envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
-from envs.rewards.reward_wrappers import RewardShapingWrapperV2
-from agents.random_agent import RandomAgent
-from agents.keyboard_agent import KeyboardAgent
-from agents.dqn_agent import DDQNAgent
-from agents.models.sc2_networks import DuelingQNet
-from agents.models.sc2_networks import NonspatialDuelingQNet
-from agents.models.sc2_networks import NonspatialDuelingLinearQNet
-from utils.utils import print_arguments
+from sc2learner.envs.sc2_env import StarCraftIIEnv
+from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
+from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
+from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
+from sc2learner.agents.random_agent import RandomAgent
+from sc2learner.agents.keyboard_agent import KeyboardAgent
+from sc2learner.agents.dqn_agent import DDQNAgent
+from sc2learner.agents.models.sc2_networks import DuelingQNet
+from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
+from sc2learner.agents.models.sc2_networks import NonspatialDuelingLinearQNet
+from sc2learner.utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
+flags.DEFINE_integer("num_parallels", 4, "Parallel number.")
+flags.DEFINE_integer("num_episodes", 50, "Number of episodes to evaluate.")
 flags.DEFINE_float("epsilon", 0.01, "Epsilon for policy.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("agent", 'dqn', ['dqn', 'random', 'keyboard'], "Algorithm.")
+flags.DEFINE_enum("agent", 'random', ['dqn', 'random', 'keyboard'], "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
-flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
+flags.DEFINE_boolean("render", False, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
@@ -92,16 +92,8 @@ def print_actions(env):
     print("-------------------------------------------------------------------")
 
 
-def print_action_distribution(env, action_counts):
-    print("----------------------- Action Distribution -----------------------")
-    for action_id, action_name in enumerate(env.action_names):
-        print("Action ID: %d	Count: %d	Name: %s" %
-              (action_id, action_counts[action_id], action_name))
-    print("-------------------------------------------------------------------")
-
-
-def train():
-    env = create_env(int(time.time()))
+def train(pid):
+    env = create_env(0)
     print_actions(env)
 
     if FLAGS.agent == 'dqn':
@@ -119,10 +111,6 @@ def train():
             eps_method='linear',
             eps_start=0,
             eps_end=0,
-            winning_rate_threshold=0,
-            difficulties=[],
-            mmc_beta=0,
-            mmc_discount=0,
             eps_decay=5000000,
             eps_decay2=30000000,
             memory_size=1000000,
@@ -141,26 +129,21 @@ def train():
 
     try:
         cum_return = 0.0
-        action_counts = [0] * env.action_space.n
         for i in range(FLAGS.num_episodes):
+            random_seed =  int(time.time() * 1000) & 0xFFFFFFFF
+            env = create_env(random_seed)
             observation = env.reset()
             done = False
-            step_id = 0
             while not done:
                 action = agent.act(observation, eps=FLAGS.epsilon)
-                print("Step ID: %d	Take Action: %d	Available Mask: %s" %
-                      (step_id, action, observation[-1]))
                 observation, reward, done, _ = env.step(action)
-                #print(observation[0].shape, observation[1].shape)
-                action_counts[action] += 1
-                #time.sleep(20)
-                #time.sleep(0.3)
                 cum_return += reward
-                step_id += 1
-            print_action_distribution(env, action_counts)
-            print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" %
-                  (i + 1, FLAGS.num_episodes, cum_return / (i + 1),
+            print("Process: %d Episode: %d Outcome: %f" % (pid, i, reward))
+            print("Process: %d Evaluated %d/%d Episodes Avg Return %f "
+                  "Avg Winning Rate %f" %
+                  (pid, i + 1, FLAGS.num_episodes, cum_return / (i + 1),
                    ((cum_return / (i + 1)) + 1) / 2.0))
+            env.close()
     except KeyboardInterrupt:
         pass
     except:
@@ -169,11 +152,15 @@ def train():
 
 
 def main(argv):
-    logging.set_verbosity(logging.ERROR)
     print_arguments(FLAGS)
-    np.set_printoptions(threshold=np.nan, linewidth=500)
-    train()
-
+    processes = [multiprocessing.Process(target=train, args=(pid,))
+                 for pid in range(FLAGS.num_parallels)]
+    for p in processes:
+        p.daemon = True
+        p.start()
+        time.sleep(1)
+    for p in processes:
+        p.join()
 
 if __name__ == '__main__':
     app.run(main)

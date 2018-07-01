@@ -4,8 +4,8 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
-from envs.actions.function import Function
-import envs.common.utils as utils
+from sc2learner.envs.actions.function import Function
+import sc2learner.envs.common.utils as utils
 
 
 class ResourceActions(object):
