@@ -9,17 +9,18 @@ import queue
 import threading
 import multiprocessing
 from collections import deque
-from gym.spaces import prng
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
+from gym.spaces import prng
 from gym import spaces
+from gym.spaces.discrete import Discrete
 
 from agents.memory import ReplayMemory, Transition
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 
 
 def tuple_cuda(tensors):
@@ -47,7 +48,7 @@ def actor_worker(pid, env_create_fn, q_network, difficulties,
 
     def preprocess_observation(observation):
         action_mask = None
-        if isinstance(action_space, MaskableDiscrete):
+        if isinstance(action_space, MaskDiscrete):
             action_mask = observation[-1]
             observation = observation[:-1]
             if len(observation) == 1:
@@ -154,8 +155,7 @@ class FastDQNAgent(object):
                  save_model_dir=None,
                  save_model_freq=50000,
                  print_freq=1000):
-        assert (isinstance(action_space, MaskableDiscrete) or
-                isinstance(action_space, spaces.Discrete))
+        assert isinstance(action_space, Discrete)
         multiprocessing.set_start_method('spawn')
 
         self._batch_size = batch_size
@@ -270,7 +270,7 @@ class FastDQNAgent(object):
 
     def _preprocess_observation(self, observation):
         action_mask = None
-        if isinstance(self._action_space, MaskableDiscrete):
+        if isinstance(self._action_space, MaskDiscrete):
             action_mask = observation[-1]
             observation = observation[:-1]
             if len(observation) == 1:

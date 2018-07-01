@@ -5,7 +5,7 @@ from gym import spaces
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
 from envs.space import PySC2RawObservation
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 from envs.observations.spatial_features import UnitTypeCountMapFeature
 from envs.observations.spatial_features import AllianceCountMapFeature
 from envs.observations.nonspatial_features import PlayerFeature
@@ -136,7 +136,7 @@ class ZergObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskableDiscrete):
+        if isinstance(self.env.action_space, MaskDiscrete):
             observation, action_mask = observation
 
         ally_map_feat = self._alliance_count_map_feature.features(observation)
@@ -162,7 +162,7 @@ class ZergObservationWrapper(gym.Wrapper):
         if self._flip:
             spatial_feat = self._diagonal_flip(spatial_feat)
 
-        if isinstance(self.action_space, MaskableDiscrete):
+        if isinstance(self.env.action_space, MaskDiscrete):
             return (spatial_feat, nonspatial_feat, action_mask)
         else:
             return (spatial_feat, nonspatial_feat)
@@ -257,7 +257,7 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskableDiscrete):
+        if isinstance(self.env.action_space, MaskDiscrete):
             observation, action_mask = observation
 
         unit_type_feat = self._unit_count_feature.features(observation)
@@ -272,7 +272,7 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
                                           game_progress_feat,
                                           action_seq_feat])
 
-        if isinstance(self.action_space, MaskableDiscrete):
+        if isinstance(self.env.action_space, MaskDiscrete):
             return (nonspatial_feat, action_mask)
         else:
             return (nonspatial_feat)

@@ -18,7 +18,7 @@ import torch.optim as optim
 from gym import spaces
 
 from agents.memory import ReplayMemory, Transition
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 
 
 def tuple_cuda(tensors):
@@ -43,7 +43,7 @@ def actor_worker(pid, env_create_fn, q_network, difficulties, discount,
 
     def preprocess_observation(observation):
         action_mask = None
-        if isinstance(action_space, MaskableDiscrete):
+        if isinstance(action_space, MaskDiscrete):
             action_mask = observation[-1]
             observation = observation[:-1]
             if len(observation) == 1:
@@ -139,7 +139,7 @@ class MCAgent(object):
                  save_model_dir=None,
                  save_model_freq=50000,
                  print_freq=1000):
-        assert (isinstance(action_space, MaskableDiscrete) or
+        assert (isinstance(action_space, MaskDiscrete) or
                 isinstance(action_space, spaces.Discrete))
         multiprocessing.set_start_method('spawn')
 
@@ -253,7 +253,7 @@ class MCAgent(object):
 
     def _preprocess_observation(self, observation):
         action_mask = None
-        if isinstance(self._action_space, MaskableDiscrete):
+        if isinstance(self._action_space, MaskDiscrete):
             action_mask = observation[-1]
             observation = observation[:-1]
             if len(observation) == 1:
