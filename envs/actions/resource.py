@@ -90,6 +90,7 @@ class ResourceActions(object):
             u for u in dc.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
             if u.int_attr.ideal_harvesters - u.int_attr.assigned_harvesters > 0
         ]
+        if len(idle_extractors) == 0: return []
         extractor = random.choice(idle_extractors)
         num_workers_need = extractor.int_attr.ideal_harvesters - \
             extractor.int_attr.assigned_harvesters
@@ -102,6 +103,7 @@ class ResourceActions(object):
                     ABILITY.HARVEST_GATHER_DRONE.value and
                  u.orders[0].target_tag not in extractor_tags))
         ]
+        if len(workers) == 0: return []
         assigned_workers = utils.closest_units(
             extractor, workers, num_workers_need)
         action = sc_pb.Action()

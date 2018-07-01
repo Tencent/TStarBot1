@@ -20,6 +20,7 @@ class ProduceActions(object):
 
         def act(dc):
             tech = self._tech_tree.getUnitData(type_id)
+            if len(dc.idle_units_of_types(tech.whatBuilds)) == 0: return []
             producer = random.choice(dc.idle_units_of_types(tech.whatBuilds))
             action = sc_pb.Action()
             action.action_raw.unit_command.unit_tags.append(producer.tag)

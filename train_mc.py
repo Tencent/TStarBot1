@@ -11,7 +11,7 @@ from envs.actions.zerg_action_wrappers import ZergActionWrapper
 from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
 from envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
 from envs.rewards.reward_wrappers import RewardShapingWrapperV2
-from agents.fast_dqn_agent import FastDQNAgent
+from agents.mc_agent import MCAgent
 from agents.models.sc2_networks import DuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingQNet
 from agents.models.sc2_networks import NonspatialDuelingLinearQNet
@@ -21,16 +21,16 @@ from utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
-flags.DEFINE_string("difficulty", '1,2,4,6,9,A', "Bot's strengths.")
-flags.DEFINE_float("winning_rate_threshold", 0.65, "Winning rate threshold.")
-flags.DEFINE_integer("memory_size", 5000000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
+flags.DEFINE_string("difficulty", '2,4,6,9,A', "Bot's strengths.")
+flags.DEFINE_float("winning_rate_threshold", 0.8, "Winning rate threshold.")
+flags.DEFINE_integer("memory_size", 125000, "Experience replay size.")
+flags.DEFINE_integer("init_memory_size", 125000, "Experience replay init size.")
 flags.DEFINE_enum("eps_method", 'linear', ['exponential', 'linear'],
                   "Epsilon decay methods.")
 flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
 flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
 flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
-flags.DEFINE_integer("eps_decay2", 50000000, "Greedy epsilon decay step.")
+flags.DEFINE_integer("eps_decay2", 10000000000000, "Greedy epsilon decay step.")
 flags.DEFINE_enum("optimizer_type", 'adam', ['rmsprop', 'adam', 'sgd'],
                   "Optimizer.")
 flags.DEFINE_float("learning_rate", 3e-7, "Learning rate.")
@@ -39,22 +39,19 @@ flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
 flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
 flags.DEFINE_float("frame_step_ratio", 1.0, "Actor frames per train step.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
-flags.DEFINE_float("discount", 0.995, "Discount.")
-flags.DEFINE_float("mmc_discount", 0.995, "Discount.")
-flags.DEFINE_float("mmc_beta", 0.9, "Discount.")
+flags.DEFINE_float("discount", 1.0, "Discount.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_string("save_model_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
-flags.DEFINE_boolean("use_action_mask", False, "Use action mask or not.")
-flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
+flags.DEFINE_boolean("use_curriculum", True, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
-flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
+flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
-flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
+flags.DEFINE_boolean("use_spatial_features", True, "Use spatial features.")
 flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
@@ -74,7 +71,7 @@ def create_env(difficulty, random_seed=None):
         random_seed=random_seed)
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
-    env = ZergActionWrapper(env, mask=FLAGS.use_action_mask)
+    env = ZergActionWrapper(env)
     if FLAGS.use_spatial_features:
         env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     else:
@@ -110,7 +107,7 @@ def train():
     env = create_env('1', 0)
     network = create_network(env)
 
-    agent = FastDQNAgent(
+    agent = MCAgent(
         observation_space=env.observation_space,
         action_space=env.action_space,
         network=network,
@@ -133,8 +130,6 @@ def train():
         target_update_freq=FLAGS.target_update_freq,
         winning_rate_threshold=FLAGS.winning_rate_threshold,
         difficulties=FLAGS.difficulty.strip().split(','),
-        mmc_beta=FLAGS.mmc_beta,
-        mmc_discount=FLAGS.mmc_discount,
         allow_eval_mode=True,
         loss_type=FLAGS.loss_type,
         init_model_path=FLAGS.init_model_path,

@@ -60,7 +60,7 @@ class PySC2RawObservation(gym.Space):
         return self._feature_layers
 
 
-class MaskableDiscrete(Discrete):
+class MaskDiscrete(Discrete):
 
     def sample(self, availables):
         x = np.random.choice(availables).item()
@@ -68,4 +68,4 @@ class MaskableDiscrete(Discrete):
         return x
 
     def contains(self, x, availables):
-        return super(MaskableDiscrete, self).contains(x) and x in availables
+        return super(MaskDiscrete, self).contains(x) and x in availables

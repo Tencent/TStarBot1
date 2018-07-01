@@ -36,8 +36,8 @@ flags.DEFINE_boolean("render", True, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
-flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
-flags.DEFINE_boolean("use_nonlinear_model", False, "Use Nonlinear model.")
+flags.DEFINE_boolean("use_spatial_features", True, "Use spatial features.")
+flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
@@ -46,7 +46,7 @@ def create_env(random_seed=None):
         map_name='AbyssalReef',
         step_mul=FLAGS.step_mul,
         disable_fog=FLAGS.disable_fog,
-        resolution=32,
+        resolution=16,
         agent_race='Z',
         bot_race='Z',
         difficulty=FLAGS.difficulty,
@@ -119,6 +119,10 @@ def train():
             eps_method='linear',
             eps_start=0,
             eps_end=0,
+            winning_rate_threshold=0,
+            difficulties=[],
+            mmc_beta=0,
+            mmc_discount=0,
             eps_decay=5000000,
             eps_decay2=30000000,
             memory_size=1000000,

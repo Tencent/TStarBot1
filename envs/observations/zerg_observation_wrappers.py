@@ -5,7 +5,7 @@ from gym import spaces
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
 from envs.space import PySC2RawObservation
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 from envs.observations.spatial_features import UnitTypeCountMapFeature
 from envs.observations.spatial_features import AllianceCountMapFeature
 from envs.observations.nonspatial_features import PlayerFeature
@@ -30,28 +30,26 @@ class ZergObservationWrapper(gym.Wrapper):
                       UNIT_TYPE.ZERG_ROACHBURROWED.value: 2,
                       UNIT_TYPE.ZERG_HYDRALISK.value: 3,
                       UNIT_TYPE.ZERG_OVERLORD.value: 4,
-                      UNIT_TYPE.ZERG_OVERSEER.value: 5,
-                      UNIT_TYPE.ZERG_HATCHERY.value: 6,
-                      UNIT_TYPE.ZERG_LAIR.value: 6,
-                      UNIT_TYPE.ZERG_HIVE.value: 6,
-                      UNIT_TYPE.ZERG_EXTRACTOR.value: 7,
-                      UNIT_TYPE.ZERG_QUEEN.value: 8,
-                      UNIT_TYPE.ZERG_RAVAGER.value: 9,
-                      UNIT_TYPE.ZERG_BANELING.value: 10,
-                      UNIT_TYPE.ZERG_LURKERMP.value: 11,
-                      UNIT_TYPE.ZERG_LURKERMPBURROWED.value: 11,
-                      UNIT_TYPE.ZERG_VIPER.value: 12,
-                      UNIT_TYPE.ZERG_MUTALISK.value: 13,
-                      UNIT_TYPE.ZERG_CORRUPTOR.value: 14,
-                      UNIT_TYPE.ZERG_BROODLORD.value: 15,
-                      UNIT_TYPE.ZERG_SWARMHOSTMP.value: 16,
-                      UNIT_TYPE.ZERG_INFESTOR.value: 17,
-                      UNIT_TYPE.ZERG_ULTRALISK.value: 18,
-                      UNIT_TYPE.ZERG_BROODLING.value: 19,
-                      UNIT_TYPE.ZERG_QUEEN.value: 20,
-                      UNIT_TYPE.ZERG_CHANGELING.value: 21,
-                      UNIT_TYPE.ZERG_SPINECRAWLER.value: 22,
-                      UNIT_TYPE.ZERG_SPORECRAWLER.value: 23},
+                      UNIT_TYPE.ZERG_OVERSEER.value: 4,
+                      UNIT_TYPE.ZERG_HATCHERY.value: 5,
+                      UNIT_TYPE.ZERG_LAIR.value: 5,
+                      UNIT_TYPE.ZERG_HIVE.value: 5,
+                      UNIT_TYPE.ZERG_EXTRACTOR.value: 6,
+                      UNIT_TYPE.ZERG_QUEEN.value: 7,
+                      UNIT_TYPE.ZERG_RAVAGER.value: 8,
+                      UNIT_TYPE.ZERG_BANELING.value: 9,
+                      UNIT_TYPE.ZERG_LURKERMP.value: 10,
+                      UNIT_TYPE.ZERG_LURKERMPBURROWED.value: 10,
+                      UNIT_TYPE.ZERG_VIPER.value: 11,
+                      UNIT_TYPE.ZERG_MUTALISK.value: 12,
+                      UNIT_TYPE.ZERG_CORRUPTOR.value: 13,
+                      UNIT_TYPE.ZERG_BROODLORD.value: 14,
+                      UNIT_TYPE.ZERG_SWARMHOSTMP.value: 15,
+                      UNIT_TYPE.ZERG_INFESTOR.value: 16,
+                      UNIT_TYPE.ZERG_ULTRALISK.value: 17,
+                      UNIT_TYPE.ZERG_CHANGELING.value: 18,
+                      UNIT_TYPE.ZERG_SPINECRAWLER.value: 19,
+                      UNIT_TYPE.ZERG_SPORECRAWLER.value: 20},
             resolution=resolution)
         self._alliance_count_map_feature = AllianceCountMapFeature(resolution)
 
@@ -138,9 +136,6 @@ class ZergObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskableDiscrete):
-            observation, action_mask = observation
-
         ally_map_feat = self._alliance_count_map_feature.features(observation)
         type_map_feat = self._unit_type_count_map_feature.features(observation)
         unit_type_feat = self._unit_count_feature.features(observation)
@@ -156,16 +151,14 @@ class ZergObservationWrapper(gym.Wrapper):
                                           player_feat,
                                           game_progress_feat,
                                           action_seq_feat])
-
+        if self._flip:
+            spatial_feat = self._diagonal_flip(spatial_feat)
         #np.set_printoptions(threshold=np.nan, linewidth=300)
         #for i in range(spatial_feat.shape[0]):
             #print(spatial_feat[i])
 
-        if self._flip:
-            spatial_feat = self._diagonal_flip(spatial_feat)
-
-        if isinstance(self.action_space, MaskableDiscrete):
-            return (spatial_feat, nonspatial_feat, action_mask)
+        if isinstance(self.env.action_space, MaskDiscrete):
+            return (spatial_feat, nonspatial_feat, observation['action_mask'])
         else:
             return (spatial_feat, nonspatial_feat)
 
@@ -259,9 +252,6 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskableDiscrete):
-            observation, action_mask = observation
-
         unit_type_feat = self._unit_count_feature.features(observation)
         unit_stat_feat = self._unit_stat_count_feature.features(observation)
         player_feat = self._player_feature.features(observation)
@@ -274,7 +264,7 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
                                           game_progress_feat,
                                           action_seq_feat])
 
-        if isinstance(self.action_space, MaskableDiscrete):
-            return (nonspatial_feat, action_mask)
+        if isinstance(self.env.action_space, MaskDiscrete):
+            return (nonspatial_feat, abservation['action_mask'])
         else:
-            return (nonspatial_feat)
+            return nonspatial_feat

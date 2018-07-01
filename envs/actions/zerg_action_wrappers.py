@@ -6,9 +6,10 @@ from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import UPGRADE_ID as UPGRADE
 from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
+from gym.spaces.discrete import Discrete
 
 from envs.space import PySC2RawObservation
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 from envs.common.data_context import DataContext
 from envs.actions.function import Function
 from envs.actions.produce import ProduceActions
@@ -20,7 +21,7 @@ from envs.actions.combat import CombatActions
 
 class ZergActionWrapper(gym.Wrapper):
 
-    def __init__(self, env):
+    def __init__(self, env, mask=False):
         super(ZergActionWrapper, self).__init__(env)
         assert isinstance(env.observation_space, PySC2RawObservation)
 
@@ -101,9 +102,10 @@ class ZergActionWrapper(gym.Wrapper):
             #self._combat_mgr.action_all_attack_30, # deprecated
             #self._combat_mgr.action_all_attack_20 # deprecated
         ] + [
-            self._combat_mgr.action(units_region_id, target_region_id)
-            for units_region_id in range(self._combat_mgr.num_regions)
-            for target_region_id in range(self._combat_mgr.num_regions)
+            self._combat_mgr.action(0, 0)
+            #self._combat_mgr.action(units_region_id, target_region_id)
+            #for units_region_id in range(self._combat_mgr.num_regions)
+            #for target_region_id in range(self._combat_mgr.num_regions)
         ]
 
         self._required_pre_actions = [self._resource_mgr.action_idle_workers_gather_minerals,
@@ -111,24 +113,28 @@ class ZergActionWrapper(gym.Wrapper):
         self._required_post_actions = [self._combat_mgr.action_rally_new_combat_units,
                                        self._combat_mgr.action_framewise_rally_and_attack]
 
-        self.action_space = MaskableDiscrete(len(self._actions))
+        if mask:
+            self.action_space = MaskDiscrete(len(self._actions))
+        else:
+            self.action_space = Discrete(len(self._actions))
 
     def step(self, action):
-        assert self._action_mask[action] == 1
         actions = self._actions[action].function(self._dc)
         pre_actions, post_actions = self._required_actions()
         observation, reward, done, info = self.env.step(
             pre_actions + actions + post_actions)
         self._dc.update(observation)
-        self._action_mask = self._get_valid_action_mask()
-        return (observation, self._action_mask), reward, done, info
+        if isinstance(self.env.action_space, MaskDiscrete):
+            observation['action_mask'] = self._get_valid_action_mask()
+        return observation, reward, done, info
 
     def reset(self):
         self._combat_mgr.reset()
         observation = self.env.reset()
         self._dc.reset(observation)
-        self._action_mask = self._get_valid_action_mask()
-        return (observation, self._action_mask)
+        if isinstance(self.env.action_space, MaskDiscrete):
+            observation['action_mask'] = self._get_valid_action_mask()
+        return observation
 
     @property
     def action_names(self):

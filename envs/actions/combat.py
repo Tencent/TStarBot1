@@ -12,23 +12,23 @@ from envs.common.const import ATTACK_FORCE
 from envs.common.const import ALLY_TYPE
 
 
-Region = namedtuple('Region', ('ranges', 'rally_point'))
+Region = namedtuple('Region', ('ranges', 'rally_point_a', 'rally_point_b'))
 
 
 class CombatActions(object):
 
     def __init__(self):
         self._regions = [
-            Region([(0, 0, 200, 176)], (100, 71.5)),
-            Region([(0, 88, 80, 176)], (68, 108)),
-            Region([(80, 88, 120, 176)], (100, 113.5)),
-            Region([(120, 88, 200, 176)], (147.5, 113.5)),
-            Region([(0, 55, 80, 88)], (52.5, 71.5)),
-            Region([(80, 55, 120, 88)], (100, 71.5)),
-            Region([(120, 55, 200, 88)], (147.5, 71.5)),
-            Region([(0, 0, 80, 55)], (52.5, 30)),
-            Region([(80, 0, 120, 55)], (100, 30)),
-            Region([(120, 0, 200, 55)], (133, 36))
+            Region([(0, 0, 200, 176)], (161.5, 21.5), (38.5, 122.5)),
+            Region([(0, 88, 80, 176)], (68, 108), (68, 108)),
+            Region([(80, 88, 120, 176)], (100, 113.5), (100, 113.5)),
+            Region([(120, 88, 200, 176)], (147.5, 113.5), (147.5, 113.5)),
+            Region([(0, 55, 80, 88)], (52.5, 71.5), (52.5, 71.5)),
+            Region([(80, 55, 120, 88)], (100, 71.5), (100, 71.5)),
+            Region([(120, 55, 200, 88)], (147.5, 71.5), (147.5, 71.5)),
+            Region([(0, 0, 80, 55)], (52.5, 30), (52.5, 30)),
+            Region([(80, 0, 120, 55)], (100, 30), (100, 30)),
+            Region([(120, 0, 200, 55)], (133, 36), (133, 36))
         ] # 3 x 3 splited regions of the map, together with the whole map.
         self._attack_tasks = {}
 
@@ -66,9 +66,12 @@ class CombatActions(object):
     def _attack_region(self, combat_region_id, target_region_id):
 
         def act(dc):
-            combat_unit = [u for u in dc.combat_units
-                           if self._is_in_region(u, combat_region_id)]
-            self._set_attack_task(combat_unit, target_region_id)
+            combat_unit = [
+                u for u in dc.combat_units
+                if self._is_in_region(u, self._region_flip(dc, combat_region_id))
+            ]
+            self._set_attack_task(
+                combat_unit, self._region_flip(dc, target_region_id))
             return []
 
         return act
@@ -82,10 +85,9 @@ class CombatActions(object):
 
         return is_valid
 
-
     def _rally_new_combat_units(self, dc):
         new_combat_units = [u for u in dc.combat_units if dc.is_new_unit(u)]
-        if dc.init_base_pos[0] < 100:
+        if self._player_position(dc) == 0:
             self._set_attack_task(new_combat_units, 1)
         else:
             self._set_attack_task(new_combat_units, 9)
@@ -115,10 +117,12 @@ class CombatActions(object):
                         target_enemies,
                         dc))
                 else:
-                    actions.extend(self._micro_rally(
-                        units_with_task,
-                        self._regions[region_id].rally_point,
-                        dc))
+                    if self._player_position(dc) == 0:
+                        rally_point = self._regions[region_id].rally_point_a
+                    else:
+                        rally_point = self._regions[region_id].rally_point_b
+                    actions.extend(
+                        self._micro_rally(units_with_task, rally_point, dc))
         return actions
 
     def _micro_attack(self, combat_units, enemy_units, dc):
@@ -298,6 +302,16 @@ class CombatActions(object):
                      unit.float_attr.pos_y >= r[1] and
                      unit.float_attr.pos_y < r[3])
                     for r in self._regions[region_id].ranges])
+
+    def _player_position(self, dc):
+        if dc.init_base_pos[0] < 100: return 0
+        else: return 1
+
+    def _region_flip(self, dc, region_id):
+        if self._player_position(dc) == 1 and region_id > 0:
+            return 10 - region_id
+        else:
+            return region_id
 
 
 # this is deprecated

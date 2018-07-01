@@ -5,7 +5,7 @@ from gym import spaces
 from absl import logging
 import numpy as np
 
-from envs.space import MaskableDiscrete
+from envs.space import MaskDiscrete
 from envs.space import PySC2RawAction
 
 
@@ -29,7 +29,6 @@ class KeyboardAgent(object):
         super(KeyboardAgent, self).__init__()
         logging.set_verbosity(logging.ERROR)
         self._action_space = action_space
-        assert isinstance(action_space, spaces.Discrete)
         self._action_queue = queue.Queue()
         self._cmd_thread = threading.Thread(
             target=add_input, args=(self._action_queue, action_space.n))
@@ -40,7 +39,7 @@ class KeyboardAgent(object):
         time.sleep(0.1)
         if not self._action_queue.empty():
             action = self._action_queue.get()
-            if (isinstance(self._action_space, MaskableDiscrete) or
+            if (isinstance(self._action_space, MaskDiscrete) or
                 isinstance(self._action_space, PySC2RawAction)):
                 action_mask = observation[-1]
                 if action_mask[action] == 0:

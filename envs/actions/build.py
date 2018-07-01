@@ -25,6 +25,7 @@ class BuildActions(object):
         def act(dc):
             tech = self._tech_tree.getUnitData(type_id)
             pos = self._spatial_planner.get_building_position(type_id, dc)
+            if pos == None: return []
             extractor_tags = set(u.tag for u in dc.units_of_type(
                                  UNIT_TYPE.ZERG_EXTRACTOR.value))
             builders = dc.units_of_types(tech.whatBuilds)
@@ -39,6 +40,7 @@ class BuildActions(object):
             if len(prefered_builders) > 0:
                 builder = utils.closest_unit(pos, prefered_builders)
             else:
+                if len(builders) == 0: return []
                 builder = utils.closest_unit(pos, builders)
             action = sc_pb.Action()
             action.action_raw.unit_command.unit_tags.append(builder.tag)

@@ -15,7 +15,8 @@ class PlayerFeature(object):
         log_features = np.log10(player_features + 1).astype(np.float32)
 
         bins_food_unused = np.zeros(10, dtype=np.float32)
-        bin_id = int((food_unused - 1) // 3 + 1) if food_unused <= 27 else 9
+        bin_id = int((max(food_unused, 0) - 1) // 3 + 1) \
+            if food_unused <= 27 else 9
         bins_food_unused[bin_id] = 1
         return np.concatenate((scaled_features, log_features, bins_food_unused))
 
@@ -29,16 +30,16 @@ class UnitTypeCountFeature(object):
     def __init__(self, type_list):
         self._type_list = type_list
         self._regions = [
-            (0, 0, 200, 176),
-            (0, 88, 80, 176),
-            (80, 88, 120, 176),
-            (120, 88, 200, 176),
-            (0, 55, 80, 88),
-            (80, 55, 120, 88),
-            (120, 55, 200, 88),
-            (0, 0, 80, 55),
-            (80, 0, 120, 55),
-            (120, 0, 200, 55)
+            (0, 0, 200, 176)
+            #(0, 88, 80, 176),
+            #(80, 88, 120, 176),
+            #(120, 88, 200, 176),
+            #(0, 55, 80, 88),
+            #(80, 55, 120, 88),
+            #(120, 55, 200, 88),
+            #(0, 0, 80, 55),
+            #(80, 0, 120, 55),
+            #(120, 0, 200, 55)
         ]
 
     def features(self, observation):
@@ -93,15 +94,15 @@ class UnitStatCountFeature(object):
     def __init__(self):
         self._regions = [
             (0, 0, 200, 176),
-            (0, 88, 80, 176),
-            (80, 88, 120, 176),
-            (120, 88, 200, 176),
-            (0, 55, 80, 88),
-            (80, 55, 120, 88),
-            (120, 55, 200, 88),
-            (0, 0, 80, 55),
-            (80, 0, 120, 55),
-            (120, 0, 200, 55)
+            #(0, 88, 80, 176),
+            #(80, 88, 120, 176),
+            #(120, 88, 200, 176),
+            #(0, 55, 80, 88),
+            #(80, 55, 120, 88),
+            #(120, 55, 200, 88),
+            #(0, 0, 80, 55),
+            #(80, 0, 120, 55),
+            #(120, 0, 200, 55)
         ]
 
     def features(self, observation):

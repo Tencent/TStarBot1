@@ -15,9 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
-from gym.spaces import prng
 from gym import spaces
-from gym.spaces.discrete import Discrete
 
 from agents.memory import ReplayMemory, Transition
 from envs.space import MaskDiscrete
@@ -38,13 +36,10 @@ def tuple_variable(tensors, volatile=False):
         return Variable(tensors, volatile=volatile)
 
 
-def actor_worker(pid, env_create_fn, q_network, difficulties,
+def actor_worker(pid, env_create_fn, q_network, difficulties, discount,
                  current_eps, cur_difficulty_idx, action_space,
                  allow_eval_mode, transition_queue, outcome_queue,
-                 use_curriculum, discount):
-    np.random.seed(pid)
-    random.seed(pid)
-    prng.seed(pid)
+                 use_curriculum):
 
     def preprocess_observation(observation):
         action_mask = None
@@ -81,47 +76,38 @@ def actor_worker(pid, env_create_fn, q_network, difficulties,
 
     episode_id = 0
     while True:
-        try:
-            episode_id += 1
-            cum_return = 0.0
-            random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
-            print("Random Seed: %d" % random_seed)
-            if use_curriculum:
-                cur_difficulty = difficulties[cur_difficulty_idx.value]
-            else:
-                cur_difficulty = random.choice(difficulties)
-            env = env_create_fn(cur_difficulty, random_seed)
-            observation = env.reset()
-            done = False
-            n_frames = 0
-            transition_list = []
-            while not done:
-                action = act(observation, eps=current_eps.value)
-                next_observation, reward, done, _ = env.step(action)
-                transition_list.append(
-                    (observation, action, reward, next_observation, done))
-                observation = next_observation
-                cum_return += reward
-                n_frames += 1
-
-            discounted_return = 0
-            for transition in reversed(transition_list):
-                discounted_return = discounted_return * discount + transition[2]
-                transition_queue.put(transition + (discounted_return,))
-            outcome_queue.put(cum_return)
-            env.close()
-            print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
-                  "Epsilon: %f Return: %f." %
-                  (pid, episode_id, n_frames, cur_difficulty, current_eps.value,
-                   cum_return))
-            sys.stdout.flush()
-
-        except:
-            print("Expection occured in PID %d. Restart." % pid)
-            pass
+        episode_id += 1
+        cum_return = 0.0
+        random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
+        print("Random Seed: %d" % random_seed)
+        if use_curriculum:
+            cur_difficulty = difficulties[cur_difficulty_idx.value]
+        else:
+            cur_difficulty = random.choice(difficulties)
+        env = env_create_fn(cur_difficulty, random_seed)
+        observation = env.reset()
+        done = False
+        n_frames = 0
+        transitions = []
+        while not done:
+            action = act(observation, eps=current_eps.value)
+            next_observation, reward, done, _ = env.step(action)
+            transitions.append((observation, action, reward))
+            observation = next_observation
+            n_frames += 1
+        for observation, action, reward in reversed(transitions):
+            cum_return = cum_return * discount + reward
+            transition_queue.put((observation, action, cum_return))
+        outcome_queue.put(cum_return)
+        env.close()
+        print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
+              "Epsilon: %f Return: %f." %
+              (pid, episode_id, n_frames, cur_difficulty, current_eps.value,
+               cum_return))
+        sys.stdout.flush()
 
 
-class FastDQNAgent(object):
+class MCAgent(object):
     '''Deep Q-learning agent.'''
 
     def __init__(self,
@@ -144,8 +130,6 @@ class FastDQNAgent(object):
                  frame_step_ratio,
                  gradient_clipping,
                  double_dqn,
-                 mmc_beta,
-                 mmc_discount,
                  target_update_freq,
                  winning_rate_threshold,
                  difficulties,
@@ -155,7 +139,8 @@ class FastDQNAgent(object):
                  save_model_dir=None,
                  save_model_freq=50000,
                  print_freq=1000):
-        assert isinstance(action_space, Discrete)
+        assert (isinstance(action_space, MaskDiscrete) or
+                isinstance(action_space, spaces.Discrete))
         multiprocessing.set_start_method('spawn')
 
         self._batch_size = batch_size
@@ -177,8 +162,6 @@ class FastDQNAgent(object):
         self._allow_eval_mode = allow_eval_mode
         self._loss_type = loss_type
         self._print_freq = print_freq
-        self._mmc_beta = mmc_beta
-        self._mmc_discount = mmc_discount
         self._episode_idx = 0
         self._current_eps = multiprocessing.Value('d', eps_start)
         self._num_threads = 4
@@ -189,8 +172,8 @@ class FastDQNAgent(object):
         self._recent_outcomes = deque(maxlen=1000)
 
         self._q_network = network
-        self._q_network.share_memory()
         self._target_q_network = deepcopy(network)
+        self._target_q_network.share_memory()
         if init_model_path:
             self._load_model(init_model_path)
             self._episode_idx = int(init_model_path[
@@ -279,40 +262,15 @@ class FastDQNAgent(object):
 
     def _optimize(self):
         #print("Batch Queue Size: %d" % self._batch_queue.qsize())
-        (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch,
-         return_batch) = self._batch_queue.get()
-        next_obs_batch, action_mask = self._preprocess_observation(
-            next_obs_batch)
+        obs_batch, action_batch, value_batch = self._batch_queue.get()
         obs_batch, _ = self._preprocess_observation(obs_batch)
-        # compute max-q target
-        if self._allow_eval_mode:
-            self._q_network.eval()
-        q_next_target = self._target_q_network(next_obs_batch)
-        if self._double_dqn:
-            q_next = self._q_network(next_obs_batch)
-            if action_mask is not None:
-                q_next[action_mask == 0] = float('-inf')
-            futures = q_next_target.gather(
-                1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
-        else:
-            if action_mask is not None:
-                q_next_target[action_mask == 0] = float('-inf')
-            futures = q_next_target.max(dim=1)[0].view(-1, 1).squeeze()
-        futures = futures * (1 - done_batch)
-        target_q = reward_batch + self._discount * futures
-        target_q = target_q * self._mmc_beta + \
-            (1.0 - self._mmc_beta) * return_batch
-        # define loss
-        self._q_network.train()
-        q = self._q_network(obs_batch).gather(
-            1, action_batch.view(-1, 1))
+        q = self._q_network(obs_batch).gather(1, action_batch.view(-1, 1))
         if self._loss_type == "smooth_l1":
-            loss = F.smooth_l1_loss(q, Variable(target_q.data))
+            loss = F.smooth_l1_loss(q, value_batch)
         elif self._loss_type == "mse":
-            loss = F.mse_loss(q, Variable(target_q.data))
+            loss = F.mse_loss(q, value_batch)
         else:
             raise NotImplementedError
-        # compute gradient and update parameters
         self._optimizer.zero_grad()
         loss.backward()
         for param in self._q_network.parameters():
@@ -323,28 +281,29 @@ class FastDQNAgent(object):
 
     def _init_parallel_actors(self, create_env_fn, num_actor_workers,
                               use_curriculum):
-        self._transition_queue = multiprocessing.Queue(8)
+        self._transition_queue = multiprocessing.Queue(128)
         self._outcome_queue = multiprocessing.Queue(200000)
         self._actor_processes = [
             multiprocessing.Process(
                 target=actor_worker,
                 args=(pid,
                       create_env_fn,
-                      self._q_network,
+                      self._target_q_network,
                       self._difficulties,
+                      self._discount,
                       self._current_eps,
                       self._cur_difficulty_idx,
                       self._action_space,
                       self._allow_eval_mode,
                       self._transition_queue,
                       self._outcome_queue,
-                      use_curriculum,
-                      self._mmc_discount))
+                      use_curriculum))
             for pid in range(num_actor_workers)]
         self._batch_queue = queue.Queue(8)
-        self._batch_thread = [threading.Thread(target=self._prepare_batch,
-                                               args=(tid,))
-                              for tid in range(self._num_threads)]
+        self._batch_thread = [
+            threading.Thread(target=self._prepare_batch, args=(tid,))
+            for tid in range(self._num_threads)
+        ]
         for process in self._actor_processes:
             process.daemon = True
             process.start()
@@ -372,7 +331,7 @@ class FastDQNAgent(object):
                 self._recent_outcomes.clear()
 
     def _prepare_batch(self, tid):
-        memory = ReplayMemory(int(self._memory_size / self._num_threads))
+        memory = deque(maxlen=int(self._memory_size / self._num_threads))
         steps = 0
         if self._frame_step_ratio < 1:
             steps_per_frame = int(1 / self._frame_step_ratio)
@@ -382,53 +341,37 @@ class FastDQNAgent(object):
             steps += 1
             if self._frame_step_ratio < 1:
                 if steps % steps_per_frame == 0: 
-                    memory.push(*(self._transition_queue.get()))
+                    memory.append(self._transition_queue.get())
             else:
                 #print("Trans Queue Size: %d" % self._transition_queue.qsize())
                 for i in range(frames_per_step):
-                    memory.push(*(self._transition_queue.get()))
+                    memory.append(self._transition_queue.get())
             if len(memory) < self._init_memory_size / self._num_threads:
                 continue
-            transitions = memory.sample(self._batch_size)
+            transitions = random.sample(memory, self._batch_size)
             self._batch_queue.put(self._transitions_to_batch(transitions))
 
     def _transitions_to_batch(self, transitions):
         # batch to pytorch tensor
-        batch = Transition(*zip(*transitions))
-        if isinstance(batch.next_observation[0], tuple):
-            next_obs_batch = tuple(torch.from_numpy(np.stack(feat))
-                                   for feat in zip(*batch.next_observation))
-        else:
-            next_obs_batch = torch.from_numpy(np.stack(batch.next_observation))
-        if isinstance(batch.observation[0], tuple):
-            obs_batch = tuple(torch.from_numpy(np.stack(feat))
-                              for feat in zip(*batch.observation))
-        else:
-            obs_batch = torch.from_numpy(np.stack(batch.observation))
-        reward_batch = torch.FloatTensor(batch.reward)
-        action_batch = torch.LongTensor(batch.action)
-        done_batch = torch.Tensor(batch.done)
-        return_batch = torch.FloatTensor(batch.mc_return)
+        obs_batch, action_batch, value_batch = zip(*transitions)
+        obs_batch = tuple(torch.from_numpy(np.stack(feat))
+                          for feat in zip(*obs_batch))
+        action_batch = torch.LongTensor(action_batch)
+        value_batch = torch.FloatTensor(value_batch)
+        value_batch = value_batch.unsqueeze(1)
 
         # move to cuda
         if torch.cuda.is_available():
-            next_obs_batch = tuple_cuda(next_obs_batch)
             obs_batch = tuple_cuda(obs_batch)
-            reward_batch = tuple_cuda(reward_batch)
             action_batch = tuple_cuda(action_batch)
-            done_batch = tuple_cuda(done_batch)
-            return_batch = tuple_cuda(return_batch)
+            value_batch = tuple_cuda(value_batch)
 
         # create variables
-        next_obs_batch = tuple_variable(next_obs_batch, volatile=True)
         obs_batch = tuple_variable(obs_batch)
-        reward_batch = tuple_variable(reward_batch)
         action_batch = tuple_variable(action_batch)
-        done_batch = tuple_variable(done_batch)
-        return_batch = tuple_variable(return_batch)
+        value_batch = tuple_variable(value_batch)
 
-        return (next_obs_batch, obs_batch, reward_batch, action_batch,
-                done_batch, return_batch)
+        return (obs_batch, action_batch, value_batch)
 
     def _update_target_network(self):
         self._target_q_network.load_state_dict(

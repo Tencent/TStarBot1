@@ -36,7 +36,7 @@ class UnitTypeCountMapFeature(object):
                 y = self._resolution - 1 - \
                     (u.float_attr.pos_y - MAP.BOTTOM) // grid_height
                 features[c, int(y), int(x)] += 1.0
-        return features
+        return features / 5.0
 
 
 class AllianceCountMapFeature(object):
@@ -70,4 +70,4 @@ class AllianceCountMapFeature(object):
             y = self._resolution - 1 - \
                 (u.float_attr.pos_y - MAP.BOTTOM) // grid_height
             features[0, int(y), int(x)] += 1.0
-        return features
+        return features / 5.0
