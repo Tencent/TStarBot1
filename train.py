@@ -48,6 +48,7 @@ flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
+flags.DEFINE_boolean("use_action_mask", False, "Use action mask or not.")
 flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
@@ -73,7 +74,7 @@ def create_env(difficulty, random_seed=None):
         random_seed=random_seed)
     if FLAGS.use_reward_shaping:
         env = RewardShapingWrapperV2(env)
-    env = ZergActionWrapper(env)
+    env = ZergActionWrapper(env, mask=FLAGS.use_action_mask)
     if FLAGS.use_spatial_features:
         env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
     else:

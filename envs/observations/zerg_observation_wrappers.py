@@ -136,9 +136,6 @@ class ZergObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskDiscrete):
-            observation, action_mask = observation
-
         ally_map_feat = self._alliance_count_map_feature.features(observation)
         type_map_feat = self._unit_type_count_map_feature.features(observation)
         unit_type_feat = self._unit_count_feature.features(observation)
@@ -154,16 +151,14 @@ class ZergObservationWrapper(gym.Wrapper):
                                           player_feat,
                                           game_progress_feat,
                                           action_seq_feat])
-
+        if self._flip:
+            spatial_feat = self._diagonal_flip(spatial_feat)
         #np.set_printoptions(threshold=np.nan, linewidth=300)
         #for i in range(spatial_feat.shape[0]):
             #print(spatial_feat[i])
 
-        if self._flip:
-            spatial_feat = self._diagonal_flip(spatial_feat)
-
         if isinstance(self.env.action_space, MaskDiscrete):
-            return (spatial_feat, nonspatial_feat, action_mask)
+            return (spatial_feat, nonspatial_feat, observation['action_mask'])
         else:
             return (spatial_feat, nonspatial_feat)
 
@@ -257,9 +252,6 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
         return self.env.player_position
 
     def _observation(self, observation):
-        if isinstance(self.env.action_space, MaskDiscrete):
-            observation, action_mask = observation
-
         unit_type_feat = self._unit_count_feature.features(observation)
         unit_stat_feat = self._unit_stat_count_feature.features(observation)
         player_feat = self._player_feature.features(observation)
@@ -273,6 +265,6 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
                                           action_seq_feat])
 
         if isinstance(self.env.action_space, MaskDiscrete):
-            return (nonspatial_feat, action_mask)
+            return (nonspatial_feat, abservation['action_mask'])
         else:
-            return (nonspatial_feat)
+            return nonspatial_feat
