@@ -5,8 +5,8 @@ from gym import spaces
 from absl import logging
 import numpy as np
 
-from envs.space import MaskDiscrete
-from envs.space import PySC2RawAction
+from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.space import PySC2RawAction
 
 
 def add_input(action_queue, n):

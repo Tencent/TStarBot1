@@ -4,15 +4,15 @@ from gym import spaces
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from envs.space import PySC2RawObservation
-from envs.space import MaskDiscrete
-from envs.observations.spatial_features import UnitTypeCountMapFeature
-from envs.observations.spatial_features import AllianceCountMapFeature
-from envs.observations.nonspatial_features import PlayerFeature
-from envs.observations.nonspatial_features import UnitTypeCountFeature
-from envs.observations.nonspatial_features import UnitStatCountFeature
-from envs.observations.nonspatial_features import GameProgressFeature
-from envs.observations.nonspatial_features import ActionSeqFeature
+from sc2learner.envs.space import PySC2RawObservation
+from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.observations.spatial_features import UnitTypeCountMapFeature
+from sc2learner.envs.observations.spatial_features import AllianceCountMapFeature
+from sc2learner.envs.observations.nonspatial_features import PlayerFeature
+from sc2learner.envs.observations.nonspatial_features import UnitTypeCountFeature
+from sc2learner.envs.observations.nonspatial_features import UnitStatCountFeature
+from sc2learner.envs.observations.nonspatial_features import GameProgressFeature
+from sc2learner.envs.observations.nonspatial_features import ActionSeqFeature
 
 
 class ZergObservationWrapper(gym.Wrapper):

@@ -1,7 +1,7 @@
 import numpy as np
 
-from envs.common.const import ALLY_TYPE
-from envs.common.const import COMBAT_TYPES
+from sc2learner.envs.common.const import ALLY_TYPE
+from sc2learner.envs.common.const import COMBAT_TYPES
 
 
 class PlayerFeature(object):

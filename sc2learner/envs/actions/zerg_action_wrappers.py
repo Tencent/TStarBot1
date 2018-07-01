@@ -8,15 +8,15 @@ from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from gym.spaces.discrete import Discrete
 
-from envs.space import PySC2RawObservation
-from envs.space import MaskDiscrete
-from envs.common.data_context import DataContext
-from envs.actions.function import Function
-from envs.actions.produce import ProduceActions
-from envs.actions.build import BuildActions
-from envs.actions.upgrade import UpgradeActions
-from envs.actions.resource import ResourceActions
-from envs.actions.combat import CombatActions
+from sc2learner.envs.space import PySC2RawObservation
+from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.common.data_context import DataContext
+from sc2learner.envs.actions.function import Function
+from sc2learner.envs.actions.produce import ProduceActions
+from sc2learner.envs.actions.build import BuildActions
+from sc2learner.envs.actions.upgrade import UpgradeActions
+from sc2learner.envs.actions.resource import ResourceActions
+from sc2learner.envs.actions.combat import CombatActions
 
 
 class ZergActionWrapper(gym.Wrapper):

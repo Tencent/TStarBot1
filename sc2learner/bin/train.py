@@ -6,16 +6,16 @@ from absl import app
 from absl import flags
 import random
 
-from envs.sc2_env import StarCraftIIEnv
-from envs.actions.zerg_action_wrappers import ZergActionWrapper
-from envs.observations.zerg_observation_wrappers import ZergObservationWrapper
-from envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
-from envs.rewards.reward_wrappers import RewardShapingWrapperV2
-from agents.dqn_agent import DDQNAgent
-from agents.models.sc2_networks import DuelingQNet
-from agents.models.sc2_networks import NonspatialDuelingQNet
-from agents.models.sc2_networks import NonspatialDuelingLinearQNet
-from utils.utils import print_arguments
+from sc2learner.envs.sc2_env import StarCraftIIEnv
+from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
+from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
+from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
+from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
+from sc2learner.agents.dqn_agent import DDQNAgent
+from sc2learner.agents.models.sc2_networks import DuelingQNet
+from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
+from sc2learner.agents.models.sc2_networks import NonspatialDuelingLinearQNet
+from sc2learner.utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS

@@ -1,6 +1,6 @@
 from gym import spaces
-from envs.space import MaskDiscrete
-from envs.space import PySC2RawAction
+from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.space import PySC2RawAction
 import numpy as np
 
 
