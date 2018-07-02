@@ -23,7 +23,7 @@ from gym.spaces import prng
 from gym.spaces.discrete import Discrete
 
 from sc2learner.agents.memory import ReplayMemory, Transition
-from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 
 
 def tuple_cuda(tensors):
