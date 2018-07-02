@@ -1,22 +1,25 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import sys
 import time
 import random
 import math
-import numpy as np
 from copy import deepcopy
 import queue
 import threading
 import multiprocessing
 from collections import deque
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
 from gym.spaces import prng
-from gym import spaces
 from gym.spaces.discrete import Discrete
 
 from sc2learner.agents.memory import ReplayMemory, Transition

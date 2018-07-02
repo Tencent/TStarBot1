@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from s2clientprotocol import sc2api_pb2 as sc_pb
 from pysc2.lib.tech_tree import TechTree
 from pysc2.lib.unit_controls import Unit

@@ -1,7 +1,11 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import random
-import numpy as np
 import math
 
+import numpy as np
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
 import sc2learner.envs.common.utils as utils

@@ -1,7 +1,11 @@
-from gym import spaces
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import numpy as np
+
 from sc2learner.envs.space import MaskDiscrete
 from sc2learner.envs.space import PySC2RawAction
-import numpy as np
 
 
 class RandomAgent(object):

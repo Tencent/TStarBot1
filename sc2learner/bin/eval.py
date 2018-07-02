@@ -1,12 +1,17 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import sys
-import torch
 import os
 import traceback
+import time
+
+import torch
 from absl import app
 from absl import flags
 from absl import logging
 import numpy as np
-import time
 
 from sc2learner.envs.sc2_env import StarCraftIIEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper

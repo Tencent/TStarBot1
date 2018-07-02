@@ -1,12 +1,16 @@
-import gym
-import platform
-import numpy as np
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
+import platform
+
+import numpy as np
+import gym
+from gym.spaces.discrete import Discrete
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import UPGRADE_ID as UPGRADE
 from pysc2.lib import point
 from s2clientprotocol import sc2api_pb2 as sc_pb
-from gym.spaces.discrete import Discrete
 
 from sc2learner.envs.space import PySC2RawObservation
 from sc2learner.envs.space import MaskDiscrete

@@ -1,7 +1,10 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 import gym
 from gym import spaces
-
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
 from sc2learner.envs.space import PySC2RawObservation

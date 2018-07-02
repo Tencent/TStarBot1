@@ -1,7 +1,11 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import time
 import queue
 import threading
-from gym import spaces
+
 from absl import logging
 import numpy as np
 

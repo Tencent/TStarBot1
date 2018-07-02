@@ -1,4 +1,9 @@
-from enum import Enum, unique
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from enum import Enum
+from enum import unique
 from collections import namedtuple
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
