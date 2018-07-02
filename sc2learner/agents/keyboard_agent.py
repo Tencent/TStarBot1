@@ -1,12 +1,16 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import time
 import queue
 import threading
-from gym import spaces
+
 from absl import logging
 import numpy as np
 
-from sc2learner.envs.space import MaskDiscrete
-from sc2learner.envs.space import PySC2RawAction
+from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawAction
 
 
 def add_input(action_queue, n):

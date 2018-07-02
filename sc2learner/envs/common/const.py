@@ -1,4 +1,9 @@
-from enum import Enum, unique
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from enum import Enum
+from enum import unique
 from collections import namedtuple
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
@@ -31,7 +36,7 @@ NEUTRAL_DESTRUCTABLEROCKEX14X4 = 638
 NEUTRAL_UNBUILDABLEROCKSDESTRUCIBLE = 472
 
 
-AREA_COLLISION_BUILDINGS = {
+PLACE_COLLISION_BUILDINGS = {
     UNIT_TYPE.NEUTRAL_MINERALFIELD.value,
     UNIT_TYPE.NEUTRAL_MINERALFIELD750.value,
     UNIT_TYPE.NEUTRAL_VESPENEGEYSER.value,

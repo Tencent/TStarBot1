@@ -1,10 +1,13 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 import gym
 import pysc2.env.sc2_env
-from pysc2.lib import actions
 
-from sc2learner.envs.space import PySC2RawAction
-from sc2learner.envs.space import PySC2RawObservation
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawAction
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
 
 
 class StarCraftIIEnv(gym.Env):

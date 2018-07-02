@@ -1,11 +1,14 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 import gym
 from gym import spaces
-
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from sc2learner.envs.space import PySC2RawObservation
-from sc2learner.envs.space import MaskDiscrete
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
+from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 from sc2learner.envs.observations.spatial_features import UnitTypeCountMapFeature
 from sc2learner.envs.observations.spatial_features import AllianceCountMapFeature
 from sc2learner.envs.observations.nonspatial_features import PlayerFeature

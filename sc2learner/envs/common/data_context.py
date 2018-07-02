@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import itertools
 
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE

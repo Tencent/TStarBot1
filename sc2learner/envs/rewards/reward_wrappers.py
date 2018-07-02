@@ -1,11 +1,12 @@
-import gym
-from gym import spaces
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
+import gym
+from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
-from pysc2.lib.typeenums import UNIT_TYPEID
-
-from sc2learner.envs.space import PySC2RawObservation
-from sc2learner.envs.space import PySC2RawAction
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
 from sc2learner.envs.common.const import ALLY_TYPE
 
 
@@ -14,9 +15,9 @@ class RewardShapingWrapperV1(gym.Wrapper):
   def __init__(self, env):
     super(RewardShapingWrapperV1, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
-    self._combat_unit_types = set([UNIT_TYPEID.ZERG_ZERGLING.value,
-                                   UNIT_TYPEID.ZERG_ROACH.value,
-                                   UNIT_TYPEID.ZERG_HYDRALISK.value])
+    self._combat_unit_types = set([UNIT_TYPE.ZERG_ZERGLING.value,
+                                   UNIT_TYPE.ZERG_ROACH.value,
+                                   UNIT_TYPE.ZERG_HYDRALISK.value])
     self.reward_range = (-np.inf, np.inf)
 
   def step(self, action):
@@ -65,12 +66,12 @@ class RewardShapingWrapperV2(gym.Wrapper):
   def __init__(self, env):
     super(RewardShapingWrapperV2, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
-    self._combat_unit_types = set([UNIT_TYPEID.ZERG_ZERGLING.value,
-                                   UNIT_TYPEID.ZERG_ROACH.value,
-                                   UNIT_TYPEID.ZERG_HYDRALISK.value,
-                                   UNIT_TYPEID.ZERG_RAVAGER.value,
-                                   UNIT_TYPEID.ZERG_BANELING.value,
-                                   UNIT_TYPEID.ZERG_BROODLING.value])
+    self._combat_unit_types = set([UNIT_TYPE.ZERG_ZERGLING.value,
+                                   UNIT_TYPE.ZERG_ROACH.value,
+                                   UNIT_TYPE.ZERG_HYDRALISK.value,
+                                   UNIT_TYPE.ZERG_RAVAGER.value,
+                                   UNIT_TYPE.ZERG_BANELING.value,
+                                   UNIT_TYPE.ZERG_BROODLING.value])
     self.reward_range = (-np.inf, np.inf)
 
   def step(self, action):
