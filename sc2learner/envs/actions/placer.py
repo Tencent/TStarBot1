@@ -9,32 +9,32 @@ import numpy as np
 from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 
 import sc2learner.envs.common.utils as utils
-from sc2learner.envs.common.const import AREA_COLLISION_BUILDINGS
+from sc2learner.envs.common.const import PLACE_COLLISION_BUILDINGS
 
 
-class SpatialPlanner(object):
+class Placer(object):
 
   def get_building_position(self, type_id, dc):
     if type_id == UNIT_TYPE.ZERG_HATCHERY.value:
-      return self._next_base_area(dc)
+      return self._next_base_place(dc)
     elif type_id == UNIT_TYPE.ZERG_EXTRACTOR.value:
       gas = dc.exploitable_gas
       return random.choice(gas) if len(gas) > 0 else None
     else:
-      areas = self._constructable_areas(1.5, dc)
-      return random.choice(areas) if len(areas) > 0 else None
+      place = self._constructable_place(1.5, dc)
+      return random.choice(place) if len(place) > 0 else None
 
   def can_build(self, type_id, dc):
     if type_id == UNIT_TYPE.ZERG_HATCHERY.value:
-      return self._next_base_area(dc) is not None
+      return self._next_base_place(dc) is not None
     elif type_id == UNIT_TYPE.ZERG_EXTRACTOR.value:
       return len(dc.exploitable_gas) > 0
     else:
-      areas = self._constructable_areas(1.5, dc)
-      return len(areas) > 0
+      place = self._constructable_place(1.5, dc)
+      return len(place) > 0
 
-  def _constructable_areas(self, margin, dc):
-    areas = []
+  def _constructable_place(self, margin, dc):
+    place = []
     bases = dc.mature_units_of_types([UNIT_TYPE.ZERG_HATCHERY.value,
                                       UNIT_TYPE.ZERG_LAIR.value,
                                       UNIT_TYPE.ZERG_HIVE.value])
@@ -43,11 +43,11 @@ class SpatialPlanner(object):
                        base.float_attr.pos_y - 10.5,
                        10.5 * 2,
                        10.5 * 2)
-      areas.extend(self._search_areas(search_region, dc, margin=margin,
+      place.extend(self._search_place(search_region, dc, margin=margin,
                                       remove_corner=True, expand_mineral=True))
-    return areas
+    return place
 
-  def _next_base_area(self, dc):
+  def _next_base_place(self, dc):
     unexploited_minerals = dc.unexploited_minerals
     if len(unexploited_minerals) == 0: return None
     mineral_to_exploit = utils.closest_unit(dc.init_base_pos,
@@ -81,11 +81,11 @@ class SpatialPlanner(object):
         y_offset = height - width + 1
       height = width - 1
     region = [left + x_offset, bottom + y_offset, width, height]
-    areas = self._search_areas(region, dc, margin=5.5, shrink_mineral=True)
-    return utils.closest_unit((x_mean, y_mean), areas) \
-        if len(areas) > 0 else None
+    place = self._search_place(region, dc, margin=5.5, shrink_mineral=True)
+    return utils.closest_unit((x_mean, y_mean), place) \
+        if len(place) > 0 else None
 
-  def _search_areas(self, search_region, dc, margin=0, remove_corner=False,
+  def _search_place(self, search_region, dc, margin=0, remove_corner=False,
                     expand_mineral=False, shrink_mineral=False):
     bottomleft = tuple(map(int, search_region[:2]))
     size = tuple(map(int, search_region[2:]))
@@ -103,13 +103,13 @@ class SpatialPlanner(object):
     filter_range = (bottomleft[0] - 10, bottomleft[0] + size[0] + 10,
                     bottomleft[1] - 10, bottomleft[1] + size[1] + 10)
     sitted_units = [u for u in dc.units
-                    if (u.unit_type in AREA_COLLISION_BUILDINGS and
+                    if (u.unit_type in PLACE_COLLISION_BUILDINGS and
                         u.float_attr.pos_x >= filter_range[0] and
                         u.float_attr.pos_x <= filter_range[1] and
                         u.float_attr.pos_y >= filter_range[2] and
                         u.float_attr.pos_y <= filter_range[3])]
     sitted_units = [u for u in dc.units
-                    if u.unit_type in AREA_COLLISION_BUILDINGS]
+                    if u.unit_type in PLACE_COLLISION_BUILDINGS]
     margin_int = math.floor(margin)
     for u in sitted_units:
       if u.float_attr.radius <= 1.0:

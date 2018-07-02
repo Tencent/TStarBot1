@@ -9,7 +9,7 @@ from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
 from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
 from sc2learner.envs.actions.function import Function
-from sc2learner.envs.actions.spatial_planner import SpatialPlanner
+from sc2learner.envs.actions.placer import Placer
 import sc2learner.envs.common.utils as utils
 from sc2learner.envs.common.const import MAXIMUM_NUM
 
@@ -17,7 +17,7 @@ from sc2learner.envs.common.const import MAXIMUM_NUM
 class BuildActions(object):
 
   def __init__(self):
-    self._spatial_planner = SpatialPlanner()
+    self._placer = Placer()
     self._tech_tree = TechTree()
 
   def action(self, func_name, type_id):
@@ -29,7 +29,7 @@ class BuildActions(object):
 
     def act(dc):
       tech = self._tech_tree.getUnitData(type_id)
-      pos = self._spatial_planner.get_building_position(type_id, dc)
+      pos = self._placer.get_building_position(type_id, dc)
       if pos == None: return []
       extractor_tags = set(u.tag for u in dc.units_of_type(
                            UNIT_TYPE.ZERG_EXTRACTOR.value))
@@ -80,7 +80,7 @@ class BuildActions(object):
           dc.supply_count >= tech.supplyCost and
           len(dc.units_of_types(tech.whatBuilds)) > 0 and
           len(dc.units_with_task(tech.buildAbility)) == 0 and
-          self._spatial_planner.can_build(type_id, dc)):
+          self._placer.can_build(type_id, dc)):
         return True
       else:
         return False
