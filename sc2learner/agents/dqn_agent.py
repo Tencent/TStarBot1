@@ -404,6 +404,7 @@ class DDQNAgent(object):
     action_batch = tuple_variable(action_batch)
     done_batch = tuple_variable(done_batch)
     return_batch = tuple_variable(return_batch)
+    print(obs_batch.size(), next_obs_batch.size(), reward_batch.size(), action_batch.size(), done_batch.size(), return_batch.size())
 
     return (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch,
             return_batch)
