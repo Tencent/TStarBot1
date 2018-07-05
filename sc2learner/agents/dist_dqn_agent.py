@@ -10,7 +10,6 @@ import math
 from copy import deepcopy
 import queue
 from threading import Thread
-import multiprocessing
 from collections import deque
 import io
 
@@ -48,12 +47,12 @@ class Actor(object):
   def act(self, observation, eps=0):
     self._network.eval()
     if random.uniform(0, 1) >= eps:
-      observation = self._tuple_tensor_from_numpy(observation)
-      if torch.cuda.is_available(): observation = self._tuple_cuda(observation)
-      observation, action_mask = self._parse_observation(observation)
-      q = self._network(self._tuple_variable(observation, volatile=True))
-      if action_mask is not None: q[action_mask == 0] = float('-inf')
-      action = q.data.max(1)[1][0]
+      observation = torch.from_numpy(np.expand_dims(observation, 0))
+      if torch.cuda.is_available():
+        observation = observation.pin_memory().cuda(non_blocking=True)
+      with torch.no_grad():
+        q = self._network(observation)
+        action = q.data.max(1)[1].item()
       return action
     else:
       return self._action_space.sample()
@@ -95,28 +94,21 @@ class Actor(object):
       mc_return_batch = mc_return_batch.cuda(non_blocking=True)
       done_batch = done_batch.cuda(non_blocking=True)
 
-    # create variables
-    obs_batch = Variable(obs_batch)
-    next_obs_batch = Variable(next_obs_batch, volatile=True)
-    reward_batch = Variable(reward_batch)
-    action_batch = Variable(action_batch)
-    done_batch = Variable(done_batch)
-    mc_return_batch = Variable(mc_return_batch)
-
     # compute max-q target
     self._network.eval()
-    q_next_target = self._target_network(next_obs_batch)
-    q_next = self._network(next_obs_batch)
-    futures = q_next_target.gather(
-        1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
-    futures = futures * (1 - done_batch)
-    target_q = reward_batch + discount * futures
-    target_q = target_q * mmc_beta + (1.0 - mmc_beta) * mc_return_batch
+    with torch.no_grad():
+      q_next_target = self._target_network(next_obs_batch)
+      q_next = self._network(next_obs_batch)
+      futures = q_next_target.gather(
+          1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
+      futures = futures * (1 - done_batch)
+      target_q = reward_batch + discount * futures
+      target_q = target_q * mmc_beta + (1.0 - mmc_beta) * mc_return_batch
 
     # define loss
     self._network.train()
     q = self._network(obs_batch).gather(1, action_batch.view(-1, 1)).squeeze()
-    loss = F.mse_loss(q, Variable(target_q.data))
+    loss = F.mse_loss(q, target_q.detach())
 
     # compute gradient and update parameters
     self._optimizer.zero_grad()
@@ -151,12 +143,6 @@ class Actor(object):
       return tuple(tensor.pin_memory().cuda(async=True) for tensor in tensors)
     else:
       return tensors.pin_memory().cuda(async=True)
-
-  def _tuple_variable(self, tensors, volatile=False):
-    if isinstance(tensors, tuple):
-      return tuple(Variable(tensor, volatile=volatile) for tensor in tensors)
-    else:
-      return Variable(tensors, volatile=volatile)
 
   def _parse_observation(self, observation):
     action_mask = None
@@ -426,7 +412,6 @@ class DistDDQNLearner(object):
     server.rem.reward_coeff = [1.0]
     server.rem.cache_flags = [1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
     server.print_info()
-    server.rem.reuse_cache = 1
 
     threads = [
         Thread(target=server.rep_worker_main, args=("tcp://*:5561", Bind)),
