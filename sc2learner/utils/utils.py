@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl import flags
+from datetime import datetime
 
 
 def print_arguments(flags_FLAGS):
@@ -30,3 +31,7 @@ def print_arguments(flags_FLAGS):
     if not arg_name.startswith('sc2_') and arg_name not in black_set:
       print("%s: %s" % (arg_name, flags_FLAGS[arg_name].value))
   print("-------------------------------------------------------------------")
+
+
+def tprint(x):
+  print("[%s] %s" % (str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')), x))

@@ -24,15 +24,16 @@ from sc2learner.utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum("job", 'actor', ['actor', 'learner'], "Job type.")
+flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
 flags.DEFINE_integer("client_memory_size", 10000,
                      "Total size of client memory.")
 flags.DEFINE_integer("client_memory_warmup_size", 1000,
                      "Warmup size of client memroy.")
-flags.DEFINE_integer("num_caches", 40, "Number of server caches.")
-flags.DEFINE_integer("cache_size", 256, "Cache size.")
-flags.DEFINE_integer("num_pull_workers", 1, "Number of pull worker for server.")
+flags.DEFINE_integer("cache_size", 1024, "Cache size.")
+flags.DEFINE_integer("num_caches", 256, "Number of server caches.")
+flags.DEFINE_integer("num_pull_workers", 16, "Number of pull worker for server.")
 flags.DEFINE_float("discount", 0.995, "Discount factor.")
-flags.DEFINE_float("push_time_interval", 0.1, "Time interval for client push.")
+flags.DEFINE_float("push_freq", 4.0, "Probability of a step being pushed.")
 flags.DEFINE_float("priority_exponent", 0.0, "Exponent for priority sampling.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
@@ -45,7 +46,7 @@ flags.DEFINE_integer("eps_decay2", 50000000, "Greedy epsilon decay step.")
 flags.DEFINE_float("learning_rate", 1e-6, "Learning rate.")
 flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
 flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
-flags.DEFINE_integer("batch_size", 4096, "Batch size.")
+flags.DEFINE_integer("batch_size", 256, "Batch size.")
 flags.DEFINE_float("mmc_discount", 0.995, "Discount.")
 flags.DEFINE_float("mmc_beta", 0.9, "Discount.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
@@ -97,7 +98,6 @@ def start_learner_job():
               adam_eps=FLAGS.adam_eps,
               learning_rate=FLAGS.learning_rate,
               target_update_freq=FLAGS.target_update_freq,
-              publish_model_freq=10000,
               checkpoint_dir=FLAGS.checkpoint_dir,
               checkpoint_freq=FLAGS.checkpoint_freq,
               print_freq=FLAGS.print_freq)
@@ -116,9 +116,10 @@ def start_actor_job():
                              eps_end=FLAGS.eps_end,
                              eps_decay=FLAGS.eps_decay,
                              eps_decay2=FLAGS.eps_decay2,
-                             push_time_interval=FLAGS.push_time_interval,
-                             learner_ip="localhost")
+                             push_freq=FLAGS.push_freq,
+                             learner_ip=FLAGS.learner_ip)
   env.close()
+  env = None
   worker.run()
 
 

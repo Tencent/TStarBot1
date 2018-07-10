@@ -29,6 +29,7 @@ from memoire import Conn
 
 from sc2learner.agents.memory import ReplayMemory, Transition
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.utils.utils import tprint
 
 
 class Actor(object):
@@ -165,7 +166,7 @@ class DistRolloutWorker(object):
                eps_end,
                eps_decay,
                eps_decay2,
-               push_time_interval,
+               push_freq,
                learner_ip="localhost"):
     self._actor = Actor(network, action_space)
     self._difficulties = difficulties
@@ -174,11 +175,13 @@ class DistRolloutWorker(object):
     self._eps_end = eps_end
     self._eps_decay = eps_decay
     self._eps_decay2 = eps_decay2
+    self._memory_warmup_size = memory_warmup_size
+    self._push_freq = push_freq
     self._num_steps = 0
     self._memory_client, self._threads = self._setup_memory_client(
-        learner_ip, memory_size, memory_warmup_size, self._actor,
-        push_time_interval)
+        learner_ip, memory_size, self._actor)
     self._replay_memory = self._memory_client.rem
+    self._cache_size = self._replay_memory.cache_size
     self._set_random_seed(self._replay_memory.uuid)
 
   def run(self):
@@ -192,7 +195,7 @@ class DistRolloutWorker(object):
       except KeyboardInterrupt:
         break
       except Exception as e:
-        print("Rollout Exception: %s" % e)
+        tprint("[Rollout Exception]: %s" % e)
         continue
 
   def _set_random_seed(self, seed):
@@ -203,30 +206,21 @@ class DistRolloutWorker(object):
   def _setup_memory_client(self,
                            server_ip,
                            memory_size,
-                           memory_warmup_size,
-                           actor,
-                           push_time_interval=1.0):
+                           actor):
     client = ReplayMemoryClient("tcp://%s:5560" % server_ip,
                                 "tcp://%s:5561" % server_ip,
                                 "tcp://%s:5562" % server_ip,
                                 memory_size)
     client.rem.print_info()
 
-    def _push_cache_worker(client, time_interval):
-      time.sleep(30)
-      while True:
-        if self._num_steps > memory_warmup_size:
-          client.push_cache()
-        time.sleep(time_interval)
-
     def _update_network_worker(client, actor):
       while True:
         f = io.BytesIO(client.sub_bytes('model'))
         actor.load_network(
             torch.load(f, map_location=lambda storage, loc: storage))
+        tprint("Network updated.")
 
     threads = [
-        Thread(target=_push_cache_worker, args=(client, push_time_interval)),
         Thread(target=_update_network_worker, args=(client, actor))
     ]
     for thread in threads:
@@ -258,6 +252,9 @@ class DistRolloutWorker(object):
       self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
                                     entry_prob, entry_value, weight=1.0)
       self._num_steps += 1
+      if (self._num_steps > self._memory_warmup_size and
+          self._num_steps % int(self._cache_size / self._push_freq) == 0):
+        self._memory_client.push_cache()
     env.close()
     entry_action[0], entry_reward[0], entry_value[0] = -1, 0, 0
     entry_prob[0] = True
@@ -266,7 +263,7 @@ class DistRolloutWorker(object):
                                   entry_prob, entry_value, weight=1.0)
     self._replay_memory.close_episode()
     self._memory_client.update_counter()
-    print("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
+    tprint("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
         self._replay_memory.uuid, difficulty, eps, reward))
 
   def _schedule_eps(self, steps):
@@ -304,7 +301,9 @@ class DistDDQNLearner(object):
     self._discount = discount
     self._actor = Actor(network, action_space)
     self._publish_model()
+    time.sleep(2)
     self._publish_model()
+    time.sleep(2)
 
   def learn(self,
             batch_size,
@@ -313,14 +312,13 @@ class DistDDQNLearner(object):
             adam_eps,
             learning_rate,
             target_update_freq,
-            publish_model_freq,
             checkpoint_dir,
             checkpoint_freq,
             print_freq):
     batch_queue = queue.Queue(8)
     batch_threads = [
-        Thread(target=self._batch_worker, args=(batch_queue, batch_size))
-        for _ in range(1)
+        Thread(target=self._batch_worker, args=(batch_queue, batch_size)),
+        Thread(target=self._publish_model_worker)
     ]
     for thread in batch_threads:
       thread.start()
@@ -347,13 +345,17 @@ class DistDDQNLearner(object):
         ckpt_path = os.path.join(checkpoint_dir, 'agent.model-%d' % num_updates)
         self._save_checkpoint(ckpt_path)
       if num_updates % print_freq == 0:
-        print("Steps: %d Time: %f Loss %f " % (num_updates, time.time() - t,
-                                               loss_sum / num_updates))
+        tprint("Steps: %d Time: %f Loss %f Actor Steps: %d" % (
+            num_updates, time.time() - t, loss_sum / num_updates,
+            self._memory_server.total_steps))
         loss_sum = 0.0
         t = time.time()
-      if num_updates % publish_model_freq == 0:
-        self._publish_model()
       num_updates += 1
+
+  def _publish_model_worker(self):
+    while True:
+      self._publish_model()
+      time.sleep(5)
 
   def _batch_worker(self, batch_queue, batch_size):
     while True:
