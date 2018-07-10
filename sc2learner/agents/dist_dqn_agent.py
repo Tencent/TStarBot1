@@ -255,7 +255,7 @@ class DistRolloutWorker(object):
     self._replay_memory.close_episode()
     self._memory_client.update_counter()
     tprint("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
-        self._replay_memory.uuid, difficulty, eps, reward))
+        self._replay_memory.uuid, difficulty, self._cur_epsilon, reward))
     self._num_rollouts += 1
 
 
@@ -357,6 +357,7 @@ class DistDDQNLearner(object):
       try:
         if self._memory_server.total_steps <= warmup_size:
           time.sleep(5)
+          tprint("Warming up: %d frames." % self._memory_server.total_steps)
           continue
         prev_trans, next_trans, _ = self._memory_server.get_batch(batch_size)
         t = time.time()
