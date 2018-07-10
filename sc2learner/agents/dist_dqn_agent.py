@@ -157,29 +157,21 @@ class DistRolloutWorker(object):
 
   def __init__(self,
                memory_size,
-               memory_warmup_size,
                difficulties,
                env_create_fn,
                network,
                action_space,
-               eps_start,
-               eps_end,
-               eps_decay,
-               eps_decay2,
                push_freq,
                learner_ip="localhost"):
     self._actor = Actor(network, action_space)
+    self._cur_epsilon = 1.0
     self._difficulties = difficulties
     self._env_create_fn = env_create_fn
-    self._eps_start = eps_start
-    self._eps_end = eps_end
-    self._eps_decay = eps_decay
-    self._eps_decay2 = eps_decay2
-    self._memory_warmup_size = memory_warmup_size
     self._push_freq = push_freq
     self._num_steps = 0
+    self._num_rollouts = 0
     self._memory_client, self._threads = self._setup_memory_client(
-        learner_ip, memory_size, self._actor)
+        learner_ip, memory_size)
     self._replay_memory = self._memory_client.rem
     self._cache_size = self._replay_memory.cache_size
     self._set_random_seed(self._replay_memory.uuid)
@@ -205,28 +197,28 @@ class DistRolloutWorker(object):
 
   def _setup_memory_client(self,
                            server_ip,
-                           memory_size,
-                           actor):
+                           memory_size):
     client = ReplayMemoryClient("tcp://%s:5560" % server_ip,
                                 "tcp://%s:5561" % server_ip,
                                 "tcp://%s:5562" % server_ip,
                                 memory_size)
     client.rem.print_info()
 
-    def _update_network_worker(client, actor):
+    def _update_network_worker(client):
       while True:
         f = io.BytesIO(client.sub_bytes('model'))
-        actor.load_network(
+        self._actor.load_network(
             torch.load(f, map_location=lambda storage, loc: storage))
         tprint("Network updated.")
+        self._cur_epsilon = float(bytes.decode(client.sub_bytes('epsilon')))
+        tprint("Epsilon updated = %f."  % self._cur_epsilon)
 
     threads = [
-        Thread(target=_update_network_worker, args=(client, actor))
+        Thread(target=_update_network_worker, args=(client,)),
     ]
     for thread in threads:
       thread.start()
     return client, threads
-
 
   def _rollout(self):
     entry_reward = np.ndarray((1), dtype=np.float32)
@@ -243,8 +235,7 @@ class DistRolloutWorker(object):
     done = False
     while not done:
       entry_state = observation
-      eps = self._schedule_eps(self._num_steps)
-      action = self._actor.act(observation, eps=eps)
+      action = self._actor.act(observation, eps=self._cur_epsilon)
       observation, reward, done, info = env.step(action)
       entry_action[0], entry_reward[0]= action, reward
       entry_prob[0] = False # entry_prob is reused as terminal
@@ -252,7 +243,7 @@ class DistRolloutWorker(object):
       self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
                                     entry_prob, entry_value, weight=1.0)
       self._num_steps += 1
-      if (self._num_steps > self._memory_warmup_size and
+      if (self._num_rollouts > 0 and
           self._num_steps % int(self._cache_size / self._push_freq) == 0):
         self._memory_client.push_cache()
     env.close()
@@ -265,16 +256,7 @@ class DistRolloutWorker(object):
     self._memory_client.update_counter()
     tprint("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
         self._replay_memory.uuid, difficulty, eps, reward))
-
-  def _schedule_eps(self, steps):
-    if steps < self._eps_decay:
-      return self._eps_start - (self._eps_start - self._eps_end) * \
-          steps / self._eps_decay
-    elif steps < self._eps_decay2:
-      return self._eps_end - (self._eps_end - 0.01) * \
-          (steps - self._eps_decay) / self._eps_decay2
-    else:
-      return 0.01
+    self._num_rollouts += 1
 
 
 class DistDDQNLearner(object):
@@ -287,6 +269,10 @@ class DistDDQNLearner(object):
                cache_size,
                num_pull_workers,
                discount,
+               eps_start,
+               eps_end,
+               eps_decay,
+               eps_decay2,
                priority_exponent=0.0):
     state_size = observation_space.spaces[0].shape[0] \
         if isinstance(observation_space, spaces.Tuple) \
@@ -300,6 +286,12 @@ class DistDDQNLearner(object):
         discount=discount)
     self._discount = discount
     self._actor = Actor(network, action_space)
+    self._eps_start = eps_start
+    self._eps_end = eps_end
+    self._eps_decay = eps_decay
+    self._eps_decay2 = eps_decay2
+    self._cur_epsilon = eps_start
+
     self._publish_model()
     time.sleep(2)
     self._publish_model()
@@ -311,13 +303,15 @@ class DistDDQNLearner(object):
             gradient_clipping,
             adam_eps,
             learning_rate,
+            warmup_size,
             target_update_freq,
             checkpoint_dir,
             checkpoint_freq,
             print_freq):
     batch_queue = queue.Queue(8)
     batch_threads = [
-        Thread(target=self._batch_worker, args=(batch_queue, batch_size)),
+        Thread(target=self._batch_worker, args=(batch_queue, batch_size,
+                                                warmup_size)),
         Thread(target=self._publish_model_worker)
     ]
     for thread in batch_threads:
@@ -328,6 +322,7 @@ class DistDDQNLearner(object):
     while True:
       observation, next_observation, action, reward, done, mc_return = \
           batch_queue.get()
+      self._cur_epsilon = self._schedule_explore_eps(self._num_steps)
       loss_sum += self._actor.optimize_step(
           obs_batch=observation,
           next_obs_batch=next_observation,
@@ -357,9 +352,12 @@ class DistDDQNLearner(object):
       self._publish_model()
       time.sleep(5)
 
-  def _batch_worker(self, batch_queue, batch_size):
+  def _batch_worker(self, batch_queue, batch_size, warmup_size):
     while True:
       try:
+        if self._memory_server.total_steps <= warmup_size:
+          time.sleep(5)
+          continue
         prev_trans, next_trans, _ = self._memory_server.get_batch(batch_size)
         t = time.time()
         observation = prev_trans[0].squeeze(1)
@@ -435,9 +433,20 @@ class DistDDQNLearner(object):
     else:
       torch.save(self._actor.network.state_dict(), f)
     self._memory_server.pub_bytes('model', f.getvalue())
+    self._memory_server.pub_bytes('epsilon', str.encode(str(self._cur_epsilon)))
 
   def _save_checkpoint(self, checkpoint_path):
     if torch.cuda.device_count() > 1:
       torch.save(self._actor.network.module.state_dict(), checkpoint_path)
     else:
       torch.save(self._actor.network.state_dict(), checkpoint_path)
+
+  def _schedule_explore_epsilon(self, steps):
+    if steps < self._eps_decay:
+      return self._eps_start - (self._eps_start - self._eps_end) * \
+          steps / self._eps_decay
+    elif steps < self._eps_decay2:
+      return self._eps_end - (self._eps_end - 0.01) * \
+          (steps - self._eps_decay) / self._eps_decay2
+    else:
+      return 0.01
