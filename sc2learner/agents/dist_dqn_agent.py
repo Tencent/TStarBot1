@@ -214,7 +214,7 @@ class DistRolloutWorker(object):
         tprint("Epsilon updated = %f."  % self._cur_epsilon)
 
     threads = [
-        Thread(target=_update_network_worker, args=(client,)),
+        Thread(target=_update_network_worker, args=(client,))
     ]
     for thread in threads:
       thread.start()
@@ -322,7 +322,7 @@ class DistDDQNLearner(object):
     while True:
       observation, next_observation, action, reward, done, mc_return = \
           batch_queue.get()
-      self._cur_epsilon = self._schedule_explore_eps(self._num_steps)
+      self._cur_epsilon = self._schedule_epsilon(num_updates)
       loss_sum += self._actor.optimize_step(
           obs_batch=observation,
           next_obs_batch=next_observation,
@@ -340,9 +340,9 @@ class DistDDQNLearner(object):
         ckpt_path = os.path.join(checkpoint_dir, 'agent.model-%d' % num_updates)
         self._save_checkpoint(ckpt_path)
       if num_updates % print_freq == 0:
-        tprint("Steps: %d Time: %f Loss %f Actor Steps: %d" % (
+        tprint("Steps: %d Time: %f Loss %f Actor Steps: %d Current Eps: %f" % (
             num_updates, time.time() - t, loss_sum / num_updates,
-            self._memory_server.total_steps))
+            self._memory_server.total_steps, self._cur_epsilon))
         loss_sum = 0.0
         t = time.time()
       num_updates += 1
@@ -442,7 +442,7 @@ class DistDDQNLearner(object):
     else:
       torch.save(self._actor.network.state_dict(), checkpoint_path)
 
-  def _schedule_explore_epsilon(self, steps):
+  def _schedule_epsilon(self, steps):
     if steps < self._eps_decay:
       return self._eps_start - (self._eps_start - self._eps_end) * \
           steps / self._eps_decay
