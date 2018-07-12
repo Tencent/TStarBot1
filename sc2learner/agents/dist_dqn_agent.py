@@ -255,10 +255,8 @@ class DistRolloutWorker(object):
     self._replay_memory.close_episode()
     self._memory_client.update_counter()
     tprint("Actor uuid: %d Seed: %d Difficulty: %s Epsilon: %f Outcome: %f." %
-        self._replay_memory.uuid, random_seed, difficulty, self._cur_epsilon,
-        reward))
-    tprint("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
-        self._replay_memory.uuid, difficulty, self._cur_epsilon, reward))
+        (self._replay_memory.uuid, random_seed, difficulty, self._cur_epsilon,
+         reward))
     self._num_rollouts += 1
 
 
