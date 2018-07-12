@@ -210,7 +210,7 @@ class DistRolloutWorker(object):
         self._actor.load_network(
             torch.load(f, map_location=lambda storage, loc: storage))
         tprint("Network updated.")
-        self._cur_epsilon = float(bytes.decode(client.sub_bytes('epsilon')))
+        self._cur_epsilon = float(client.sub_bytes('epsilon'))
         tprint("Epsilon updated = %f."  % self._cur_epsilon)
 
     threads = [
@@ -254,6 +254,9 @@ class DistRolloutWorker(object):
                                   entry_prob, entry_value, weight=1.0)
     self._replay_memory.close_episode()
     self._memory_client.update_counter()
+    tprint("Actor uuid: %d Seed: %d Difficulty: %s Epsilon: %f Outcome: %f." %
+        self._replay_memory.uuid, random_seed, difficulty, self._cur_epsilon,
+        reward))
     tprint("Actor uuid: %d Difficulty: %s Epsilon: %f Outcome: %f." % (
         self._replay_memory.uuid, difficulty, self._cur_epsilon, reward))
     self._num_rollouts += 1
@@ -350,7 +353,7 @@ class DistDDQNLearner(object):
   def _publish_model_worker(self):
     while True:
       self._publish_model()
-      time.sleep(5)
+      time.sleep(10)
 
   def _batch_worker(self, batch_queue, batch_size, warmup_size):
     while True:
@@ -434,7 +437,7 @@ class DistDDQNLearner(object):
     else:
       torch.save(self._actor.network.state_dict(), f)
     self._memory_server.pub_bytes('model', f.getvalue())
-    self._memory_server.pub_bytes('epsilon', str.encode(str(self._cur_epsilon)))
+    self._memory_server.pub_bytes('epsilon', str(self._cur_epsilon))
 
   def _save_checkpoint(self, checkpoint_path):
     if torch.cuda.device_count() > 1:
