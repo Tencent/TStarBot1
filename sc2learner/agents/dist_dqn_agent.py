@@ -206,12 +206,16 @@ class DistRolloutWorker(object):
 
     def _update_network_worker(client):
       while True:
-        f = io.BytesIO(client.sub_bytes('model'))
-        self._actor.load_network(
-            torch.load(f, map_location=lambda storage, loc: storage))
-        tprint("Network updated.")
-        self._cur_epsilon = float(client.sub_bytes('epsilon'))
-        tprint("Epsilon updated = %f."  % self._cur_epsilon)
+        try:
+          f = io.BytesIO(client.sub_bytes('model'))
+          self._actor.load_network(
+              torch.load(f, map_location=lambda storage, loc: storage))
+          tprint("Network updated.")
+          self._cur_epsilon = float(client.sub_bytes('epsilon'))
+          tprint("Epsilon updated = %f."  % self._cur_epsilon)
+        except Exception as e:
+          tprint("[Update Network Exception]: %s" % e)
+          continue
 
     threads = [
         Thread(target=_update_network_worker, args=(client,))
@@ -360,7 +364,7 @@ class DistDDQNLearner(object):
           time.sleep(5)
           tprint("Warming up: %d frames." % self._memory_server.total_steps)
           continue
-        prev_trans, next_trans, _ = self._memory_server.get_batch(batch_size)
+        prev_trans, next_trans, weight = self._memory_server.get_batch(batch_size)
         t = time.time()
         observation = prev_trans[0].squeeze(1)
         next_observation = next_trans[0].squeeze(1)
@@ -368,6 +372,12 @@ class DistDDQNLearner(object):
         mc_return = prev_trans[2].squeeze()
         reward = prev_trans[4].squeeze()
         done = next_trans[3].squeeze()
+
+        if np.any(action < 0):
+          np.set_printoptions(threshold=np.nan, linewidth=300)
+          tprint("Error action detected: actions %s, weights: %s" %
+              (action, weight))
+          continue
 
         observation = torch.from_numpy(observation)
         next_observation = torch.from_numpy(next_observation)
