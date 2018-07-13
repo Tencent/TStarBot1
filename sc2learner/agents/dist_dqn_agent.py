@@ -5,6 +5,7 @@ from __future__ import print_function
 import os
 import sys
 import time
+import struct
 import random
 import math
 from copy import deepcopy
@@ -207,15 +208,28 @@ class DistRolloutWorker(object):
     def _update_network_worker(client):
       while True:
         try:
-          f = io.BytesIO(client.sub_bytes('model'))
+          bytes_recv = client.sub_bytes('model')
+          self._cur_epsilon = struct.unpack('d', bytes_recv[:8])[0]
+          f = io.BytesIO(bytes_recv[8:])
           self._actor.load_network(
               torch.load(f, map_location=lambda storage, loc: storage))
-          tprint("Network updated.")
-          self._cur_epsilon = float(client.sub_bytes('epsilon'))
-          tprint("Epsilon updated = %f."  % self._cur_epsilon)
+          tprint("Network updated. Epsilon = %f" % self._cur_epsilon)
         except Exception as e:
           tprint("[Update Network Exception]: %s" % e)
           continue
+
+    #def _update_network_worker(client):
+      #while True:
+        #try:
+          #f = io.BytesIO(client.sub_bytes('model'))
+          #self._actor.load_network(
+              #torch.load(f, map_location=lambda storage, loc: storage))
+          #tprint("Network updated.")
+          #self._cur_epsilon = float(client.sub_bytes('epsilon'))
+          #tprint("Epsilon updated = %f."  % self._cur_epsilon)
+        #except Exception as e:
+          #tprint("[Update Network Exception]: %s" % e)
+          #continue
 
     threads = [
         Thread(target=_update_network_worker, args=(client,))
@@ -298,9 +312,9 @@ class DistDDQNLearner(object):
     self._cur_epsilon = eps_start
 
     self._publish_model()
-    time.sleep(2)
+    time.sleep(5)
     self._publish_model()
-    time.sleep(2)
+    time.sleep(5)
 
   def learn(self,
             batch_size,
@@ -444,8 +458,9 @@ class DistDDQNLearner(object):
       torch.save(self._actor.network.module.state_dict(), f)
     else:
       torch.save(self._actor.network.state_dict(), f)
-    self._memory_server.pub_bytes('model', f.getvalue())
-    self._memory_server.pub_bytes('epsilon', str(self._cur_epsilon))
+    self._memory_server.pub_bytes(
+      'model', struct.pack('d', self._cur_epsilon) + f.getvalue())
+    #self._memory_server.pub_bytes('epsilon', str(self._cur_epsilon))
 
   def _save_checkpoint(self, checkpoint_path):
     if torch.cuda.device_count() > 1:
