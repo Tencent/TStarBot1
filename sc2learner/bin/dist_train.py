@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import sys
 from threading import Thread
+import os
 
 import torch
 from absl import app
@@ -80,6 +81,9 @@ def create_network(env):
 
 
 def start_learner_job():
+  if not os.path.exists(FLAGS.checkpoint_dir):
+    os.makedirs(FLAGS.checkpoint_dir)
+
   env = create_env('1', 0)
   network = create_network(env)
   agent = DistDDQNLearner(network=network,
