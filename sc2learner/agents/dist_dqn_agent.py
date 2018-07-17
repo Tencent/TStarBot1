@@ -360,7 +360,7 @@ class DistDDQNLearner(object):
         self._save_checkpoint(ckpt_path)
       if num_updates % print_freq == 0:
         tprint("Steps: %d Time: %f Loss %f Actor Steps: %d Current Eps: %f" % (
-            num_updates, time.time() - t, loss_sum / num_updates,
+            num_updates, time.time() - t, loss_sum / print_freq,
             self._memory_server.total_steps, self._cur_epsilon))
         loss_sum = 0.0
         t = time.time()
