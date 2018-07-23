@@ -4,10 +4,24 @@ from __future__ import print_function
 
 import numpy as np
 import gym
-import pysc2.env.sc2_env
+from pysc2.env import sc2_env
 
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawAction
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
+
+
+DIFFICULTIES= {
+    "1": sc2_env.Difficulty.very_easy,
+    "2": sc2_env.Difficulty.easy,
+    "3": sc2_env.Difficulty.medium,
+    "4": sc2_env.Difficulty.medium_hard,
+    "5": sc2_env.Difficulty.hard,
+    "6": sc2_env.Difficulty.hard,
+    "7": sc2_env.Difficulty.very_hard,
+    "8": sc2_env.Difficulty.cheat_vision,
+    "9": sc2_env.Difficulty.cheat_money,
+    "A": sc2_env.Difficulty.cheat_insane,
+}
 
 
 class StarCraftIIEnv(gym.Env):
@@ -17,24 +31,24 @@ class StarCraftIIEnv(gym.Env):
                step_mul=8,
                resolution=32,
                disable_fog=False,
-               agent_race=None,
-               bot_race=None,
-               difficulty=None,
+               agent_race='random',
+               bot_race='random',
+               difficulty='1',
                game_steps_per_episode=0,
                score_index=None,
                visualize_feature_map=False,
                random_seed=None):
-    self._resolution = resolution
-    self._sc2_env = pysc2.env.sc2_env.SC2Env(
+    players=[sc2_env.Agent(sc2_env.Race[agent_race]),
+             sc2_env.Bot(sc2_env.Race[bot_race], DIFFICULTIES[difficulty])]
+    agent_interface_format=sc2_env.parse_agent_interface_format(
+        feature_screen=resolution, feature_minimap=resolution)
+    self._sc2_env = sc2_env.SC2Env(
         map_name=map_name,
         step_mul=step_mul,
-        agent_race=agent_race,
-        bot_race=bot_race,
+        players=players,
+        agent_interface_format=agent_interface_format,
         disable_fog=disable_fog,
-        difficulty=difficulty,
         game_steps_per_episode=game_steps_per_episode,
-        screen_size_px=(resolution, resolution),
-        minimap_size_px=(resolution, resolution),
         visualize=visualize_feature_map,
         score_index=score_index,
         random_seed=random_seed)

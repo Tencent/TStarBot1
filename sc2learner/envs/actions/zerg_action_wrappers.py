@@ -184,6 +184,7 @@ class ZergActionWrapper(gym.Wrapper):
 
   # TODO(@xinghai) : remove this hack
   def _action_select_units_for_mac(self):
+    return []
     action = sc_pb.Action()
     action.action_raw.unit_command.ability_id = 0
     select = action.action_feature_layer.unit_selection_rect
