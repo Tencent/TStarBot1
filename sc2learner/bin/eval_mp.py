@@ -54,9 +54,7 @@ def create_env(random_seed=None):
                        agent_race='zerg',
                        bot_race='zerg',
                        difficulty=FLAGS.difficulty,
-                       game_steps_per_episode=0,
                        visualize_feature_map=FLAGS.render,
-                       score_index=None,
                        random_seed=random_seed)
   if FLAGS.use_reward_shaping: env = RewardShapingWrapperV2(env)
   env = ZergActionWrapper(env)
@@ -114,6 +112,10 @@ def train(pid):
                       eps_decay=5000000,
                       eps_decay2=30000000,
                       memory_size=1000000,
+                      winning_rate_threshold=0,
+                      difficulties=[],
+                      mmc_beta=0,
+                      mmc_discount=0,
                       init_memory_size=100000,
                       frame_step_ratio=1.0,
                       gradient_clipping=1.0,
@@ -126,6 +128,7 @@ def train(pid):
     agent = KeyboardAgent(action_space=env.action_space)
   else:
     raise NotImplementedError
+  env.close()
 
   try:
     cum_return = 0.0
@@ -146,7 +149,6 @@ def train(pid):
       env.close()
   except KeyboardInterrupt: pass
   except: traceback.print_exc()
-  env.close()
 
 
 def main(argv):

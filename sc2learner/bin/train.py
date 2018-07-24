@@ -69,9 +69,7 @@ def create_env(difficulty, random_seed=None):
                        bot_race='zerg',
                        difficulty=difficulty,
                        disable_fog=FLAGS.disable_fog,
-                       game_steps_per_episode=0,
                        visualize_feature_map=False,
-                       score_index=None,
                        random_seed=random_seed)
   if FLAGS.use_reward_shaping: env = RewardShapingWrapperV2(env)
   env = ZergActionWrapper(env, mask=FLAGS.use_action_mask)

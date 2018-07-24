@@ -147,7 +147,6 @@ class DDQNAgent(object):
                save_model_freq=50000,
                print_freq=1000):
     assert isinstance(action_space, Discrete)
-    multiprocessing.set_start_method('spawn')
 
     self._batch_size = batch_size
     self._discount = discount
@@ -303,6 +302,7 @@ class DDQNAgent(object):
 
   def _init_parallel_actors(self, create_env_fn, num_actor_workers,
                             use_curriculum):
+    multiprocessing.set_start_method('spawn')
     self._transition_queue = multiprocessing.Queue(8)
     self._outcome_queue = multiprocessing.Queue(200000)
     self._actor_processes = [

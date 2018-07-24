@@ -34,7 +34,7 @@ class StarCraftIIEnv(gym.Env):
                agent_race='random',
                bot_race='random',
                difficulty='1',
-               game_steps_per_episode=0,
+               game_steps_per_episode=None,
                score_index=None,
                visualize_feature_map=False,
                random_seed=None):
