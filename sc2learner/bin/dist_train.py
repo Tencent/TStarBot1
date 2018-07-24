@@ -26,11 +26,11 @@ from sc2learner.utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_enum("job", 'actor', ['actor', 'learner'], "Job type.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
-flags.DEFINE_integer("client_memory_size", 10000,
+flags.DEFINE_integer("client_memory_size", 50000,
                      "Total size of client memory.")
-flags.DEFINE_integer("warmup_size", 5000000, "Warmup size for replay memory.")
-flags.DEFINE_integer("cache_size", 1024, "Cache size.")
-flags.DEFINE_integer("num_caches", 256, "Number of server caches.")
+flags.DEFINE_integer("warmup_size", 10000000, "Warmup size for replay memory.")
+flags.DEFINE_integer("cache_size", 128, "Cache size.")
+flags.DEFINE_integer("num_caches", 4096, "Number of server caches.")
 flags.DEFINE_integer("num_pull_workers", 16, "Number of pull worker for server.")
 flags.DEFINE_float("discount", 0.995, "Discount factor.")
 flags.DEFINE_float("push_freq", 4.0, "Probability of a step being pushed.")
@@ -50,6 +50,7 @@ flags.DEFINE_integer("batch_size", 256, "Batch size.")
 flags.DEFINE_float("mmc_discount", 0.995, "Discount.")
 flags.DEFINE_float("mmc_beta", 0.9, "Discount.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
+flags.DEFINE_string("init_checkpoint_path", "", "Checkpoint to initialize model.")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("checkpoint_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
@@ -97,6 +98,7 @@ def start_learner_job():
                           eps_decay=FLAGS.eps_decay,
                           eps_decay2=FLAGS.eps_decay2,
                           discount=FLAGS.discount,
+                          init_checkpoint_path=FLAGS.init_checkpoint_path,
                           priority_exponent=FLAGS.priority_exponent)
   env.close()
   env = None

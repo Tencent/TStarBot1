@@ -292,6 +292,7 @@ class DistDDQNLearner(object):
                eps_end,
                eps_decay,
                eps_decay2,
+               init_checkpoint_path="",
                priority_exponent=0.0):
     state_size = observation_space.spaces[0].shape[0] \
         if isinstance(observation_space, spaces.Tuple) \
@@ -304,12 +305,15 @@ class DistDDQNLearner(object):
         priority_exponent=priority_exponent,
         discount=discount)
     self._discount = discount
-    self._actor = Actor(network, action_space)
     self._eps_start = eps_start
     self._eps_end = eps_end
     self._eps_decay = eps_decay
     self._eps_decay2 = eps_decay2
     self._cur_epsilon = eps_start
+
+    self._actor = Actor(network, action_space)
+    if init_checkpoint_path:
+      self._load_model(init_checkpoint_path)
 
     self._publish_model()
     time.sleep(5)
@@ -467,6 +471,10 @@ class DistDDQNLearner(object):
       torch.save(self._actor.network.module.state_dict(), checkpoint_path)
     else:
       torch.save(self._actor.network.state_dict(), checkpoint_path)
+
+  def _load_model(self, model_path):
+    self._actor.load_network(
+        torch.load(model_path, map_location=lambda storage, loc: storage))
 
   def _schedule_epsilon(self, steps):
     if steps < self._eps_decay:
