@@ -29,20 +29,20 @@ from sc2learner.utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_parallels", 4, "Parallel number.")
 flags.DEFINE_integer("num_episodes", 50, "Number of episodes to evaluate.")
-flags.DEFINE_float("epsilon", 0.01, "Epsilon for policy.")
+flags.DEFINE_float("epsilon", 0.0, "Epsilon for policy.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
                   "Bot's strength.")
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
-flags.DEFINE_enum("agent", 'random', ['dqn', 'random', 'keyboard'], "Algorithm.")
+flags.DEFINE_enum("agent", 'dqn', ['dqn', 'random', 'keyboard'], "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("render", False, "Visualize feature map or not.")
-flags.DEFINE_boolean("disable_fog", True, "Disable fog-of-war.")
+flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
 flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
-flags.DEFINE_boolean("use_spatial_features", True, "Use spatial features.")
+flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
 flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
