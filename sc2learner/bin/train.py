@@ -26,6 +26,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_integer("num_actor_workers", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulty", '1,2,4,6,9,A', "Bot's strengths.")
+flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_float("winning_rate_threshold", 0.65, "Winning rate threshold.")
 flags.DEFINE_integer("memory_size", 5000000, "Experience replay size.")
 flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
@@ -72,7 +73,8 @@ def create_env(difficulty, random_seed=None):
                        visualize_feature_map=False,
                        random_seed=random_seed)
   if FLAGS.use_reward_shaping: env = RewardShapingWrapperV2(env)
-  env = ZergActionWrapper(env, mask=FLAGS.use_action_mask)
+  env = ZergActionWrapper(env, game_version=FLAGS.game_version,
+                          mask=FLAGS.use_action_mask)
   if FLAGS.use_spatial_features:
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
   else:

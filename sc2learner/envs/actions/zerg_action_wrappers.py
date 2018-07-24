@@ -25,14 +25,14 @@ from sc2learner.envs.actions.combat import CombatActions
 
 class ZergActionWrapper(gym.Wrapper):
 
-  def __init__(self, env, mask=False):
+  def __init__(self, env, game_version='3.16.1', mask=False):
     super(ZergActionWrapper, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
 
     self._dc = DataContext()
-    self._build_mgr = BuildActions()
-    self._produce_mgr = ProduceActions()
-    self._upgrade_mgr = UpgradeActions()
+    self._build_mgr = BuildActions(game_version)
+    self._produce_mgr = ProduceActions(game_version)
+    self._upgrade_mgr = UpgradeActions(game_version)
     self._resource_mgr = ResourceActions()
     self._combat_mgr = CombatActions()
 

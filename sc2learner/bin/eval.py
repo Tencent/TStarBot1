@@ -30,6 +30,7 @@ from sc2learner.utils.utils import print_arguments
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
 flags.DEFINE_float("epsilon", 0.01, "Epsilon for policy.")
+flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
@@ -57,7 +58,7 @@ def create_env(random_seed=None):
                        visualize_feature_map=FLAGS.render,
                        random_seed=random_seed)
   if FLAGS.use_reward_shaping: env = RewardShapingWrapperV2(env)
-  env = ZergActionWrapper(env)
+  env = ZergActionWrapper(env, game_version=FLAGS.game_version)
   if FLAGS.use_spatial_features:
     env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
   else:
