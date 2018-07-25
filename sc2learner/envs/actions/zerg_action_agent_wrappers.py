@@ -23,12 +23,9 @@ from sc2learner.envs.actions.resource import ResourceActions
 from sc2learner.envs.actions.combat import CombatActions
 
 
-class ZergActionWrapper(gym.Wrapper):
+class ZergActionAgentWrapper(object):
 
-  def __init__(self, env, game_version='3.16.1', mask=False):
-    super(ZergActionWrapper, self).__init__(env)
-    assert isinstance(env.observation_space, PySC2RawObservation)
-
+  def __init__(self, agent, game_version='3.16.1', mask=False):
     self._dc = DataContext()
     self._build_mgr = BuildActions(game_version)
     self._produce_mgr = ProduceActions(game_version)
@@ -124,26 +121,20 @@ class ZergActionWrapper(gym.Wrapper):
     if mask: self.action_space = MaskDiscrete(len(self._actions))
     else: self.action_space = Discrete(len(self._actions))
 
-  def step(self, action):
+    self._agent = agent
+
+  def act(self, observation):
+    action = self._agent.act(observation)
+    self._dc.update(observation)
     actions = self._actions[action].function(self._dc)
     pre_actions, post_actions = self._required_actions()
-    observation, reward, done, info = self.env.step(
-        pre_actions + actions + post_actions)
-    self._dc.update(observation)
-    if isinstance(self.env.action_space, MaskDiscrete):
-      observation['action_mask'] = self._get_valid_action_mask()
-    return observation, reward, done, info
+    atomic_actions = pre_actions + actions + post_actions
+    return atomic_actions
 
-  def reset(self):
+  def reset(self, observation):
     self._combat_mgr.reset()
-    observation = self.env.reset()
     self._dc.reset(observation)
-    if isinstance(self.env.action_space, MaskDiscrete):
-      observation['action_mask'] = self._get_valid_action_mask()
-    return observation
-
-  def register_opponent(self, agent):
-    self.env.register_opponent(agent)
+    self._agent.reset(observation)
 
   @property
   def action_names(self):

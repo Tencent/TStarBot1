@@ -242,6 +242,9 @@ class ZergNonspatialObservationWrapper(gym.Wrapper):
     self._action_seq_feature.reset()
     return self._observation(observation)
 
+  def register_opponent(self, agent):
+    self.env.register_opponent(agent)
+
   @property
   def action_names(self):
     if not hasattr(self.env, 'action_names'):
