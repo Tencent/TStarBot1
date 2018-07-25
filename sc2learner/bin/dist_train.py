@@ -63,13 +63,12 @@ def create_env(difficulty, random_seed=None):
   env = StarCraftIIEnv(map_name='AbyssalReef',
                        step_mul=FLAGS.step_mul,
                        resolution=16,
-                       agent_race='Z',
-                       bot_race='Z',
+                       agent_race='zerg',
+                       bot_race='zerg',
                        difficulty=difficulty,
                        disable_fog=FLAGS.disable_fog,
                        game_steps_per_episode=0,
                        visualize_feature_map=False,
-                       score_index=None,
                        random_seed=random_seed)
   env = ZergActionWrapper(env, mask=False)
   env = ZergNonspatialObservationWrapper(env)
