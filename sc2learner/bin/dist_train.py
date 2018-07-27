@@ -28,6 +28,7 @@ flags.DEFINE_enum("job", 'actor', ['actor', 'learner'], "Job type.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
 flags.DEFINE_integer("client_memory_size", 50000,
                      "Total size of client memory.")
+flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_integer("warmup_size", 10000000, "Warmup size for replay memory.")
 flags.DEFINE_integer("cache_size", 128, "Cache size.")
 flags.DEFINE_integer("num_caches", 4096, "Number of server caches.")
@@ -70,7 +71,7 @@ def create_env(difficulty, random_seed=None):
                        game_steps_per_episode=0,
                        visualize_feature_map=False,
                        random_seed=random_seed)
-  env = ZergActionWrapper(env, mask=False)
+  env = ZergActionWrapper(env, game_version=FLAGS.game_version)
   env = ZergNonspatialObservationWrapper(env)
   return env
 
