@@ -174,7 +174,8 @@ class DistRolloutWorker(object):
                network,
                action_space,
                push_freq,
-               learner_ip="localhost"):
+               learner_ip="localhost",
+               enable_push=True):
     self._actor = Actor(network, action_space)
     self._cur_epsilon = 1.0
     self._difficulties = difficulties
@@ -187,6 +188,7 @@ class DistRolloutWorker(object):
     self._replay_memory = self._memory_client.rem
     self._cache_size = self._replay_memory.cache_size
     self._set_random_seed(self._replay_memory.uuid)
+    self._enable_push = enable_push
 
   def run(self):
     while not self._actor.is_network_loaded:
@@ -272,7 +274,7 @@ class DistRolloutWorker(object):
       self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
                                     entry_prob, entry_value, weight=1.0)
       self._num_steps += 1
-      if (self._num_rollouts > 0 and
+      if (self._num_rollouts > 0 and self._enable_push and
           self._num_steps % int(self._cache_size / self._push_freq) == 0):
         self._memory_client.push_cache()
     env.close()

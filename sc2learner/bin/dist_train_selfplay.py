@@ -122,7 +122,8 @@ def start_eval_job():
                              network=network,
                              action_space=env.action_space,
                              push_freq=FLAGS.push_freq,
-                             learner_ip=FLAGS.learner_ip)
+                             learner_ip=FLAGS.learner_ip,
+                             enable_push=False)
   env.close()
   env = None
   worker.run()
