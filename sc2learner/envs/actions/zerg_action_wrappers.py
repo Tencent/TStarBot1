@@ -25,7 +25,8 @@ from sc2learner.envs.actions.combat import CombatActions
 
 class ZergActionWrapper(gym.Wrapper):
 
-  def __init__(self, env, game_version='3.16.1', mask=False):
+  def __init__(self, env, game_version='4.1.2', mask=False,
+               region_wise_combat=False):
     super(ZergActionWrapper, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
 
@@ -102,14 +103,11 @@ class ZergActionWrapper(gym.Wrapper):
         self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
         self._resource_mgr.action_some_workers_gather_gas,
         # ZERG_LOCUST, ZERG_CHANGELING not included
-        #self._combat_mgr.action_rally_idle_combat_units_to_midfield, # deprecated
-        #self._combat_mgr.action_all_attack_30, # deprecated
-        #self._combat_mgr.action_all_attack_20 # deprecated
     ] + [
-        self._combat_mgr.action(0, 0)
-        #self._combat_mgr.action(units_region_id, target_region_id)
-        #for units_region_id in range(self._combat_mgr.num_regions)
-        #for target_region_id in range(self._combat_mgr.num_regions)
+        self._combat_mgr.action(0, 0) if not region_wise_combat else (
+        self._combat_mgr.action(source_region_id, target_region_id)
+        for source_region_id in range(self._combat_mgr.num_regions)
+        for target_region_id in range(self._combat_mgr.num_regions))
     ]
 
     self._required_pre_actions = [
@@ -156,12 +154,6 @@ class ZergActionWrapper(gym.Wrapper):
 
   def _required_actions(self):
     pre_actions = []
-    # TODO(@xinghai) : remove this hacking trick
-    has_any_unit_selected = any([u.bool_attr.is_selected
-                                 for u in self._dc.units])
-    if platform.system() != 'Linux' and not has_any_unit_selected:
-      pre_actions.extend(self._action_select_units_for_mac())
-
     for fn in self._required_pre_actions:
       if fn.is_valid(self._dc):
         pre_actions.extend(fn.function(self._dc))
@@ -184,15 +176,3 @@ class ZergActionWrapper(gym.Wrapper):
     return Function(name='do_nothing',
                     function=lambda dc: [],
                     is_valid=lambda dc: True)
-
-  # TODO(@xinghai) : remove this hack
-  def _action_select_units_for_mac(self):
-    return []
-    action = sc_pb.Action()
-    action.action_raw.unit_command.ability_id = 0
-    select = action.action_feature_layer.unit_selection_rect
-    out_rect = select.selection_screen_coord.add()
-    point.Point(0, 0).assign_to(out_rect.p0)
-    point.Point(32, 32).assign_to(out_rect.p1)
-    select.selection_add = True
-    return [action]

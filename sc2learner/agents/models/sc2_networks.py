@@ -106,17 +106,3 @@ class NonspatialDuelingQNet(nn.Module):
 
     adv_subtract = adv - adv.mean(dim=1, keepdim=True)
     return value + adv_subtract
-
-
-class NonspatialDuelingLinearQNet(nn.Module):
-
-  def __init__(self, n_dims, n_out):
-    super(NonspatialDuelingLinearQNet, self).__init__()
-    self.value_fc = nn.Linear(n_dims, 1)
-    self.adv_fc = nn.Linear(n_dims, n_out)
-
-  def forward(self, x):
-    value = self.value_fc(x)
-    adv = self.adv_fc(x)
-    adv_subtract = adv - adv.mean(dim=1, keepdim=True)
-    return value + adv_subtract

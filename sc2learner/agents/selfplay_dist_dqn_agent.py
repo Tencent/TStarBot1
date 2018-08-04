@@ -301,7 +301,7 @@ class SelfplayDistRolloutWorker(object):
                model_cache_prob,
                model_cache_size,
                learner_ip="localhost",
-               game_version="3.16.1"):
+               game_version="4.1.2"):
     self._env = env
     self._actor = Actor(network, self._env.action_space)
     self._raw_oppo_actor = Actor(deepcopy(network), self._env.action_space)

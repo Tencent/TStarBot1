@@ -16,14 +16,12 @@ import numpy as np
 from sc2learner.envs.sc2_env import StarCraftIIEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
-from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
 from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from sc2learner.agents.random_agent import RandomAgent
 from sc2learner.agents.keyboard_agent import KeyboardAgent
 from sc2learner.agents.dqn_agent import DDQNAgent
 from sc2learner.agents.models.sc2_networks import DuelingQNet
 from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
-from sc2learner.agents.models.sc2_networks import NonspatialDuelingLinearQNet
 from sc2learner.utils.utils import print_arguments
 
 
@@ -38,12 +36,10 @@ flags.DEFINE_enum("difficulty", '1',
 flags.DEFINE_string("init_model_path", None, "Filepath to load initial model.")
 flags.DEFINE_enum("agent", 'dqn', ['dqn', 'random', 'keyboard'], "Algorithm.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
-flags.DEFINE_boolean("render", False, "Visualize feature map or not.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
-flags.DEFINE_boolean("flip_features", True, "Flip 2D features.")
-flags.DEFINE_boolean("use_reward_shaping", False, "Enable reward shaping.")
+flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_action_mask", False, "Use action mask or not.")
 flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
-flags.DEFINE_boolean("use_nonlinear_model", True, "Use Nonlinear model.")
 flags.FLAGS(sys.argv)
 
 
@@ -55,33 +51,27 @@ def create_env(random_seed=None):
                        agent_race='zerg',
                        bot_race='zerg',
                        difficulty=FLAGS.difficulty,
-                       visualize_feature_map=FLAGS.render,
                        random_seed=random_seed)
-  if FLAGS.use_reward_shaping: env = RewardShapingWrapperV2(env)
-  env = ZergActionWrapper(env, game_version=FLAGS.game_version)
-  if FLAGS.use_spatial_features:
-    env = ZergObservationWrapper(env, flip=FLAGS.flip_features)
-  else:
-    env = ZergNonspatialObservationWrapper(env)
+  env = ZergActionWrapper(env,
+                          game_version=FLAGS.game_version,
+                          mask=FLAGS.use_action_mask,
+                          region_wise_combat=FLAGS.use_region_wise_combat)
+  env = ZergObservationWrapper(env,
+                               use_spatial_features=FLAGS.use_spatial_features,
+                               divide_regions=FLAGS.use_region_wise_combat)
   return env
 
 
 def create_network(env):
   if FLAGS.use_spatial_features:
-    assert FLAGS.use_nonlinear_model
     network = DuelingQNet(resolution=env.observation_space.spaces[0].shape[1],
                           n_channels=env.observation_space.spaces[0].shape[0],
                           n_dims=env.observation_space.spaces[1].shape[0],
                           n_out=env.action_space.n,
                           batchnorm=FLAGS.use_batchnorm)
   else:
-    if FLAGS.use_nonlinear_model:
-      network = NonspatialDuelingQNet(n_dims=env.observation_space.shape[0],
-                                      n_out=env.action_space.n)
-    else:
-      network = NonspatialDuelingLinearQNet(
-          n_dims=env.observation_space.shape[0],
-          n_out=env.action_space.n)
+    network = NonspatialDuelingQNet(n_dims=env.observation_space.shape[0],
+                                    n_out=env.action_space.n)
   return network
 
 

@@ -36,7 +36,6 @@ class StarCraftIIEnv(gym.Env):
                difficulty='1',
                game_steps_per_episode=None,
                score_index=None,
-               visualize_feature_map=False,
                random_seed=None):
     players=[sc2_env.Agent(sc2_env.Race[agent_race]),
              sc2_env.Bot(sc2_env.Race[bot_race], DIFFICULTIES[difficulty])]
@@ -49,7 +48,7 @@ class StarCraftIIEnv(gym.Env):
         agent_interface_format=agent_interface_format,
         disable_fog=disable_fog,
         game_steps_per_episode=game_steps_per_episode,
-        visualize=visualize_feature_map,
+        visualize=False,
         score_index=score_index,
         random_seed=random_seed)
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)

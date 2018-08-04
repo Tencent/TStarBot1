@@ -16,7 +16,7 @@ from memoire import Conn
 
 from sc2learner.envs.sc2_env import StarCraftIIEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
-from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
+from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
 from sc2learner.agents.dist_dqn_agent import DistRolloutWorker
 from sc2learner.agents.dist_dqn_agent import DistDDQNLearner
 from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
@@ -57,6 +57,7 @@ flags.DEFINE_integer("checkpoint_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
 flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
+flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
 
@@ -68,11 +69,14 @@ def create_env(difficulty, random_seed=None):
                        bot_race='zerg',
                        difficulty=difficulty,
                        disable_fog=FLAGS.disable_fog,
-                       game_steps_per_episode=0,
-                       visualize_feature_map=False,
                        random_seed=random_seed)
-  env = ZergActionWrapper(env, game_version=FLAGS.game_version)
-  env = ZergNonspatialObservationWrapper(env)
+  env = ZergActionWrapper(env,
+                          game_version=FLAGS.game_version,
+                          mask=False,
+                          region_wise_combat=FLAGS.use_region_wise_combat)
+  env = ZergObservationWrapper(env,
+                               use_spatial_features=False,
+                               divide_regions=FLAGS.use_region_wise_combat)
   return env
 
 

@@ -13,7 +13,7 @@ from sc2learner.envs.common.const import MAXIMUM_NUM
 
 class ProduceActions(object):
 
-  def __init__(self, game_version='3.16.1'):
+  def __init__(self, game_version='4.1.2'):
     self._tech_tree = TechTree()
     self._tech_tree.update_version(game_version)
 

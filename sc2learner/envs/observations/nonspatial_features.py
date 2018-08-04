@@ -30,22 +30,27 @@ class PlayerFeature(object):
 
 class UnitTypeCountFeature(object):
 
-  def __init__(self, type_list):
+  def __init__(self, type_list, devide_regions=False):
     self._type_list = type_list
-    self._regions = [(0, 0, 200, 176)]
-                      #(0, 88, 80, 176),
-                      #(80, 88, 120, 176),
-                      #(120, 88, 200, 176),
-                      #(0, 55, 80, 88),
-                      #(80, 55, 120, 88),
-                      #(120, 55, 200, 88),
-                      #(0, 0, 80, 55),
-                      #(80, 0, 120, 55),
-                      #(120, 0, 200, 55)]
+    if devide_regions:
+      self._regions = [(0, 0, 200, 176),
+                       (0, 88, 80, 176),
+                       (80, 88, 120, 176),
+                       (120, 88, 200, 176),
+                       (0, 55, 80, 88),
+                       (80, 55, 120, 88),
+                       (120, 55, 200, 88),
+                       (0, 0, 80, 55),
+                       (80, 0, 120, 55),
+                       (120, 0, 200, 55)]
+    else:
+      self._regions = [(0, 0, 200, 176)]
+    self._regions_flipped = [self._regions[0]] + [
+        self._regions[10 - i] for i in range(1, len(self._regions))]
 
-  def features(self, observation):
+  def features(self, observation, need_flip=False):
     feature_list = []
-    for region in self._regions:
+    for region in (self._regions if not need_flip else self._regions_flipped):
       units_in_region = [u for u in observation['units']
                          if self._is_in_region(u, region)]
       feature_list.append(self._generate_features(units_in_region))
@@ -92,21 +97,26 @@ class UnitTypeCountFeature(object):
 
 class UnitStatCountFeature(object):
 
-  def __init__(self):
-    self._regions = [(0, 0, 200, 176)]
-                     #(0, 88, 80, 176),
-                     #(80, 88, 120, 176),
-                     #(120, 88, 200, 176),
-                     #(0, 55, 80, 88),
-                     #(80, 55, 120, 88),
-                     #(120, 55, 200, 88),
-                     #(0, 0, 80, 55),
-                     #(80, 0, 120, 55),
-                     #(120, 0, 200, 55)
+  def __init__(self, devide_regions=False):
+    if devide_regions:
+      self._regions = [(0, 0, 200, 176),
+                       (0, 88, 80, 176),
+                       (80, 88, 120, 176),
+                       (120, 88, 200, 176),
+                       (0, 55, 80, 88),
+                       (80, 55, 120, 88),
+                       (120, 55, 200, 88),
+                       (0, 0, 80, 55),
+                       (80, 0, 120, 55),
+                       (120, 0, 200, 55)]
+    else:
+      self._regions = [(0, 0, 200, 176)]
+    self._regions_flipped = [self._regions[0]] + [
+        self._regions[10 - i] for i in range(1, len(self._regions))]
 
-  def features(self, observation):
+  def features(self, observation, need_flip=False):
     feature_list = []
-    for region in self._regions:
+    for region in (self._regions if not need_flip else self._regions_flipped):
       units_in_region = [u for u in observation['units']
                          if self._is_in_region(u, region)]
       feature_list.append(self._generate_features(units_in_region))

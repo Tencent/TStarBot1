@@ -14,14 +14,16 @@ class UnitTypeCountMapFeature(object):
     self._type_map = type_map
     self._resolution = resolution
 
-  def features(self, observation):
+  def features(self, observation, need_flip=False):
     self_units = [u for u in observation['units']
                   if u.int_attr.alliance == ALLY_TYPE.SELF.value]
     enemy_units = [u for u in observation['units']
                    if u.int_attr.alliance == ALLY_TYPE.ENEMY.value]
     self_features = self._generate_features(self_units)
     enemy_features = self._generate_features(enemy_units)
-    return np.concatenate((self_features, enemy_features))
+    features = np.concatenate((self_features, enemy_features))
+    if need_flip: features = np.flip(np.flip(features, axis=1), axis=2).copy()
+    return features
 
   @property
   def num_channels(self):
@@ -48,7 +50,7 @@ class AllianceCountMapFeature(object):
   def __init__(self, resolution):
     self._resolution = resolution
 
-  def features(self, observation):
+  def features(self, observation, need_flip=False):
     self_units = [u for u in observation['units']
                   if u.int_attr.alliance == ALLY_TYPE.SELF.value]
     enemy_units = [u for u in observation['units']
@@ -58,7 +60,9 @@ class AllianceCountMapFeature(object):
     self_features = self._generate_features(self_units)
     enemy_features = self._generate_features(enemy_units)
     neutral_features = self._generate_features(neutral_units)
-    return np.concatenate((self_features, enemy_features, neutral_features))
+    features = np.concatenate((self_features, enemy_features, neutral_features))
+    if need_flip: features = np.flip(np.flip(features, axis=1), axis=2).copy()
+    return features
 
   @property
   def num_channels(self):

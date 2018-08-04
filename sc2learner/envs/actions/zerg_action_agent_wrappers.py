@@ -25,7 +25,7 @@ from sc2learner.envs.actions.combat import CombatActions
 
 class ZergActionAgentWrapper(object):
 
-  def __init__(self, agent, game_version='3.16.1', mask=False):
+  def __init__(self, agent, game_version='4.1.2', mask=False):
     self._dc = DataContext()
     self._build_mgr = BuildActions(game_version)
     self._produce_mgr = ProduceActions(game_version)
