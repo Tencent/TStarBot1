@@ -15,14 +15,12 @@ from absl import flags
 from sc2learner.envs.sc2_env import StarCraftIIEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
-from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
 from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from sc2learner.agents.random_agent import RandomAgent
 from sc2learner.agents.keyboard_agent import KeyboardAgent
 from sc2learner.agents.dqn_agent import DDQNAgent
 from sc2learner.agents.models.sc2_networks import DuelingQNet
 from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
-from sc2learner.agents.models.sc2_networks import NonspatialDuelingLinearQNet
 from sc2learner.utils.utils import print_arguments
 
 

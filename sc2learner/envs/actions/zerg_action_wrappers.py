@@ -103,12 +103,11 @@ class ZergActionWrapper(gym.Wrapper):
         self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
         self._resource_mgr.action_some_workers_gather_gas,
         # ZERG_LOCUST, ZERG_CHANGELING not included
-    ] + [
-        self._combat_mgr.action(0, 0) if not region_wise_combat else (
+    ] + ([self._combat_mgr.action(0, 0)] if not region_wise_combat else [
         self._combat_mgr.action(source_region_id, target_region_id)
         for source_region_id in range(self._combat_mgr.num_regions)
-        for target_region_id in range(self._combat_mgr.num_regions))
-    ]
+        for target_region_id in range(self._combat_mgr.num_regions)
+    ])
 
     self._required_pre_actions = [
         self._resource_mgr.action_idle_workers_gather_minerals,

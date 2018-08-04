@@ -67,7 +67,7 @@ class ZergObservationWrapper(gym.Wrapper):
                    UNIT_TYPE.ZERG_LURKERDENMP.value,
                    UNIT_TYPE.ZERG_LAIR.value,
                    UNIT_TYPE.ZERG_HIVE.value,
-                   UNIT_TYPE.ZERG_GREATERSPIRE.value]
+                   UNIT_TYPE.ZERG_GREATERSPIRE.value],
         divide_regions=divide_regions
     )
     self._unit_stat_count_feature = UnitStatCountFeature(
