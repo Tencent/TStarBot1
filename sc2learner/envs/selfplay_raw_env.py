@@ -22,7 +22,7 @@ DIFFICULTIES= {
 }
 
 
-class SelfplayStarCraftIIEnv(gym.Env):
+class SC2SelfplayRawEnv(gym.Env):
 
   def __init__(self,
                map_name,

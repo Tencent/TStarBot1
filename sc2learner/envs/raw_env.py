@@ -24,7 +24,7 @@ DIFFICULTIES= {
 }
 
 
-class StarCraftIIEnv(gym.Env):
+class SC2RawEnv(gym.Env):
 
   def __init__(self,
                map_name,

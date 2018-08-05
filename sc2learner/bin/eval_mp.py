@@ -12,15 +12,15 @@ import torch
 from absl import app
 from absl import flags
 
-from sc2learner.envs.sc2_env import StarCraftIIEnv
+from sc2learner.envs.raw_env import SC2RawEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
 from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from sc2learner.agents.random_agent import RandomAgent
 from sc2learner.agents.keyboard_agent import KeyboardAgent
 from sc2learner.agents.dqn_agent import DDQNAgent
-from sc2learner.agents.models.sc2_networks import DuelingQNet
-from sc2learner.agents.models.sc2_networks import NonspatialDuelingQNet
+from sc2learner.agents.q_networks import DuelingQNet
+from sc2learner.agents.q_networks import NonspatialDuelingQNet
 from sc2learner.utils.utils import print_arguments
 
 
@@ -44,14 +44,14 @@ flags.FLAGS(sys.argv)
 
 
 def create_env(random_seed=None):
-  env = StarCraftIIEnv(map_name='AbyssalReef',
-                       step_mul=FLAGS.step_mul,
-                       disable_fog=FLAGS.disable_fog,
-                       resolution=16,
-                       agent_race='zerg',
-                       bot_race='zerg',
-                       difficulty=FLAGS.difficulty,
-                       random_seed=random_seed)
+  env = SC2RawEnv(map_name='AbyssalReef',
+                  step_mul=FLAGS.step_mul,
+                  disable_fog=FLAGS.disable_fog,
+                  resolution=16,
+                  agent_race='zerg',
+                  bot_race='zerg',
+                  difficulty=FLAGS.difficulty,
+                  random_seed=random_seed)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,
