@@ -5,58 +5,45 @@ from __future__ import print_function
 import sys
 from threading import Thread
 import os
+import multiprocessing
+import tensorflow as tf
+import random
 
 import torch
 from absl import app
 from absl import flags
 from absl import logging
-from memoire import ReplayMemoryServer
-from memoire import Bind
-from memoire import Conn
 
-from sc2learner.agents.ppo_policies import LstmPolicy
+from sc2learner.agents.ppo_policies import LstmPolicy, MlpPolicy
+from sc2learner.agents.ppo_agent import PPOActor, PPOLearner
 from sc2learner.envs.raw_env import SC2RawEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
-from sc2learner.envs.observations.zerg_observation_wrappers import ZergNonspatialObservationWrapper
-from sc2learner.agents.dist_dqn_agent import DistRolloutWorker
-from sc2learner.agents.dist_dqn_agent import DistDDQNLearner
-from sc2learner.agents.q_networks import NonspatialDuelingQNet
+from sc2learner.envs.observations.zerg_observation_wrappers \
+    import ZergObservationWrapper
 from sc2learner.utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner'], "Job type.")
+flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
+flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
-flags.DEFINE_integer("client_memory_size", 50000,
-                     "Total size of client memory.")
-flags.DEFINE_integer("warmup_size", 10000000, "Warmup size for replay memory.")
-flags.DEFINE_integer("cache_size", 128, "Cache size.")
-flags.DEFINE_integer("num_caches", 4096, "Number of server caches.")
-flags.DEFINE_integer("num_pull_workers", 16, "Number of pull worker for server.")
-flags.DEFINE_float("discount", 0.995, "Discount factor.")
-flags.DEFINE_float("push_freq", 4.0, "Probability of a step being pushed.")
-flags.DEFINE_float("priority_exponent", 0.0, "Exponent for priority sampling.")
+flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
+flags.DEFINE_float("discount_gamma", 0.995, "Discount factor.")
+flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
+flags.DEFINE_float("clip_range", 0.1, "Clip range for PPO.")
+flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
+flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
+flags.DEFINE_integer("batch_size", 4, "Batch size.")
+flags.DEFINE_integer("learner_queue_size", 8, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
-flags.DEFINE_integer("memory_size", 5000000, "Experience replay size.")
-flags.DEFINE_integer("init_memory_size", 500000, "Experience replay init size.")
-flags.DEFINE_float("eps_start", 1.0, "Max greedy epsilon for exploration.")
-flags.DEFINE_float("eps_end", 0.1, "Min greedy epsilon for exploration.")
-flags.DEFINE_integer("eps_decay", 1000000, "Greedy epsilon decay step.")
-flags.DEFINE_integer("eps_decay2", 10000000, "Greedy epsilon decay step.")
 flags.DEFINE_float("learning_rate", 1e-6, "Learning rate.")
-flags.DEFINE_float("adam_eps", 1e-7, "Adam optimizer's epsilon.")
-flags.DEFINE_float("gradient_clipping", 10.0, "Gradient clipping threshold.")
-flags.DEFINE_integer("batch_size", 256, "Batch size.")
-flags.DEFINE_float("mmc_discount", 0.995, "Discount.")
-flags.DEFINE_float("mmc_beta", 0.9, "Discount.")
-flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
-flags.DEFINE_string("init_checkpoint_path", "", "Checkpoint to initialize model.")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_integer("checkpoint_freq", 500000, "Model saving frequency.")
-flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
-flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
+flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
+flags.DEFINE_integer("save_interval", 500000, "Model saving frequency.")
+flags.DEFINE_integer("print_interval", 100, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
+flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
 
@@ -78,36 +65,51 @@ def create_env(difficulty, random_seed=None):
                   bot_race='zerg',
                   difficulty=difficulty,
                   disable_fog=FLAGS.disable_fog,
-                  game_steps_per_episode=0,
-                  visualize_feature_map=False,
                   random_seed=random_seed)
-  env = ZergActionWrapper(env, mask=False)
-  env = ZergNonspatialObservationWrapper(env)
+  env = ZergActionWrapper(env,
+                          game_version=FLAGS.game_version,
+                          mask=False,
+                          region_wise_combat=FLAGS.use_region_wise_combat)
+  env = ZergObservationWrapper(env,
+                               use_spatial_features=False,
+                               divide_regions=FLAGS.use_region_wise_combat)
   return env
 
 
 def start_actor():
   difficulty = random.choice(FLAGS.difficulties.split(','))
   game_seed =  random.randint(0, 2**32 - 1)
+  print("Game Seed: %d" % game_seed)
   env = create_env(difficulty, game_seed)
-  actor = ppo3.PPOActor(env=env,
-                        policy=LstmPolicy,
-                        unroll_length=128,
-                        gamma=0.99,
-                        lam=0.95,
-                        learner_ip="localhost")
+  policy = {'lstm': LstmPolicy,
+            'mlp': MlpPolicy}[FLAGS.policy]
+  actor = PPOActor(env=env,
+                   policy=policy,
+                   unroll_length=FLAGS.unroll_length,
+                   gamma=FLAGS.discount_gamma,
+                   lam=FLAGS.lambda_return,
+                   learner_ip=FLAGS.learner_ip)
   actor.run()
 
 
 def start_learner():
-  env = create_env(FLAGS.difficulties, 0)
-  learner = ppo3.PPOLearner(env=env,
-                            policy=LstmPolicy,
-                            unroll_length=128,
-                            lr=2.5e-4,
-                            clip_range=0.1,
-                            batch_size=2,
-                            print_interval=100)
+  env = create_env('1', 0)
+  policy = {'lstm': LstmPolicy,
+            'mlp': MlpPolicy}[FLAGS.policy]
+  learner = PPOLearner(env=env,
+                       policy=policy,
+                       unroll_length=FLAGS.unroll_length,
+                       lr=FLAGS.learning_rate,
+                       clip_range=FLAGS.clip_range,
+                       batch_size=FLAGS.batch_size,
+                       ent_coef=FLAGS.ent_coef,
+                       vf_coef=0.5,
+                       max_grad_norm=0.5,
+                       queue_size=FLAGS.learner_queue_size,
+                       print_interval=FLAGS.print_interval,
+                       save_interval=FLAGS.save_interval,
+                       learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
+                       save_dir=FLAGS.save_dir)
   learner.run()
 
 

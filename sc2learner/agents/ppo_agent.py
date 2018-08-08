@@ -154,11 +154,11 @@ class PPOActor(object):
       mb_values.append(value[0])
       mb_neglogpacs.append(neglogpac[0])
       mb_dones.append(self._done)
-      self._obs[:], reward, self._done, info = self._env.step(action)
+      self._obs[:], reward, self._done, info = self._env.step(action[0])
       if self._done:
         self._obs[:] = self._env.reset()
         self._state = self._model.initial_state
-      if 'episode' in info: episode_infos.append(info.get('episode'))
+        episode_infos.append({'r': reward})
       mb_rewards.append(reward)
     mb_obs = np.asarray(mb_obs, dtype=self._obs.dtype)
     mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
@@ -252,7 +252,7 @@ class PPOLearner(object):
     while True:
       while (self._learn_act_speed_ratio > 0 and
           update * self._batch_size >= \
-          self._num_unrolls * self.learn_act_speed_ratio):
+          self._num_unrolls * self._learn_act_speed_ratio):
         time.sleep(0.001)
       update += 1
       lr_now = self._lr(update)

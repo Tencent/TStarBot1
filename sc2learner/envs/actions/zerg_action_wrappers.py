@@ -131,7 +131,7 @@ class ZergActionWrapper(gym.Wrapper):
       observation['action_mask'] = self._get_valid_action_mask()
     return observation, reward, done, info
 
-  def reset(self):
+  def reset(self, **kwargs):
     self._combat_mgr.reset()
     observation = self.env.reset()
     self._dc.reset(observation)

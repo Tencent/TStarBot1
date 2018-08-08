@@ -56,7 +56,7 @@ class SC2RawEnv(gym.Env):
     self._difficulty = difficulty
     self._reseted = False
 
-  def _step(self, actions):
+  def step(self, actions):
     assert self._reseted
     timestep = self._sc2_env.step([actions])[0]
     observation = timestep.observation
@@ -69,11 +69,11 @@ class SC2RawEnv(gym.Env):
     info = {}
     return (observation, reward, done, info)
 
-  def _reset(self):
+  def reset(self):
     timestep = self._sc2_env.reset()[0]
     observation = timestep.observation
     self._reseted = True
     return observation
 
-  def _close(self):
+  def close(self):
     self._sc2_env.close()

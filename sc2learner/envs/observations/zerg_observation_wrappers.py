@@ -120,18 +120,20 @@ class ZergObservationWrapper(gym.Wrapper):
 
     if use_spatial_features:
       self.observation_space = spaces.Tuple([
-          spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution]),
-          spaces.Box(0.0, float('inf'), [n_dims])
+          spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution],
+                     dtype=np.float32),
+          spaces.Box(0.0, float('inf'), [n_dims], dtype=np.float32)
       ])
     else:
-      self.observation_space = spaces.Box(0.0, float('inf'), [n_dims])
+      self.observation_space = spaces.Box(0.0, float('inf'), [n_dims],
+                                          dtype=np.float32)
 
   def step(self, action):
     observation, reward, done, info = self.env.step(action)
     self._action_seq_feature.push_action(action)
     return self._observation(observation), reward, done, info
 
-  def reset(self):
+  def reset(self, **kwargs):
     observation = self.env.reset()
     self._action_seq_feature.reset()
     return self._observation(observation)
