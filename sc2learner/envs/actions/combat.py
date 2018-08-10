@@ -78,7 +78,7 @@ class CombatActions(object):
 
     return act
 
-  def _is_valid_attack_region(self, combat_region_id, target_region_id):
+  def _is_valid_attack_region(self, source_region_id, target_region_id):
 
     def is_valid(dc):
       flip = True if self._player_position(dc) == 0  else False

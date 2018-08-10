@@ -15,3 +15,6 @@ class MaskDiscrete(Discrete):
 
   def contains(self, x, availables):
     return super(MaskDiscrete, self).contains(x) and x in availables
+
+  def __repr__(self):
+    return "MaskDiscrete(%d)" % self.n

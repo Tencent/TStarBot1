@@ -25,7 +25,7 @@ from sc2learner.utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner'], "Job type.")
-flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
+flags.DEFINE_enum("policy", 'lstm', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
@@ -34,16 +34,17 @@ flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
 flags.DEFINE_float("clip_range", 0.1, "Clip range for PPO.")
 flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
 flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
-flags.DEFINE_integer("batch_size", 4, "Batch size.")
-flags.DEFINE_integer("learner_queue_size", 8, "Size of learner's unroll queue.")
+flags.DEFINE_integer("batch_size", 32, "Batch size.")
+flags.DEFINE_integer("learner_queue_size", 128, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
-flags.DEFINE_float("learning_rate", 1e-6, "Learning rate.")
+flags.DEFINE_float("learning_rate", 2.5e-4, "Learning rate.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 100, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
 
@@ -68,10 +69,12 @@ def create_env(difficulty, random_seed=None):
                   random_seed=random_seed)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
-                          mask=False,
+                          mask=FLAGS.use_action_mask,
                           region_wise_combat=FLAGS.use_region_wise_combat)
   env = ZergObservationWrapper(env,
                                use_spatial_features=False,
+                               use_game_progress=(not FLAGS.policy == 'lstm'),
+                               use_action_seq=(not FLAGS.policy == 'lstm'),
                                divide_regions=FLAGS.use_region_wise_combat)
   return env
 

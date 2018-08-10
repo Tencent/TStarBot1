@@ -5,13 +5,14 @@ from queue import Queue
 from threading import Thread
 import time
 import random
-
 import joblib
+
 import numpy as np
 import tensorflow as tf
 import zmq
-
 from baselines.common import explained_variance
+
+from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 
 
 class Model(object):
@@ -64,8 +65,13 @@ class Model(object):
               states=None):
       advs = returns - values
       advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-      td_map = {train_model.X:obs, A:actions, ADV:advs, R:returns, LR:lr,
-                CLIPRANGE:cliprange, OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
+      if isinstance(ac_space, MaskDiscrete):
+        td_map = {train_model.X:obs[0], train_model.Mask:obs[-1], A:actions,
+                  ADV:advs, R:returns, LR:lr, CLIPRANGE:cliprange,
+                  OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
+      else:
+        td_map = {train_model.X:obs, A:actions, ADV:advs, R:returns, LR:lr,
+                  CLIPRANGE:cliprange, OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
       if states is not None:
         td_map[train_model.S] = states
         td_map[train_model.M] = masks
@@ -121,9 +127,7 @@ class PPOActor(object):
                         ent_coef=0.01,
                         vf_coef=0.5,
                         max_grad_norm=0.5)
-    self._obs = np.zeros(env.observation_space.shape,
-                         dtype=env.observation_space.dtype.name)
-    self._obs[:] = env.reset()
+    self._obs = env.reset()
     self._state = self._model.initial_state
     self._done = False
 
@@ -147,27 +151,34 @@ class PPOActor(object):
     mb_states, episode_infos = self._state, []
     for _ in range(self._unroll_length):
       action, value, self._state, neglogpac = self._model.step(
-          np.expand_dims(self._obs, 0), self._state,
+          transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
+          self._state,
           np.expand_dims(self._done, 0))
-      mb_obs.append(self._obs.copy())
+      mb_obs.append(transform_tuple(self._obs, lambda x: x.copy()))
       mb_actions.append(action[0])
       mb_values.append(value[0])
       mb_neglogpacs.append(neglogpac[0])
       mb_dones.append(self._done)
-      self._obs[:], reward, self._done, info = self._env.step(action[0])
+      self._obs, reward, self._done, info = self._env.step(action[0])
       if self._done:
-        self._obs[:] = self._env.reset()
+        self._obs = self._env.reset()
         self._state = self._model.initial_state
         episode_infos.append({'r': reward})
       mb_rewards.append(reward)
-    mb_obs = np.asarray(mb_obs, dtype=self._obs.dtype)
+    if isinstance(self._obs, tuple):
+      mb_obs = tuple(np.asarray(obs, dtype=self._obs[0].dtype)
+                     for obs in zip(*mb_obs))
+    else:
+      mb_obs = np.asarray(mb_obs, dtype=self._obs.dtype)
     mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
     mb_actions = np.asarray(mb_actions)
     mb_values = np.asarray(mb_values, dtype=np.float32)
     mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
     mb_dones = np.asarray(mb_dones, dtype=np.bool)
-    last_values = self._model.value(np.expand_dims(self._obs, 0), self._state,
-                                    np.expand_dims(self._done, 0))
+    last_values = self._model.value(
+        transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
+        self._state,
+        np.expand_dims(self._done, 0))
     mb_returns = np.zeros_like(mb_rewards)
     mb_advs = np.zeros_like(mb_rewards)
     last_gae_lam = 0
@@ -259,9 +270,18 @@ class PPOLearner(object):
       clip_range_now = self._clip_range(update)
 
       batch = random.sample(self._data_queue, self._batch_size)
-      obs, returns, dones, actions, values, neglogpacs, states = (
-          np.concatenate(arr) if arr[0] is not None else None
-          for arr in zip(*batch))
+      obs, returns, dones, actions, values, neglogpacs, states = zip(*batch)
+      if isinstance(obs[0], tuple):
+        obs = tuple(np.concatenate(ob) for ob in zip(*obs))
+      else:
+        obs = np.concatenate(obs)
+      returns = np.concatenate(returns)
+      dones = np.concatenate(dones)
+      actions = np.concatenate(actions)
+      values = np.concatenate(values)
+      neglogpacs = np.concatenate(neglogpacs)
+      states = np.concatenate(states) if states[0] is not None else None
+
       loss.append(self._model.train(lr_now, clip_range_now, obs, returns, dones,
                                     actions, values, neglogpacs, states))
       self._model_params = self._model.read_params()
@@ -298,7 +318,7 @@ class PPOLearner(object):
       data_queue.append(data[:-1])
       episode_infos.extend(data[-1])
       self._num_unrolls += 1
-      num_frames_now += data[0].shape[0]
+      num_frames_now += data[1].shape[0]
       if self._num_unrolls % 100 == 0:
         self._rollout_fps = num_frames_now / (time.time() - start_time)
         start_time, num_frames_now = time.time(), 0
@@ -320,3 +340,10 @@ def constfn(val):
 
 def safemean(xs):
   return np.nan if len(xs) == 0 else np.mean(xs)
+
+
+def transform_tuple(x, transformer):
+  if isinstance(x, tuple):
+    return tuple(transformer(a) for a in x)
+  else:
+    return transformer(x)

@@ -127,7 +127,7 @@ class ZergActionWrapper(gym.Wrapper):
     observation, reward, done, info = self.env.step(
         pre_actions + actions + post_actions)
     self._dc.update(observation)
-    if isinstance(self.env.action_space, MaskDiscrete):
+    if isinstance(self.action_space, MaskDiscrete):
       observation['action_mask'] = self._get_valid_action_mask()
     return observation, reward, done, info
 
@@ -135,7 +135,7 @@ class ZergActionWrapper(gym.Wrapper):
     self._combat_mgr.reset()
     observation = self.env.reset()
     self._dc.reset(observation)
-    if isinstance(self.env.action_space, MaskDiscrete):
+    if isinstance(self.action_space, MaskDiscrete):
       observation['action_mask'] = self._get_valid_action_mask()
     return observation
 

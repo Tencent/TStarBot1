@@ -20,10 +20,13 @@ from sc2learner.envs.observations.nonspatial_features import ActionSeqFeature
 
 class ZergObservationWrapper(gym.Wrapper):
 
-  def __init__(self, env, use_spatial_features=False, divide_regions=False):
+  def __init__(self, env, use_spatial_features=False, use_game_progress=True,
+               use_action_seq=True, divide_regions=False):
     super(ZergObservationWrapper, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
     self._use_spatial_features = use_spatial_features
+    self._use_game_progress = use_game_progress
+    self._use_action_seq = use_action_seq
 
     # nonspatial features
     self._unit_count_feature = UnitTypeCountFeature(
@@ -73,14 +76,17 @@ class ZergObservationWrapper(gym.Wrapper):
     self._unit_stat_count_feature = UnitStatCountFeature(
         divide_regions=divide_regions)
     self._player_feature = PlayerFeature()
-    self._game_progress_feature = GameProgressFeature()
-    self._action_seq_feature = ActionSeqFeature(self.action_space.n, 10)
-    n_dims = sum([self._unit_stat_count_feature.num_dims,
-                  self._unit_count_feature.num_dims,
-                  self._player_feature.num_dims,
-                  self._game_progress_feature.num_dims,
-                  self._action_seq_feature.num_dims])
-
+    if use_game_progress:
+      self._game_progress_feature = GameProgressFeature()
+    if use_action_seq:
+      self._action_seq_feature = ActionSeqFeature(self.action_space.n, 10)
+    n_dims = sum([
+        self._unit_stat_count_feature.num_dims,
+        self._unit_count_feature.num_dims,
+        self._player_feature.num_dims,
+        self._game_progress_feature.num_dims if use_game_progress else 0,
+        self._action_seq_feature.num_dims if use_action_seq else 0
+    ])
 
     # spatial features
     if use_spatial_features:
@@ -119,23 +125,39 @@ class ZergObservationWrapper(gym.Wrapper):
                         self._alliance_count_map_feature.num_channels])
 
     if use_spatial_features:
-      self.observation_space = spaces.Tuple([
-          spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution],
-                     dtype=np.float32),
-          spaces.Box(0.0, float('inf'), [n_dims], dtype=np.float32)
-      ])
+      if isinstance(self.env.action_space, MaskDiscrete):
+        self.observation_space = spaces.Tuple([
+            spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution],
+                       dtype=np.float32),
+            spaces.Box(0.0, float('inf'), [n_dims], dtype=np.float32),
+            spaces.Box(0.0, 1.0, [self.env.action_space.n], dtype=np.float32)
+        ])
+      else:
+        self.observation_space = spaces.Tuple([
+            spaces.Box(0.0, float('inf'), [n_channels, resolution, resolution],
+                       dtype=np.float32),
+            spaces.Box(0.0, float('inf'), [n_dims], dtype=np.float32)
+        ])
     else:
-      self.observation_space = spaces.Box(0.0, float('inf'), [n_dims],
-                                          dtype=np.float32)
+      if isinstance(self.env.action_space, MaskDiscrete):
+        self.observation_space = spaces.Tuple([
+            spaces.Box(0.0, float('inf'), [n_dims], dtype=np.float32),
+            spaces.Box(0.0, 1.0, [self.env.action_space.n], dtype=np.float32)
+        ])
+      else:
+        self.observation_space = spaces.Box(0.0, float('inf'), [n_dims],
+                                            dtype=np.float32)
 
   def step(self, action):
     observation, reward, done, info = self.env.step(action)
-    self._action_seq_feature.push_action(action)
+    if self._use_action_seq:
+      self._action_seq_feature.push_action(action)
     return self._observation(observation), reward, done, info
 
   def reset(self, **kwargs):
     observation = self.env.reset()
-    self._action_seq_feature.reset()
+    if self._use_action_seq:
+      self._action_seq_feature.reset()
     return self._observation(observation)
 
   @property
@@ -158,13 +180,17 @@ class ZergObservationWrapper(gym.Wrapper):
     unit_stat_feat = self._unit_stat_count_feature.features(observation,
                                                             need_flip)
     player_feat = self._player_feature.features(observation)
-    game_progress_feat = self._game_progress_feature.features(observation)
-    action_seq_feat = self._action_seq_feature.features()
-    nonspatial_feat = np.concatenate([unit_type_feat,
-                                      unit_stat_feat,
-                                      player_feat,
-                                      game_progress_feat,
-                                      action_seq_feat])
+    if self._use_game_progress:
+      game_progress_feat = self._game_progress_feature.features(observation)
+    if self._use_action_seq:
+      action_seq_feat = self._action_seq_feature.features()
+    nonspatial_feat = np.concatenate([
+        unit_type_feat,
+        unit_stat_feat,
+        player_feat,
+        game_progress_feat if self._use_game_progress else [],
+        action_seq_feat if self._use_action_seq else []
+    ])
 
     # nonspatial features
     if self._use_spatial_features:
@@ -182,6 +208,6 @@ class ZergObservationWrapper(gym.Wrapper):
         return (spatial_feat, nonspatial_feat)
     else:
       if isinstance(self.env.action_space, MaskDiscrete):
-        return (nonspatial_feat, abservation['action_mask'])
+        return (nonspatial_feat, observation['action_mask'])
       else:
         return nonspatial_feat
