@@ -44,14 +44,14 @@ flags.FLAGS(sys.argv)
 
 
 def create_env(random_seed=None):
-  env = StarRawEnv(map_name='AbyssalReef',
-                   step_mul=FLAGS.step_mul,
-                   disable_fog=FLAGS.disable_fog,
-                   resolution=16,
-                   agent_race='zerg',
-                   bot_race='zerg',
-                   difficulty=FLAGS.difficulty,
-                   random_seed=random_seed)
+  env = SC2RawEnv(map_name='AbyssalReef',
+                  step_mul=FLAGS.step_mul,
+                  disable_fog=FLAGS.disable_fog,
+                  resolution=16,
+                  agent_race='zerg',
+                  bot_race='zerg',
+                  difficulty=FLAGS.difficulty,
+                  random_seed=random_seed)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,

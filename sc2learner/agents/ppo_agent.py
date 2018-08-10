@@ -338,6 +338,34 @@ class PPOLearner(object):
       receiver.send_pyobj(self._model_params)
 
 
+class PPOAgent(object):
+
+  def __init__(self, env, policy, model_path=None):
+    self._model = Model(policy=policy,
+                        ob_space=env.observation_space,
+                        ac_space=env.action_space,
+                        nbatch_act=1,
+                        nbatch_train=1,
+                        unroll_length=1,
+                        ent_coef=0.01,
+                        vf_coef=0.5,
+                        max_grad_norm=0.5)
+    if model_path is not None:
+      self._model.load(model_path)
+    self._state = self._model.initial_state
+    self._done = False
+
+  def act(self, observation):
+      action, value, self._state, _ = self._model.step(
+          transform_tuple(observation, lambda x: np.expand_dims(x, 0)),
+          self._state,
+          np.expand_dims(self._done, 0))
+      return action[0]
+
+  def reset(self):
+    self._state = self._model.initial_state
+
+
 def constfn(val):
   def f(_):
     return val

@@ -6,13 +6,13 @@ import sys
 from threading import Thread
 import os
 import multiprocessing
-import tensorflow as tf
 import random
 import time
 
 from absl import app
 from absl import flags
 from absl import logging
+import tensorflow as tf
 
 from sc2learner.agents.ppo_policies import LstmPolicy, MlpPolicy
 from sc2learner.agents.ppo_agent import PPOActor, PPOLearner
@@ -40,7 +40,7 @@ flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 2.5e-4, "Learning rate.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_integer("save_interval", 200000, "Model saving frequency.")
+flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 500, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
