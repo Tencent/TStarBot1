@@ -257,7 +257,8 @@ class PPOLearner(object):
     self._reply_model_thread.start()
 
   def run(self):
-    while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
+    #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
+    while self._episode_infos.qsize() < 100: time.sleep(1)
     update, loss = 0, []
     time_start = time.time()
     while True:

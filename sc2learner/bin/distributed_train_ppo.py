@@ -93,6 +93,7 @@ def start_actor():
                    lam=FLAGS.lambda_return,
                    learner_ip=FLAGS.learner_ip)
   actor.run()
+  env.close()
 
 
 def start_learner():
@@ -114,6 +115,7 @@ def start_learner():
                        learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
                        save_dir=FLAGS.save_dir)
   learner.run()
+  env.close()
 
 
 def main(argv):
