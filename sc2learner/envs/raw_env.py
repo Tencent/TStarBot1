@@ -8,6 +8,7 @@ from pysc2.env import sc2_env
 
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawAction
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
+from sc2learner.utils.utils import tprint
 
 
 DIFFICULTIES= {
@@ -64,8 +65,8 @@ class SC2RawEnv(gym.Env):
     done = timestep.last()
     if done:
       self._reseted = False
-      print("Episode Done. Difficulty: %s Outcome %f" %
-            (self._difficulty, reward))
+      tprint("Episode Done. Difficulty: %s Outcome %f" %
+             (self._difficulty, reward))
     info = {}
     return (observation, reward, done, info)
 

@@ -24,6 +24,6 @@ setup(
         'sc2learner.bin',
     ],
     install_requires=[
-        'gym==0.9.4',
+        'gym==0.10.5',
     ],
 )

@@ -8,8 +8,8 @@ import os
 import multiprocessing
 import tensorflow as tf
 import random
+import time
 
-import torch
 from absl import app
 from absl import flags
 from absl import logging
@@ -40,17 +40,18 @@ flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 2.5e-4, "Learning rate.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
-flags.DEFINE_integer("save_interval", 500000, "Model saving frequency.")
-flags.DEFINE_integer("print_interval", 100, "Print train cost frequency.")
+flags.DEFINE_integer("save_interval", 200000, "Model saving frequency.")
+flags.DEFINE_integer("print_interval", 500, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
 flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
 
-def tf_config():
-  ncpu = multiprocessing.cpu_count()
-  if sys.platform == 'darwin': ncpu //= 2
+def tf_config(ncpu=None):
+  if ncpu is None:
+    ncpu = multiprocessing.cpu_count()
+    if sys.platform == 'darwin': ncpu //= 2
   config = tf.ConfigProto(allow_soft_placement=True,
                           intra_op_parallelism_threads=ncpu,
                           inter_op_parallelism_threads=ncpu)
@@ -80,6 +81,8 @@ def create_env(difficulty, random_seed=None):
 
 
 def start_actor():
+  tf_config(ncpu=1)
+  random.seed(time.time())
   difficulty = random.choice(FLAGS.difficulties.split(','))
   game_seed =  random.randint(0, 2**32 - 1)
   print("Game Seed: %d" % game_seed)
@@ -97,6 +100,7 @@ def start_actor():
 
 
 def start_learner():
+  tf_config()
   env = create_env('1', 0)
   policy = {'lstm': LstmPolicy,
             'mlp': MlpPolicy}[FLAGS.policy]
@@ -121,7 +125,6 @@ def start_learner():
 def main(argv):
   logging.set_verbosity(logging.ERROR)
   print_arguments(FLAGS)
-  tf_config()
   if FLAGS.job_name == 'actor': start_actor()
   else: start_learner()
 

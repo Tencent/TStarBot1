@@ -6,6 +6,7 @@ import gym
 from pysc2.env import sc2_env
 
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
+from sc2learner.utils.utils import tprint
 
 
 DIFFICULTIES= {
@@ -66,7 +67,7 @@ class SC2SelfplayRawEnv(gym.Env):
     self._opponent_actions = self._opponent_agent.act(oppo_observation)
     if done:
       self._reseted = False
-      print("Episode Done. Outcome %f" % reward)
+      tprint("Episode Done. Outcome %f" % reward)
     info = {}
     return (observation, reward, done, info)
 

@@ -13,6 +13,7 @@ import zmq
 from baselines.common import explained_variance
 
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.utils.utils import tprint
 
 
 class Model(object):
@@ -141,9 +142,13 @@ class PPOActor(object):
 
   def run(self):
     while True:
+      t = time.time()
       self._update_model()
-      if self._data_queue.full(): print("[WARN]: Actor's queue is full.")
+      if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
+      tprint("Time update model: %f" % (time.time() - t))
+      t = time.time()
       self._data_queue.put(self._nstep_rollout())
+      tprint("Time rollout: %f" % (time.time() - t))
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
@@ -242,7 +247,7 @@ class PPOLearner(object):
     if load_path is not None: self._model.load(load_path)
     self._model_params = self._model.read_params()
     self._data_queue = deque(maxlen=queue_size)
-    self._episode_infos = deque(maxlen=200)
+    self._episode_infos = deque(maxlen=2000)
     self._rollout_fps = -1
     self._num_unrolls = 0
 
@@ -258,7 +263,7 @@ class PPOLearner(object):
 
   def run(self):
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
-    while self._episode_infos.qsize() < 100: time.sleep(1)
+    while len(self._episode_infos) < 2000: time.sleep(1)
     update, loss = 0, []
     time_start = time.time()
     while True:
@@ -295,18 +300,18 @@ class PPOLearner(object):
         rollout_fps = self._print_interval * batch_steps / time_elapsed
         var = explained_variance(values, returns)
         avg_reward = safemean([info['r'] for info in self._episode_infos])
-        print("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
-              "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.5f	"
-              "Value-loss: %.5f	Policy-entropy: %.5f	Time-elapsed: %.1f" % (
-              update, train_fps, self._rollout_fps, var, avg_reward,
-              *loss_mean[:3], time_elapsed))
+        tprint("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
+               "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.7f	"
+               "Value-loss: %.5f	Policy-entropy: %.5f	Time-elapsed: %.1f" % (
+               update, train_fps, self._rollout_fps, var, avg_reward,
+               *loss_mean[:3], time_elapsed))
         time_start, loss = time.time(), []
 
       if self._save_dir is not None and update % self._save_interval == 0:
         os.makedirs(self._save_dir, exist_ok=True)
         save_path = os.path.join(self._save_dir, 'checkpoints-%i' % update)
         self._model.save(save_path)
-        print('Saved to %s.' % save_path)
+        tprint('Saved to %s.' % save_path)
 
   def _pull_data(self, zmq_context, data_queue, episode_infos):
     receiver = zmq_context.socket(zmq.PULL)
@@ -320,7 +325,7 @@ class PPOLearner(object):
       episode_infos.extend(data[-1])
       self._num_unrolls += 1
       num_frames_now += data[1].shape[0]
-      if self._num_unrolls % 100 == 0:
+      if self._num_unrolls % 2000 == 0:
         self._rollout_fps = num_frames_now / (time.time() - start_time)
         start_time, num_frames_now = time.time(), 0
 
