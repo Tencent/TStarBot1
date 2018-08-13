@@ -19,12 +19,13 @@ from sc2learner.utils.utils import tprint
 
 class Model(object):
   def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
-               unroll_length, ent_coef, vf_coef, max_grad_norm):
+               unroll_length, ent_coef, vf_coef, max_grad_norm, scope_name):
     sess = tf.get_default_session()
 
-    act_model = policy(sess, ob_space, ac_space, nbatch_act, 1, reuse=False)
-    train_model = policy(sess, ob_space, ac_space, nbatch_train, unroll_length,
-                         reuse=True)
+    act_model = policy(sess, scope_name, ob_space, ac_space, nbatch_act, 1,
+                       reuse=False)
+    train_model = policy(sess, scope_name, ob_space, ac_space, nbatch_train,
+                         unroll_length, reuse=True)
 
     A = train_model.pdtype.sample_placeholder([None])
     ADV = tf.placeholder(tf.float32, [None])
@@ -52,8 +53,7 @@ class Model(object):
     clipfrac = tf.reduce_mean(
         tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
     loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
-    with tf.variable_scope('model'):
-      params = tf.trainable_variables()
+    params = tf.trainable_variables(scope=scope_name)
     grads = tf.gradients(loss, params)
     if max_grad_norm is not None:
       grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
@@ -121,6 +121,7 @@ class PPOActor(object):
     self._gamma = gamma
 
     self._model = Model(policy=policy,
+                        scope_name="model",
                         ob_space=env.observation_space,
                         ac_space=env.action_space,
                         nbatch_act=1,
@@ -238,6 +239,7 @@ class PPOLearner(object):
     self._save_dir = save_dir
 
     self._model = Model(policy=policy,
+                        scope_name="model",
                         ob_space=env.observation_space,
                         ac_space=env.action_space,
                         nbatch_act=1,
@@ -373,6 +375,7 @@ class PPOAgent(object):
 
   def __init__(self, env, policy, model_path=None):
     self._model = Model(policy=policy,
+                        scope_name="model",
                         ob_space=env.observation_space,
                         ac_space=env.action_space,
                         nbatch_act=1,
@@ -395,6 +398,148 @@ class PPOAgent(object):
 
   def reset(self):
     self._state = self._model.initial_state
+
+
+class PPOSelfplayActor(object):
+
+  def __init__(self, env, policy, unroll_length, gamma, lam, model_cache_size,
+               model_cache_prob, queue_size=1, learner_ip="localhost",
+               port_A="5700", port_B="5701"):
+    self._env = env
+    self._unroll_length = unroll_length
+    self._lam = lam
+    self._gamma = gamma
+    self._model_cache = deque(maxlen=model_cache_size)
+    self._model_cache_prob = model_cache_prob
+
+    self._model = Model(policy=policy,
+                        scope_name="model",
+                        ob_space=env.observation_space,
+                        ac_space=env.action_space,
+                        nbatch_act=1,
+                        nbatch_train=unroll_length,
+                        unroll_length=unroll_length,
+                        ent_coef=0.01,
+                        vf_coef=0.5,
+                        max_grad_norm=0.5)
+    self._oppo_model = Model(policy=policy,
+                             scope_name="oppo_model",
+                             ob_space=env.observation_space,
+                             ac_space=env.action_space,
+                             nbatch_act=1,
+                             nbatch_train=unroll_length,
+                             unroll_length=unroll_length,
+                             ent_coef=0.01,
+                             vf_coef=0.5,
+                             max_grad_norm=0.5)
+    self._obs, self._oppo_obs = env.reset()
+    self._state = self._model.initial_state
+    self._oppo_state = self._oppo_model.initial_state
+    self._done = False
+
+    self._latest_model = self._oppo_model.read_params()
+    self._model_cache.append(self._latest_model)
+
+    self._zmq_context = zmq.Context()
+    self._model_requestor = self._zmq_context.socket(zmq.REQ)
+    self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
+    self._data_queue = Queue(queue_size)
+    self._push_thread = Thread(target=self._push_data, args=(
+        self._zmq_context, learner_ip, port_B, self._data_queue))
+    self._push_thread.start()
+
+  def run(self):
+    while True:
+      t = time.time()
+      self._update_model()
+      if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
+      tprint("Time update model: %f" % (time.time() - t))
+      t = time.time()
+      self._data_queue.put(self._nstep_rollout())
+      tprint("Time rollout: %f" % (time.time() - t))
+
+  def _nstep_rollout(self):
+    mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
+        [],[],[],[],[],[]
+    mb_states, episode_infos = self._state, []
+    for _ in range(self._unroll_length):
+      action, value, self._state, neglogpac = self._model.step(
+          transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
+          self._state,
+          np.expand_dims(self._done, 0))
+      oppo_action, _, self._oppo_state, _ = self._oppo_model.step(
+          transform_tuple(self._oppo_obs, lambda x: np.expand_dims(x, 0)),
+          self._oppo_state,
+          np.expand_dims(self._done, 0))
+      mb_obs.append(transform_tuple(self._obs, lambda x: x.copy()))
+      mb_actions.append(action[0])
+      mb_values.append(value[0])
+      mb_neglogpacs.append(neglogpac[0])
+      mb_dones.append(self._done)
+      (self._obs, self._oppo_obs), reward, self._done, info = self._env.step(
+        [action[0], oppo_action[0]])
+      if self._done:
+        self._obs, self._oppo_obs = self._env.reset()
+        self._state = self._model.initial_state
+        self._oppo_state = self._oppo_model.initial_state
+        self._update_opponent()
+        episode_infos.append({'r': reward})
+      mb_rewards.append(reward)
+    if isinstance(self._obs, tuple):
+      mb_obs = tuple(np.asarray(obs, dtype=self._obs[0].dtype)
+                     for obs in zip(*mb_obs))
+    else:
+      mb_obs = np.asarray(mb_obs, dtype=self._obs.dtype)
+    mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
+    mb_actions = np.asarray(mb_actions)
+    mb_values = np.asarray(mb_values, dtype=np.float32)
+    mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
+    mb_dones = np.asarray(mb_dones, dtype=np.bool)
+    last_values = self._model.value(
+        transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
+        self._state,
+        np.expand_dims(self._done, 0))
+    mb_returns = np.zeros_like(mb_rewards)
+    mb_advs = np.zeros_like(mb_rewards)
+    last_gae_lam = 0
+    for t in reversed(range(self._unroll_length)):
+      if t == self._unroll_length - 1:
+        next_nonterminal = 1.0 - self._done
+        next_values = last_values[0]
+      else:
+        next_nonterminal = 1.0 - mb_dones[t + 1]
+        next_values = mb_values[t + 1]
+      delta = mb_rewards[t] + self._gamma * next_values * next_nonterminal - \
+          mb_values[t]
+      mb_advs[t] = last_gae_lam = delta + self._gamma * self._lam * \
+          next_nonterminal * last_gae_lam
+    mb_returns = mb_advs + mb_values
+    return (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs,
+            mb_states, episode_infos)
+
+  def _push_data(self, zmq_context, learner_ip, port_B, data_queue):
+    sender = zmq_context.socket(zmq.PUSH)
+    sender.setsockopt(zmq.SNDHWM, 1)
+    sender.setsockopt(zmq.RCVHWM, 1)
+    sender.connect("tcp://%s:%s" % (learner_ip, port_B))
+    while True:
+      data = data_queue.get()
+      sender.send_pyobj(data)
+
+  def _update_model(self):
+      self._model_requestor.send_string("request model")
+      model_params = self._model_requestor.recv_pyobj()
+      self._model.load_params(model_params)
+      if random.uniform(0, 1.0) < self._model_cache_prob:
+        self._model_cache.append(model_params)
+      self._latest_model = model_params
+
+  def _update_opponent(self):
+    if random.uniform(0, 1.0) < 0.8 or len(self._model_cache) == 0:
+      self._oppo_model.load_params(self._latest_model)
+    else:
+      model_params = random.choice(self._model_cache)
+      self._oppo_model.load_params(model_params)
 
 
 def constfn(val):

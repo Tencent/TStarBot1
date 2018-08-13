@@ -2,7 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 import gym
 from pysc2.env import sc2_env
 
@@ -53,7 +52,7 @@ class SC2RawEnv(gym.Env):
         score_index=score_index,
         random_seed=random_seed)
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
-    self.action_space = None
+    self.action_space = PySC2RawAction()
     self._difficulty = difficulty
     self._reseted = False
 

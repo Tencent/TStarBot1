@@ -5,6 +5,7 @@ from __future__ import print_function
 import gym
 from pysc2.env import sc2_env
 
+from sc2learner.envs.spaces.pysc2_raw import PySC2RawAction
 from sc2learner.envs.spaces.pysc2_raw import PySC2RawObservation
 from sc2learner.utils.utils import tprint
 
@@ -50,35 +51,27 @@ class SC2SelfplayRawEnv(gym.Env):
         score_index=score_index,
         random_seed=random_seed)
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
-    self.action_space = None
+    self.action_space = PySC2RawAction()
     self._reseted = False
-    self._opponent_agent = None
 
-  def register_opponent(self, agent):
-    self._opponent_agent = agent
-
-  def _step(self, actions):
+  def step(self, actions):
     assert self._reseted
-    timesteps = self._sc2_env.step([actions, self._opponent_actions])
-    observation = timesteps[0].observation
+    assert len(actions) == 2
+    timesteps = self._sc2_env.step(actions)
+    observation = [timesteps[0].observation, timesteps[1].observation]
     reward = float(timesteps[0].reward)
     done = timesteps[0].last()
-    oppo_observation = timesteps[1].observation
-    self._opponent_actions = self._opponent_agent.act(oppo_observation)
     if done:
       self._reseted = False
       tprint("Episode Done. Outcome %f" % reward)
     info = {}
     return (observation, reward, done, info)
 
-  def _reset(self):
+  def reset(self, **kwargs):
     timesteps = self._sc2_env.reset()
-    observation = timesteps[0].observation
-    oppo_observation = timesteps[1].observation
-    self._opponent_agent.reset(oppo_observation)
-    self._opponent_actions = self._opponent_agent.act(oppo_observation)
+    observation = [timesteps[0].observation, timesteps[1].observation]
     self._reseted = True
     return observation
 
-  def _close(self):
+  def close(self):
     self._sc2_env.close()

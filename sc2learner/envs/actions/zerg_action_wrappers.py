@@ -28,7 +28,8 @@ class ZergActionWrapper(gym.Wrapper):
   def __init__(self, env, game_version='4.1.2', mask=False,
                use_all_combat_actions=False):
     super(ZergActionWrapper, self).__init__(env)
-    assert isinstance(env.observation_space, PySC2RawObservation)
+    # TODO: multiple observation space
+    #assert isinstance(env.observation_space, PySC2RawObservation)
 
     self._dc = DataContext()
     self._build_mgr = BuildActions(game_version)
@@ -144,9 +145,6 @@ class ZergActionWrapper(gym.Wrapper):
       observation['action_mask'] = self._get_valid_action_mask()
     return observation
 
-  def register_opponent(self, agent):
-    self.env.register_opponent(agent)
-
   @property
   def action_names(self):
     return [action.name for action in self._actions]
@@ -180,3 +178,29 @@ class ZergActionWrapper(gym.Wrapper):
     return Function(name='do_nothing',
                     function=lambda dc: [],
                     is_valid=lambda dc: True)
+
+
+class ZergPlayerActionWrapper(ZergActionWrapper):
+
+  def __init__(self, player, **kwargs):
+    self._warn_double_wrap = lambda *args: None
+    self._player = player
+    super(ZergPlayerActionWrapper, self).__init__(**kwargs)
+
+  def step(self, action):
+    actions = self._actions[action[self._player]].function(self._dc)
+    pre_actions, post_actions = self._required_actions()
+    action[self._player] = pre_actions + actions + post_actions
+    observation, reward, done, info = self.env.step(action)
+    self._dc.update(observation[self._player])
+    if isinstance(self.action_space, MaskDiscrete):
+      observation[self._player]['action_mask'] = self._get_valid_action_mask()
+    return observation, reward, done, info
+
+  def reset(self, **kwargs):
+    self._combat_mgr.reset()
+    observation = self.env.reset()
+    self._dc.reset(observation[self._player])
+    if isinstance(self.action_space, MaskDiscrete):
+      observation[self._player]['action_mask'] = self._get_valid_action_mask()
+    return observation

@@ -9,19 +9,19 @@ from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 
 class LstmPolicy(object):
 
-  def __init__(self, sess, ob_space, ac_space, nbatch, unroll_length, nlstm=512,
-               reuse=False):
+  def __init__(self, sess, scope_name, ob_space, ac_space, nbatch,
+               unroll_length, nlstm=512, reuse=False):
     nenv = nbatch // unroll_length
     if isinstance(ac_space, MaskDiscrete):
       self.pdtype = MaskCategoricalPdType(ac_space.n)
       ob_space, mask_space = ob_space.spaces
     else:
       self.pdtype = make_pdtype(ac_space)
-    X, processed_x = observation_input(ob_space, nbatch)
 
     M = tf.placeholder(tf.float32, [nbatch]) #mask (done t-1)
     S = tf.placeholder(tf.float32, [nenv, nlstm*2]) #states
-    with tf.variable_scope("model", reuse=reuse):
+    with tf.variable_scope(scope_name, reuse=reuse):
+      X, processed_x = observation_input(ob_space, nbatch)
       processed_x = tf.layers.flatten(processed_x)
       fc1 = tf.nn.relu(fc(processed_x, 'fc1', 512))
       h = tf.nn.relu(fc(fc1, 'fc2', 512))
@@ -64,14 +64,15 @@ class LstmPolicy(object):
 
 
 class MlpPolicy(object):
-  def __init__(self, sess, ob_space, ac_space, nbatch, nsteps, reuse=False):
+  def __init__(self, sess, scope_name, ob_space, ac_space, nbatch, nsteps,
+               reuse=False):
     if isinstance(ac_space, MaskDiscrete):
       self.pdtype = MaskCategoricalPdType(ac_space.n)
       ob_space, mask_space = ob_space.spaces
     else:
       self.pdtype = make_pdtype(ac_space)
 
-    with tf.variable_scope("model", reuse=reuse):
+    with tf.variable_scope(scope_name, reuse=reuse):
       X, processed_x = observation_input(ob_space, nbatch)
       activ = tf.tanh
       processed_x = tf.layers.flatten(processed_x)

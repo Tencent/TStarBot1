@@ -25,7 +25,8 @@ class ZergObservationWrapper(gym.Wrapper):
   def __init__(self, env, use_spatial_features=False, use_game_progress=True,
                action_seq_len=8, use_regions=False):
     super(ZergObservationWrapper, self).__init__(env)
-    assert isinstance(env.observation_space, PySC2RawObservation)
+    # TODO: multiple observation space
+    #assert isinstance(env.observation_space, PySC2RawObservation)
     self._use_spatial_features = use_spatial_features
     self._use_game_progress = use_game_progress
     self._dc = DataContext()
@@ -159,9 +160,9 @@ class ZergObservationWrapper(gym.Wrapper):
                                             dtype=np.float32)
 
   def step(self, action):
+    self._action_seq_feature.push_action(action)
     observation, reward, done, info = self.env.step(action)
     self._dc.update(observation)
-    self._action_seq_feature.push_action(action)
     return self._observation(observation), reward, done, info
 
   def reset(self, **kwargs):
@@ -227,3 +228,25 @@ class ZergObservationWrapper(gym.Wrapper):
         return (nonspatial_feat, observation['action_mask'])
       else:
         return nonspatial_feat
+
+
+class ZergPlayerObservationWrapper(ZergObservationWrapper):
+
+  def __init__(self, player, **kwargs):
+    self._warn_double_wrap = lambda *args: None
+    self._player = player
+    super(ZergPlayerObservationWrapper, self).__init__(**kwargs)
+
+  def step(self, action):
+    self._action_seq_feature.push_action(action[self._player])
+    observation, reward, done, info = self.env.step(action)
+    self._dc.update(observation)
+    observation[self._player] = self._observation(observation[self._player])
+    return observation, reward, done, info
+
+  def reset(self, **kwargs):
+    observation = self.env.reset()
+    self._dc.reset(observation)
+    self._action_seq_feature.reset()
+    observation[self._player] = self._observation(observation[self._player])
+    return observation
