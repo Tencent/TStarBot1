@@ -33,12 +33,14 @@ flags.DEFINE_float("discount_gamma", 0.995, "Discount factor.")
 flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
 flags.DEFINE_float("clip_range", 0.1, "Clip range for PPO.")
 flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
+flags.DEFINE_float("vf_coef", 0.5, "Coefficient for the value loss.")
 flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_integer("learner_queue_size", 128, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 2.5e-4, "Learning rate.")
+flags.DEFINE_string("init_model_path", None, "Initial model path.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 500, "Print train cost frequency.")
@@ -111,13 +113,14 @@ def start_learner():
                        clip_range=FLAGS.clip_range,
                        batch_size=FLAGS.batch_size,
                        ent_coef=FLAGS.ent_coef,
-                       vf_coef=0.5,
+                       vf_coef=FLAGS.vf_coef,
                        max_grad_norm=0.5,
                        queue_size=FLAGS.learner_queue_size,
                        print_interval=FLAGS.print_interval,
                        save_interval=FLAGS.save_interval,
                        learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
-                       save_dir=FLAGS.save_dir)
+                       save_dir=FLAGS.save_dir,
+                       load_path=FLAGS.init_model_path)
   learner.run()
   env.close()
 
