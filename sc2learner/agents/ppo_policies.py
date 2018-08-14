@@ -9,7 +9,7 @@ from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 
 class LstmPolicy(object):
 
-  def __init__(self, sess, ob_space, ac_space, nbatch, unroll_length, nlstm=256,
+  def __init__(self, sess, ob_space, ac_space, nbatch, unroll_length, nlstm=1024,
                reuse=False):
     nenv = nbatch // unroll_length
     if isinstance(ac_space, MaskDiscrete):
@@ -23,8 +23,8 @@ class LstmPolicy(object):
     S = tf.placeholder(tf.float32, [nenv, nlstm*2]) #states
     with tf.variable_scope("model", reuse=reuse):
       processed_x = tf.layers.flatten(processed_x)
-      fc1 = tf.nn.relu(fc(processed_x, 'fc1', 512))
-      h = tf.nn.relu(fc(fc1, 'fc2', 512))
+      fc1 = tf.nn.relu(fc(processed_x, 'fc1', 1024))
+      h = tf.nn.relu(fc(fc1, 'fc2', 1024))
       xs = batch_to_seq(h, nenv, unroll_length)
       ms = batch_to_seq(M, nenv, unroll_length)
       h5, snew = lstm(xs, ms, S, 'lstm1', nh=nlstm)
@@ -75,12 +75,12 @@ class MlpPolicy(object):
       X, processed_x = observation_input(ob_space, nbatch)
       activ = tf.tanh
       processed_x = tf.layers.flatten(processed_x)
-      pi_h1 = activ(fc(processed_x, 'pi_fc1', nh=256, init_scale=np.sqrt(2)))
-      pi_h2 = activ(fc(pi_h1, 'pi_fc2', nh=256, init_scale=np.sqrt(2)))
-      pi_h3 = activ(fc(pi_h2, 'pi_fc3', nh=256, init_scale=np.sqrt(2)))
-      vf_h1 = activ(fc(processed_x, 'vf_fc1', nh=256, init_scale=np.sqrt(2)))
-      vf_h2 = activ(fc(vf_h1, 'vf_fc2', nh=256, init_scale=np.sqrt(2)))
-      vf_h3 = activ(fc(vf_h2, 'vf_fc3', nh=256, init_scale=np.sqrt(2)))
+      pi_h1 = activ(fc(processed_x, 'pi_fc1', nh=512, init_scale=np.sqrt(2)))
+      pi_h2 = activ(fc(pi_h1, 'pi_fc2', nh=512, init_scale=np.sqrt(2)))
+      pi_h3 = activ(fc(pi_h2, 'pi_fc3', nh=512, init_scale=np.sqrt(2)))
+      vf_h1 = activ(fc(processed_x, 'vf_fc1', nh=512, init_scale=np.sqrt(2)))
+      vf_h2 = activ(fc(vf_h1, 'vf_fc2', nh=512, init_scale=np.sqrt(2)))
+      vf_h3 = activ(fc(vf_h2, 'vf_fc3', nh=512, init_scale=np.sqrt(2)))
       vf = fc(vf_h3, 'vf', 1)[:,0]
 
       if isinstance(ac_space, MaskDiscrete):
