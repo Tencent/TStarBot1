@@ -25,25 +25,26 @@ from sc2learner.utils.utils import print_arguments
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner'], "Job type.")
-flags.DEFINE_enum("policy", 'lstm', ['mlp', 'lstm'], "Job type.")
+flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_float("discount_gamma", 0.995, "Discount factor.")
 flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
-flags.DEFINE_float("clip_range", 0.1, "Clip range for PPO.")
+flags.DEFINE_float("clip_range", 0.2, "Clip range for PPO.")
 flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
 flags.DEFINE_float("vf_coef", 0.5, "Coefficient for the value loss.")
 flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
-flags.DEFINE_integer("learner_queue_size", 128, "Size of learner's unroll queue.")
+flags.DEFINE_integer("game_steps_per_episode", 0, "Maximum steps per episode.")
+flags.DEFINE_integer("learner_queue_size", 512, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 2.5e-4, "Learning rate.")
 flags.DEFINE_string("init_model_path", None, "Initial model path.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
-flags.DEFINE_integer("print_interval", 500, "Print train cost frequency.")
+flags.DEFINE_integer("print_interval", 1000, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
 flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
@@ -69,6 +70,7 @@ def create_env(difficulty, random_seed=None):
                   bot_race='zerg',
                   difficulty=difficulty,
                   disable_fog=FLAGS.disable_fog,
+                  game_steps_per_episode=FLAGS.game_steps_per_episode,
                   random_seed=random_seed)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
