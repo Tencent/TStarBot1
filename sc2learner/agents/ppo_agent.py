@@ -225,7 +225,7 @@ class PPOLearner(object):
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)
     if isinstance(clip_range, float): clip_range = constfn(clip_range)
-    else: assert callable(cliprange)
+    else: assert callable(clip_range)
     self._lr = lr
     self._clip_range=clip_range
     self._batch_size = batch_size
@@ -247,7 +247,7 @@ class PPOLearner(object):
     if load_path is not None: self._model.load(load_path)
     self._model_params = self._model.read_params()
     self._data_queue = deque(maxlen=queue_size)
-    self._episode_infos = deque(maxlen=2000)
+    self._episode_infos = deque(maxlen=5000)
     self._rollout_fps = -1
     self._num_unrolls = 0
 
@@ -263,7 +263,7 @@ class PPOLearner(object):
 
   def run(self):
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
-    while len(self._episode_infos) < 2000: time.sleep(1)
+    while len(self._episode_infos) < self._episode_infos.maxlen: time.sleep(1)
     update, loss = 0, []
     time_start = time.time()
     while True:
