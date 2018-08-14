@@ -9,7 +9,7 @@ from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 
 class LstmPolicy(object):
 
-  def __init__(self, sess, ob_space, ac_space, nbatch, unroll_length, nlstm=1024,
+  def __init__(self, sess, ob_space, ac_space, nbatch, unroll_length, nlstm=512,
                reuse=False):
     nenv = nbatch // unroll_length
     if isinstance(ac_space, MaskDiscrete):
@@ -23,8 +23,8 @@ class LstmPolicy(object):
     S = tf.placeholder(tf.float32, [nenv, nlstm*2]) #states
     with tf.variable_scope("model", reuse=reuse):
       processed_x = tf.layers.flatten(processed_x)
-      fc1 = tf.nn.relu(fc(processed_x, 'fc1', 1024))
-      h = tf.nn.relu(fc(fc1, 'fc2', 1024))
+      fc1 = tf.nn.relu(fc(processed_x, 'fc1', 512))
+      h = tf.nn.relu(fc(fc1, 'fc2', 512))
       xs = batch_to_seq(h, nenv, unroll_length)
       ms = batch_to_seq(M, nenv, unroll_length)
       h5, snew = lstm(xs, ms, S, 'lstm1', nh=nlstm)
