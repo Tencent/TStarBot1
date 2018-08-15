@@ -34,6 +34,7 @@ class SC2SelfplayRawEnv(gym.Env):
                agent_race='random',
                opponent_race='random',
                game_steps_per_episode=None,
+               tie_to_lose=False,
                score_index=None,
                random_seed=None):
     players=[sc2_env.Agent(sc2_env.Race[agent_race]),
@@ -63,6 +64,8 @@ class SC2SelfplayRawEnv(gym.Env):
     done = timesteps[0].last()
     if done:
       self._reseted = False
+      if tie_to_lose and reward == 0:
+        reward = -1.0
       tprint("Episode Done. Outcome %f" % reward)
     info = {}
     return (observation, reward, done, info)

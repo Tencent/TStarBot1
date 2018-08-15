@@ -41,7 +41,7 @@ flags.DEFINE_float("clip_range", 0.2, "Clip range for PPO.")
 flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
 flags.DEFINE_float("vf_coef", 0.5, "Coefficient for the value loss.")
 flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
-flags.DEFINE_integer("game_steps_per_episode", 0, "Maximum steps per episode.")
+flags.DEFINE_integer("game_steps_per_episode", 43200, "Maximum steps per episode.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
 flags.DEFINE_integer("learner_queue_size", 512, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
@@ -76,6 +76,7 @@ def create_env(difficulty, random_seed=None):
                   bot_race='zerg',
                   difficulty=difficulty,
                   disable_fog=FLAGS.disable_fog,
+                  tie_to_lose=True,
                   game_steps_per_episode=FLAGS.game_steps_per_episode,
                   random_seed=random_seed)
   env = ZergActionWrapper(env,
