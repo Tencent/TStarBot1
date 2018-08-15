@@ -114,11 +114,13 @@ class Model(object):
 class PPOActor(object):
 
   def __init__(self, env, policy, unroll_length, gamma, lam, queue_size=1,
-               learner_ip="localhost", port_A="5700", port_B="5701"):
+               enable_push=True, learner_ip="localhost", port_A="5700",
+               port_B="5701"):
     self._env = env
     self._unroll_length = unroll_length
     self._lam = lam
     self._gamma = gamma
+    self._enable_push = enable_push
 
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -137,20 +139,23 @@ class PPOActor(object):
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
     self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
-    self._data_queue = Queue(queue_size)
-    self._push_thread = Thread(target=self._push_data, args=(
-        self._zmq_context, learner_ip, port_B, self._data_queue))
-    self._push_thread.start()
+    if enable_push:
+      self._data_queue = Queue(queue_size)
+      self._push_thread = Thread(target=self._push_data, args=(
+          self._zmq_context, learner_ip, port_B, self._data_queue))
+      self._push_thread.start()
 
   def run(self):
     while True:
       t = time.time()
       self._update_model()
-      if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
       tprint("Time update model: %f" % (time.time() - t))
       t = time.time()
-      self._data_queue.put(self._nstep_rollout())
-      tprint("Time rollout: %f" % (time.time() - t))
+      unroll = self._nstep_rollout()
+      if self._enable_push:
+        if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
+        self._data_queue.put(unroll)
+        tprint("Time rollout: %f" % (time.time() - t))
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \

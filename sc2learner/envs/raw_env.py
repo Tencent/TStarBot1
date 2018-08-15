@@ -55,6 +55,7 @@ class SC2RawEnv(gym.Env):
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
     self.action_space = PySC2RawAction()
     self._difficulty = difficulty
+    self._tie_to_lose = tie_to_lose
     self._reseted = False
 
   def step(self, actions):
@@ -65,7 +66,7 @@ class SC2RawEnv(gym.Env):
     done = timestep.last()
     if done:
       self._reseted = False
-      if tie_to_lose and reward == 0:
+      if self._tie_to_lose and reward == 0:
         reward = -1.0
       tprint("Episode Done. Difficulty: %s Outcome %f" %
              (self._difficulty, reward))

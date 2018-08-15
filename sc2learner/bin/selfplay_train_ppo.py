@@ -76,7 +76,7 @@ def create_env(difficulty, random_seed=None):
                   bot_race='zerg',
                   difficulty=difficulty,
                   disable_fog=FLAGS.disable_fog,
-                  tie_to_lose=True,
+                  tie_to_lose=False,
                   game_steps_per_episode=FLAGS.game_steps_per_episode,
                   random_seed=random_seed)
   env = ZergActionWrapper(env,
@@ -97,6 +97,7 @@ def create_selfplay_env(random_seed=None):
                           resolution=16,
                           agent_race='zerg',
                           opponent_race='zerg',
+                          tie_to_lose=True,
                           disable_fog=FLAGS.disable_fog,
                           game_steps_per_episode=FLAGS.game_steps_per_episode,
                           random_seed=random_seed)
@@ -186,6 +187,7 @@ def start_evaluator():
                    unroll_length=FLAGS.unroll_length,
                    gamma=FLAGS.discount_gamma,
                    lam=FLAGS.lambda_return,
+                   enable_push=False,
                    learner_ip=FLAGS.learner_ip)
   actor.run()
   env.close()
