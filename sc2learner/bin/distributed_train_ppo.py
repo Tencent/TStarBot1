@@ -46,7 +46,7 @@ flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 1000, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
-flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_region_wise_combat", True, "Use region-wise combat.")
 flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
