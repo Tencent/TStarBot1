@@ -542,9 +542,12 @@ class PPOSelfplayActor(object):
   def _update_opponent(self):
     if random.uniform(0, 1.0) < 0.8 or len(self._model_cache) == 0:
       self._oppo_model.load_params(self._latest_model)
+      tprint("Opponent updated with the current model.")
     else:
       model_params = random.choice(self._model_cache)
       self._oppo_model.load_params(model_params)
+      tprint("Opponent updated with the previous model. %d models cached." %
+          len(self._model_cache))
 
 
 def constfn(val):

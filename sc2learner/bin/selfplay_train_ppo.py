@@ -97,7 +97,7 @@ def create_selfplay_env(random_seed=None):
                           resolution=16,
                           agent_race='zerg',
                           opponent_race='zerg',
-                          tie_to_lose=True,
+                          tie_to_lose=False,
                           disable_fog=FLAGS.disable_fog,
                           game_steps_per_episode=FLAGS.game_steps_per_episode,
                           random_seed=random_seed)
@@ -174,7 +174,7 @@ def start_learner():
 
 
 def start_evaluator():
-  tf_config(ncpu=1)
+  tf_config(ncpu=2)
   random.seed(time.time())
   difficulty = random.choice(FLAGS.difficulties.split(','))
   game_seed =  random.randint(0, 2**32 - 1)
