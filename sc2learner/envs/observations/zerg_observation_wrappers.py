@@ -40,22 +40,25 @@ class ZergObservationWrapper(gym.Wrapper):
                    UNIT_TYPE.ZERG_HYDRALISK.value,
                    UNIT_TYPE.ZERG_LURKERMP.value,
                    UNIT_TYPE.ZERG_LURKERMPBURROWED.value,
-                   UNIT_TYPE.ZERG_VIPER.value,
+                   #UNIT_TYPE.ZERG_VIPER.value,
                    UNIT_TYPE.ZERG_MUTALISK.value,
                    UNIT_TYPE.ZERG_CORRUPTOR.value,
                    UNIT_TYPE.ZERG_BROODLORD.value,
-                   UNIT_TYPE.ZERG_SWARMHOSTMP.value,
+                   #UNIT_TYPE.ZERG_SWARMHOSTMP.value,
                    UNIT_TYPE.ZERG_LOCUSTMP.value,
-                   UNIT_TYPE.ZERG_INFESTOR.value,
+                   #UNIT_TYPE.ZERG_INFESTOR.value,
                    UNIT_TYPE.ZERG_ULTRALISK.value,
                    UNIT_TYPE.ZERG_BROODLING.value,
                    UNIT_TYPE.ZERG_OVERLORD.value,
                    UNIT_TYPE.ZERG_OVERSEER.value,
-                   UNIT_TYPE.ZERG_QUEEN.value,
-                   UNIT_TYPE.ZERG_CHANGELING.value,
-                   UNIT_TYPE.ZERG_SPINECRAWLER.value,
+                   #UNIT_TYPE.ZERG_CHANGELING.value,
+                   UNIT_TYPE.ZERG_QUEEN.value],
+        divide_regions=divide_regions
+    )
+    self._building_count_feature = UnitTypeCountFeature(
+        type_list=[UNIT_TYPE.ZERG_SPINECRAWLER.value,
                    UNIT_TYPE.ZERG_SPORECRAWLER.value,
-                   UNIT_TYPE.ZERG_NYDUSCANAL.value,
+                   #UNIT_TYPE.ZERG_NYDUSCANAL.value,
                    UNIT_TYPE.ZERG_EXTRACTOR.value,
                    UNIT_TYPE.ZERG_SPAWNINGPOOL.value,
                    UNIT_TYPE.ZERG_ROACHWARREN.value,
@@ -66,12 +69,12 @@ class ZergObservationWrapper(gym.Wrapper):
                    UNIT_TYPE.ZERG_INFESTATIONPIT.value,
                    UNIT_TYPE.ZERG_SPIRE.value,
                    UNIT_TYPE.ZERG_ULTRALISKCAVERN.value,
-                   UNIT_TYPE.ZERG_NYDUSNETWORK.value,
+                   #UNIT_TYPE.ZERG_NYDUSNETWORK.value,
                    UNIT_TYPE.ZERG_LURKERDENMP.value,
                    UNIT_TYPE.ZERG_LAIR.value,
                    UNIT_TYPE.ZERG_HIVE.value,
                    UNIT_TYPE.ZERG_GREATERSPIRE.value],
-        divide_regions=divide_regions
+        divide_regions=False
     )
     self._unit_stat_count_feature = UnitStatCountFeature(
         divide_regions=divide_regions)
@@ -79,10 +82,11 @@ class ZergObservationWrapper(gym.Wrapper):
     if use_game_progress:
       self._game_progress_feature = GameProgressFeature()
     if use_action_seq:
-      self._action_seq_feature = ActionSeqFeature(self.action_space.n, 10)
+      self._action_seq_feature = ActionSeqFeature(self.action_space.n, 6)
     n_dims = sum([
         self._unit_stat_count_feature.num_dims,
         self._unit_count_feature.num_dims,
+        self._building_count_feature.num_dims,
         self._player_feature.num_dims,
         self._game_progress_feature.num_dims if use_game_progress else 0,
         self._action_seq_feature.num_dims if use_action_seq else 0
@@ -175,8 +179,10 @@ class ZergObservationWrapper(gym.Wrapper):
   def _observation(self, observation):
     need_flip = True if self.env.player_position == 0 else False
 
-    # spatial features
+    # nonspatial features
     unit_type_feat = self._unit_count_feature.features(observation, need_flip)
+    building_type_feat = self._building_count_feature.features(observation,
+                                                               need_flip)
     unit_stat_feat = self._unit_stat_count_feature.features(observation,
                                                             need_flip)
     player_feat = self._player_feature.features(observation)
@@ -186,13 +192,14 @@ class ZergObservationWrapper(gym.Wrapper):
       action_seq_feat = self._action_seq_feature.features()
     nonspatial_feat = np.concatenate([
         unit_type_feat,
+        building_type_feat,
         unit_stat_feat,
         player_feat,
         game_progress_feat if self._use_game_progress else [],
         action_seq_feat if self._use_action_seq else []
     ])
 
-    # nonspatial features
+    # spatial features
     if self._use_spatial_features:
       ally_map_feat = self._alliance_count_map_feature.features(
           observation, need_flip)

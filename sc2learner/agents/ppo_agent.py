@@ -263,7 +263,8 @@ class PPOLearner(object):
 
   def run(self):
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
-    while len(self._episode_infos) < self._episode_infos.maxlen: time.sleep(1)
+    while len(self._episode_infos) < self._episode_infos.maxlen / 2:
+      time.sleep(1)
     update, loss = 0, []
     time_start = time.time()
     while True:

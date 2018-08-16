@@ -105,8 +105,8 @@ class ZergActionWrapper(gym.Wrapper):
         # ZERG_LOCUST, ZERG_CHANGELING not included
     ] + ([self._combat_mgr.action(0, 0)] if not region_wise_combat else [
         self._combat_mgr.action(source_region_id, target_region_id)
-        for source_region_id in range(self._combat_mgr.num_regions)
-        for target_region_id in range(self._combat_mgr.num_regions)
+        for source_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
+        for target_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
     ])
 
     self._required_pre_actions = [

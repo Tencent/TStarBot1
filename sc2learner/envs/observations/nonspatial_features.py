@@ -58,7 +58,7 @@ class UnitTypeCountFeature(object):
 
   @property
   def num_dims(self):
-    return len(self._type_list) * len(self._regions) * 2 * 5
+    return len(self._type_list) * len(self._regions) * 2 * 2
 
   def _generate_features(self, units):
     self_units = [u for u in units
@@ -71,15 +71,8 @@ class UnitTypeCountFeature(object):
 
     scaled_features = features / 20
     log_features = np.log10(features + 1)
-    gt1_features = (features >= 1).astype(np.float32)
-    gt5_features = (features >= 5).astype(np.float32)
-    gt15_features = (features >= 15).astype(np.float32)
 
-    return np.concatenate((scaled_features,
-                           log_features,
-                           gt1_features,
-                           gt5_features,
-                           gt15_features))
+    return np.concatenate((scaled_features, log_features))
 
   def _get_counts(self, units):
     count = {t: 0 for t in self._type_list}
@@ -124,7 +117,7 @@ class UnitStatCountFeature(object):
 
   @property
   def num_dims(self):
-    return len(self._regions) * 2 * 4 * 5
+    return len(self._regions) * 2 * 4 * 2
 
   def _generate_features(self, units):
     self_units = [u for u in units
@@ -149,14 +142,7 @@ class UnitStatCountFeature(object):
 
     scaled_features = features / 20
     log_features = np.log10(features + 1)
-    gt1_features = (features >= 1).astype(np.float32)
-    gt10_features = (features >= 10).astype(np.float32)
-    gt20_features = (features >= 20).astype(np.float32)
-    return np.concatenate((scaled_features,
-                           log_features,
-                           gt1_features,
-                           gt10_features,
-                           gt20_features))
+    return np.concatenate((scaled_features, log_features))
 
   def _is_in_region(self, unit, region):
     return (unit.float_attr.pos_x >= region[0] and

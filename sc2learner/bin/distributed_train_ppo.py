@@ -36,7 +36,7 @@ flags.DEFINE_float("ent_coef", 0.01, "Coefficient for the entropy term.")
 flags.DEFINE_float("vf_coef", 0.5, "Coefficient for the value loss.")
 flags.DEFINE_float("learn_act_speed_ratio", 0, "Maximum learner/actor ratio.")
 flags.DEFINE_integer("batch_size", 32, "Batch size.")
-flags.DEFINE_integer("game_steps_per_episode", 0, "Maximum steps per episode.")
+flags.DEFINE_integer("game_steps_per_episode", 40000, "Maximum steps per episode.")
 flags.DEFINE_integer("learner_queue_size", 512, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
@@ -81,15 +81,16 @@ def create_env(difficulty, random_seed=None):
                                use_game_progress=(not FLAGS.policy == 'lstm'),
                                use_action_seq=(not FLAGS.policy == 'lstm'),
                                divide_regions=FLAGS.use_region_wise_combat)
+  print(env.observation_space, env.action_space)
   return env
 
 
 def start_actor():
-  tf_config(ncpu=1)
+  tf_config(ncpu=2)
   random.seed(time.time())
   difficulty = random.choice(FLAGS.difficulties.split(','))
   game_seed =  random.randint(0, 2**32 - 1)
-  print("Game Seed: %d" % game_seed)
+  print("Game Seed: %d Difficulty: %s" % (game_seed, difficulty))
   env = create_env(difficulty, game_seed)
   policy = {'lstm': LstmPolicy,
             'mlp': MlpPolicy}[FLAGS.policy]
