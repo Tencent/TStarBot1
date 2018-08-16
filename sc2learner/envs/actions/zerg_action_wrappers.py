@@ -104,9 +104,12 @@ class ZergActionWrapper(gym.Wrapper):
         self._resource_mgr.action_some_workers_gather_gas,
         # ZERG_LOCUST, ZERG_CHANGELING not included
     ] + ([self._combat_mgr.action(0, 0)] if not region_wise_combat else [
-        self._combat_mgr.action(source_region_id, target_region_id)
-        for source_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
-        for target_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
+        self._combat_mgr.action(0, 0),
+        self._combat_mgr.action(0, 1),
+        self._combat_mgr.action(0, 4),
+        self._combat_mgr.action(4, 1)
+        #for source_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
+        #for target_region_id in [0, 1, 2, 4, 5, 9]
     ])
 
     self._required_pre_actions = [
