@@ -2,6 +2,7 @@ import os
 import time
 from collections import deque
 from queue import Queue
+import queue
 from threading import Thread
 import time
 import random
@@ -265,6 +266,16 @@ class PPOLearner(object):
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
     while len(self._episode_infos) < self._episode_infos.maxlen / 2:
       time.sleep(1)
+
+    batch_queue = Queue(4)
+    batch_threads = [
+        Thread(target=self._prepare_batch,
+               args=(self._data_queue, batch_queue, self._batch_size))
+        for _ in range(4)
+    ]
+    for thread in batch_threads:
+      thread.start()
+
     update, loss = 0, []
     time_start = time.time()
     while True:
@@ -276,19 +287,8 @@ class PPOLearner(object):
       lr_now = self._lr(update)
       clip_range_now = self._clip_range(update)
 
-      batch = random.sample(self._data_queue, self._batch_size)
-      obs, returns, dones, actions, values, neglogpacs, states = zip(*batch)
-      if isinstance(obs[0], tuple):
-        obs = tuple(np.concatenate(ob) for ob in zip(*obs))
-      else:
-        obs = np.concatenate(obs)
-      returns = np.concatenate(returns)
-      dones = np.concatenate(dones)
-      actions = np.concatenate(actions)
-      values = np.concatenate(values)
-      neglogpacs = np.concatenate(neglogpacs)
-      states = np.concatenate(states) if states[0] is not None else None
-
+      batch = batch_queue.get()
+      obs, returns, dones, actions, values, neglogpacs, states = batch
       loss.append(self._model.train(lr_now, clip_range_now, obs, returns, dones,
                                     actions, values, neglogpacs, states))
       self._model_params = self._model.read_params()
@@ -313,6 +313,22 @@ class PPOLearner(object):
         save_path = os.path.join(self._save_dir, 'checkpoints-%i' % update)
         self._model.save(save_path)
         tprint('Saved to %s.' % save_path)
+
+  def _prepare_batch(self, data_queue, batch_queue, batch_size):
+    while True:
+      batch = random.sample(data_queue, batch_size)
+      obs, returns, dones, actions, values, neglogpacs, states = zip(*batch)
+      if isinstance(obs[0], tuple):
+        obs = tuple(np.concatenate(ob) for ob in zip(*obs))
+      else:
+        obs = np.concatenate(obs)
+      returns = np.concatenate(returns)
+      dones = np.concatenate(dones)
+      actions = np.concatenate(actions)
+      values = np.concatenate(values)
+      neglogpacs = np.concatenate(neglogpacs)
+      states = np.concatenate(states) if states[0] is not None else None
+      batch_queue.put((obs, returns, dones, actions, values, neglogpacs, states))
 
   def _pull_data(self, zmq_context, data_queue, episode_infos):
     receiver = zmq_context.socket(zmq.PULL)
