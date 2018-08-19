@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+from pysc2.lib.typeenums import UNIT_TYPEID as UNIT_TYPE
+from pysc2.lib.typeenums import ABILITY_ID as ABILITY
 
 from sc2learner.envs.common.const import ALLY_TYPE
 from sc2learner.envs.common.const import COMBAT_TYPES
@@ -14,7 +16,7 @@ class PlayerFeature(object):
     player_features = observation["player"][1:-1].astype(np.float32)
     food_unused = player_features[3] - player_features[2]
     player_features[-1] = food_unused if food_unused >= 0 else 0
-    scale = np.array([2000, 2000, 20, 20, 20, 20, 20, 20, 20])
+    scale = np.array([2000, 2000, 20, 20, 20, 20, 20, 20, 20], np.float32)
     scaled_features = (player_features / scale).astype(np.float32)
     log_features = np.log10(player_features + 1).astype(np.float32)
 
@@ -203,3 +205,28 @@ class ActionSeqFeature(object):
   @property
   def num_dims(self):
     return self._n_dims_action_space * len(self._action_seq)
+
+
+class WorkerFeature(object):
+
+  def features(self, dc):
+    extractor_tags = set(u.tag for u in dc.units_of_type(
+        UNIT_TYPE.ZERG_EXTRACTOR.value))
+    workers = dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
+    harvest_workers = [
+        u for u in workers
+        if (len(u.orders) > 0 and
+           u.orders[0].ability_id == ABILITY.HARVEST_GATHER_DRONE.value)
+    ]
+    gas_workers = [u for u in harvest_workers
+                   if u.orders[0].target_tag in extractor_tags]
+    mineral_workers = [u for u in harvest_workers
+                       if u.orders[0].target_tag not in extractor_tags]
+    return np.array([len(gas_workers),
+                     len(mineral_workers),
+                     len(workers) - len(gas_workers) - len(mineral_workers)],
+                    dtype=np.float32) / 20.0
+
+  @property
+  def num_dims(self):
+    return 3

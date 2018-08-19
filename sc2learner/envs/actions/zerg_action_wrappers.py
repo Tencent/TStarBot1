@@ -101,7 +101,8 @@ class ZergActionWrapper(gym.Wrapper):
         self._upgrade_mgr.action("upgrade_missile_weapons_level1", UPGRADE.ZERGMISSILEWEAPONSLEVEL1.value),
         self._upgrade_mgr.action("upgrade_missile_weapons_level2", UPGRADE.ZERGMISSILEWEAPONSLEVEL2.value),
         self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
-        self._resource_mgr.action_some_workers_gather_gas,
+        self._resource_mgr.action_assign_workers_gather_gas,
+        self._resource_mgr.action_assign_workers_gather_minerals,
         # ZERG_LOCUST, ZERG_CHANGELING not included
     ] + ([
         self._combat_mgr.action(0, 0),

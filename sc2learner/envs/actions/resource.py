@@ -27,10 +27,16 @@ class ResourceActions(object):
                     is_valid=self._is_valid_all_idle_workers_gather_minerals)
 
   @property
-  def action_some_workers_gather_gas(self):
-    return Function(name="some_workers_gather_gas",
-                    function=self._some_workers_gather_gas,
-                    is_valid=self._is_valid_some_workers_gather_gas)
+  def action_assign_workers_gather_gas(self):
+    return Function(name="assign_workers_gather_gas",
+                    function=self._assign_workers_gather_gas,
+                    is_valid=self._is_valid_assign_workers_gather_gas)
+
+  @property
+  def action_assign_workers_gather_minerals(self):
+    return Function(name="assign_workers_gather_minerals",
+                    function=self._assign_workers_gather_minerals,
+                    is_valid=self._is_valid_assign_workers_gather_minerals)
 
   def _all_idle_queens_inject_larva(self, dc):
     injectable_queens = [
@@ -84,7 +90,7 @@ class ResourceActions(object):
     else:
       return False
 
-  def _some_workers_gather_gas(self, dc):
+  def _assign_workers_gather_gas(self, dc):
     idle_extractors =  [
         u for u in dc.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
         if u.int_attr.ideal_harvesters - u.int_attr.assigned_harvesters > 0
@@ -111,7 +117,7 @@ class ResourceActions(object):
     action.action_raw.unit_command.target_unit_tag = extractor.tag
     return [action]
 
-  def _is_valid_some_workers_gather_gas(self, dc):
+  def _is_valid_assign_workers_gather_gas(self, dc):
     idle_extractors =  [
         u for u in dc.units_of_type(UNIT_TYPE.ZERG_EXTRACTOR.value)
         if u.int_attr.ideal_harvesters - u.int_attr.assigned_harvesters > 0
@@ -126,3 +132,34 @@ class ResourceActions(object):
     ]
     if len(idle_extractors) > 0 and len(workers) > 0: return True
     else: return False
+
+  def _assign_workers_gather_minerals(self, dc):
+    extractor_tags = set(u.tag for u in dc.units_of_type(
+        UNIT_TYPE.ZERG_EXTRACTOR.value))
+    workers = [
+        u for u in dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
+        if (len(u.orders) == 0 or
+            (u.orders[0].ability_id == ABILITY.HARVEST_GATHER_DRONE.value and
+             u.orders[0].target_tag in extractor_tags))
+    ]
+    actions = []
+    for worker in random.sample(workers, min(3, len(workers))):
+      target_mineral = utils.closest_unit(worker, dc.minerals)
+      action = sc_pb.Action()
+      action.action_raw.unit_command.unit_tags.append(worker.tag)
+      action.action_raw.unit_command.ability_id = \
+          ABILITY.HARVEST_GATHER_DRONE.value
+      action.action_raw.unit_command.target_unit_tag = target_mineral.tag
+      actions.append(action)
+    return actions
+
+  def _is_valid_assign_workers_gather_minerals(self, dc):
+    extractor_tags = set(u.tag for u in dc.units_of_type(
+        UNIT_TYPE.ZERG_EXTRACTOR.value))
+    workers = [
+        u for u in dc.units_of_type(UNIT_TYPE.ZERG_DRONE.value)
+        if (len(u.orders) == 0 or
+            (u.orders[0].ability_id == ABILITY.HARVEST_GATHER_DRONE.value and
+             u.orders[0].target_tag in extractor_tags))
+    ]
+    return len(workers) > 0
