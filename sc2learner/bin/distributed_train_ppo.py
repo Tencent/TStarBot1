@@ -28,6 +28,8 @@ flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner'], "Job type.")
 flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
+flags.DEFINE_string("port_A", "5700", "Port for transporting model.")
+flags.DEFINE_string("port_B", "5701", "Port for transporting data.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_float("discount_gamma", 0.995, "Discount factor.")
 flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
@@ -100,7 +102,9 @@ def start_actor():
                    unroll_length=FLAGS.unroll_length,
                    gamma=FLAGS.discount_gamma,
                    lam=FLAGS.lambda_return,
-                   learner_ip=FLAGS.learner_ip)
+                   learner_ip=FLAGS.learner_ip,
+                   port_A=FLAGS.port_A,
+                   port_B=FLAGS.port_B)
   actor.run()
   env.close()
 
@@ -124,7 +128,9 @@ def start_learner():
                        save_interval=FLAGS.save_interval,
                        learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
                        save_dir=FLAGS.save_dir,
-                       load_path=FLAGS.init_model_path)
+                       load_path=FLAGS.init_model_path,
+                       port_A=FLAGS.port_A,
+                       port_B=FLAGS.port_B)
   learner.run()
   env.close()
 

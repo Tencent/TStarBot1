@@ -113,8 +113,8 @@ class Model(object):
 
 class PPOActor(object):
 
-  def __init__(self, env, policy, unroll_length, gamma, lam,
-               learner_ip="localhost", queue_size=1):
+  def __init__(self, env, policy, unroll_length, gamma, lam, queue_size=1,
+               learner_ip="localhost", port_A="5700", port_B="5701"):
     self._env = env
     self._unroll_length = unroll_length
     self._lam = lam
@@ -135,10 +135,10 @@ class PPOActor(object):
 
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
-    self._model_requestor.connect("tcp://%s:5701" % learner_ip)
+    self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
     self._data_queue = Queue(queue_size)
     self._push_thread = Thread(target=self._push_data, args=(
-        self._zmq_context, learner_ip, self._data_queue))
+        self._zmq_context, learner_ip, port_B, self._data_queue))
     self._push_thread.start()
 
   def run(self):
@@ -203,11 +203,11 @@ class PPOActor(object):
     return (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs,
             mb_states, episode_infos)
 
-  def _push_data(self, zmq_context, learner_ip, data_queue):
+  def _push_data(self, zmq_context, learner_ip, port_B, data_queue):
     sender = zmq_context.socket(zmq.PUSH)
     sender.setsockopt(zmq.SNDHWM, 1)
     sender.setsockopt(zmq.RCVHWM, 1)
-    sender.connect("tcp://%s:5700" % learner_ip)
+    sender.connect("tcp://%s:%s" % (learner_ip, port_B))
     while True:
       data = data_queue.get()
       sender.send_pyobj(data)
@@ -222,7 +222,8 @@ class PPOLearner(object):
   def __init__(self, env, policy, unroll_length, lr, clip_range, batch_size,
                ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, queue_size=8,
                print_interval=100, save_interval=10000, learn_act_speed_ratio=0,
-               unroll_split=8, save_dir=None, load_path=None):
+               unroll_split=8, save_dir=None, load_path=None,
+               port_A="5700", port_B="5701"):
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)
     if isinstance(clip_range, float): clip_range = constfn(clip_range)
@@ -258,11 +259,11 @@ class PPOLearner(object):
     self._pull_data_thread = Thread(
         target=self._pull_data,
         args=(self._zmq_context, self._data_queue, self._episode_infos,
-              self._unroll_split)
+              self._unroll_split, port_B)
     )
     self._pull_data_thread.start()
-    self._reply_model_thread = Thread(target=self._reply_model,
-                                      args=(self._zmq_context, self._model))
+    self._reply_model_thread = Thread(
+        target=self._reply_model, args=(self._zmq_context, self._model, port_A))
     self._reply_model_thread.start()
 
   def run(self):
@@ -334,11 +335,12 @@ class PPOLearner(object):
       states = np.concatenate(states) if states[0] is not None else None
       batch_queue.put((obs, returns, dones, actions, values, neglogpacs, states))
 
-  def _pull_data(self, zmq_context, data_queue, episode_infos, unroll_split):
+  def _pull_data(self, zmq_context, data_queue, episode_infos, unroll_split,
+                 port_B):
     receiver = zmq_context.socket(zmq.PULL)
     receiver.setsockopt(zmq.RCVHWM, 1)
     receiver.setsockopt(zmq.SNDHWM, 1)
-    receiver.bind("tcp://*:5700")
+    receiver.bind("tcp://*:%s" % port_B)
     start_time, num_frames_now = time.time(), 0
     while True:
       data = receiver.recv_pyobj()
@@ -358,9 +360,9 @@ class PPOLearner(object):
         self._rollout_fps = num_frames_now / (time.time() - start_time)
         start_time, num_frames_now = time.time(), 0
 
-  def _reply_model(self, zmq_context, model):
+  def _reply_model(self, zmq_context, model, port_A):
     receiver = zmq_context.socket(zmq.REP)
-    receiver.bind("tcp://*:5701")
+    receiver.bind("tcp://*:%s" % port_A)
     while True:
       msg = receiver.recv_string()
       assert msg == "request model"
