@@ -222,7 +222,7 @@ class PPOLearner(object):
   def __init__(self, env, policy, unroll_length, lr, clip_range, batch_size,
                ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, queue_size=8,
                print_interval=100, save_interval=10000, learn_act_speed_ratio=0,
-               save_dir=None, load_path=None):
+               unroll_split=8, save_dir=None, load_path=None):
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)
     if isinstance(clip_range, float): clip_range = constfn(clip_range)
@@ -247,7 +247,9 @@ class PPOLearner(object):
                         max_grad_norm=max_grad_norm)
     if load_path is not None: self._model.load(load_path)
     self._model_params = self._model.read_params()
-    self._data_queue = deque(maxlen=queue_size)
+    self._unroll_split = unroll_split if self._model.initial_state is None else 1
+    assert self._unroll_length % self._unroll_split == 0
+    self._data_queue = deque(maxlen=queue_size * self._unroll_split)
     self._episode_infos = deque(maxlen=5000)
     self._rollout_fps = -1
     self._num_unrolls = 0
@@ -255,7 +257,8 @@ class PPOLearner(object):
     self._zmq_context = zmq.Context()
     self._pull_data_thread = Thread(
         target=self._pull_data,
-        args=(self._zmq_context, self._data_queue, self._episode_infos)
+        args=(self._zmq_context, self._data_queue, self._episode_infos,
+              self._unroll_split)
     )
     self._pull_data_thread.start()
     self._reply_model_thread = Thread(target=self._reply_model,
@@ -270,7 +273,8 @@ class PPOLearner(object):
     batch_queue = Queue(4)
     batch_threads = [
         Thread(target=self._prepare_batch,
-               args=(self._data_queue, batch_queue, self._batch_size))
+               args=(self._data_queue, batch_queue,
+                     self._batch_size * self._unroll_split))
         for _ in range(4)
     ]
     for thread in batch_threads:
@@ -330,7 +334,7 @@ class PPOLearner(object):
       states = np.concatenate(states) if states[0] is not None else None
       batch_queue.put((obs, returns, dones, actions, values, neglogpacs, states))
 
-  def _pull_data(self, zmq_context, data_queue, episode_infos):
+  def _pull_data(self, zmq_context, data_queue, episode_infos, unroll_split):
     receiver = zmq_context.socket(zmq.PULL)
     receiver.setsockopt(zmq.RCVHWM, 1)
     receiver.setsockopt(zmq.SNDHWM, 1)
@@ -338,7 +342,15 @@ class PPOLearner(object):
     start_time, num_frames_now = time.time(), 0
     while True:
       data = receiver.recv_pyobj()
-      data_queue.append(data[:-1])
+      if unroll_split > 1:
+        data_queue.extend(list(zip(*(
+            [list(zip(*transform_tuple(
+                data[0], lambda x: np.split(x, unroll_split))))] + \
+                [np.split(arr, unroll_split) for arr in data[1:-2]] + \
+                [[data[-2] for _ in range(unroll_split)]]
+        ))))
+      else:
+        data_queue.append(data[:-1])
       episode_infos.extend(data[-1])
       self._num_unrolls += 1
       num_frames_now += data[1].shape[0]
