@@ -30,9 +30,9 @@ class PlayerFeature(object):
 
 class UnitTypeCountFeature(object):
 
-  def __init__(self, type_list, divide_regions=False):
+  def __init__(self, type_list, use_regions=False):
     self._type_list = type_list
-    if divide_regions:
+    if use_regions:
       self._regions = [(0, 0, 200, 176),
                        (0, 88, 80, 176),
                        (80, 88, 120, 176),
@@ -90,8 +90,8 @@ class UnitTypeCountFeature(object):
 
 class UnitStatCountFeature(object):
 
-  def __init__(self, divide_regions=False):
-    if divide_regions:
+  def __init__(self, use_regions=False):
+    if use_regions:
       self._regions = [(0, 0, 200, 176),
                        (0, 88, 80, 176),
                        (80, 88, 120, 176),

@@ -49,12 +49,13 @@ flags.DEFINE_enum("loss_type", 'mse', ['mse', 'smooth_l1'], "Loss type.")
 flags.DEFINE_integer("target_update_freq", 10000, "Target net update frequency.")
 flags.DEFINE_integer("save_model_freq", 500000, "Model saving frequency.")
 flags.DEFINE_integer("print_freq", 10000, "Print train cost frequency.")
-flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
 flags.DEFINE_boolean("use_action_mask", False, "Use action mask or not.")
 flags.DEFINE_boolean("use_curriculum", False, "Use curriculum or not.")
 flags.DEFINE_boolean("use_batchnorm", False, "Use batchnorm or not.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_spatial_features", False, "Use spatial features.")
+flags.DEFINE_boolean("use_region_features", True, "Use region features")
 flags.FLAGS(sys.argv)
 
 
@@ -70,10 +71,10 @@ def create_env(difficulty, random_seed=None):
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,
-                          region_wise_combat=FLAGS.use_region_wise_combat)
+                          use_all_combat_actions=FLAGS.use_all_combat_actions)
   env = ZergObservationWrapper(env,
                                use_spatial_features=FLAGS.use_spatial_features,
-                               divide_regions=FLAGS.use_region_wise_combat)
+                               use_regions=FLAGS.use_region_features)
   return env
 
 

@@ -31,7 +31,8 @@ flags.DEFINE_enum("difficulty", '1',
                   "Bot's strength.")
 flags.DEFINE_string("model_path", None, "Filepath to load initial model.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
-flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
+flags.DEFINE_boolean("use_region_features", True, "Use region features")
 flags.DEFINE_boolean("use_action_mask", True, "Use action mask or not.")
 flags.FLAGS(sys.argv)
 
@@ -74,12 +75,12 @@ def create_env(random_seed=None):
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,
-                          region_wise_combat=FLAGS.use_region_wise_combat)
+                          use_all_combat_actions=FLAGS.use_all_combat_actions)
   env = ZergObservationWrapper(env,
                                use_spatial_features=False,
                                use_game_progress=(not FLAGS.policy == 'lstm'),
                                action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
-                               divide_regions=FLAGS.use_region_wise_combat)
+                               use_regions=FLAGS.use_region_features)
   return env
 
 

@@ -26,7 +26,7 @@ from sc2learner.envs.actions.combat import CombatActions
 class ZergActionWrapper(gym.Wrapper):
 
   def __init__(self, env, game_version='4.1.2', mask=False,
-               region_wise_combat=False):
+               use_all_combat_actions=False):
     super(ZergActionWrapper, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
 
@@ -103,13 +103,14 @@ class ZergActionWrapper(gym.Wrapper):
         self._upgrade_mgr.action("upgrade_missile_weapons_level3", UPGRADE.ZERGMISSILEWEAPONSLEVEL3.value),
         self._resource_mgr.action_some_workers_gather_gas,
         # ZERG_LOCUST, ZERG_CHANGELING not included
-    ] + ([self._combat_mgr.action(0, 0)] if not region_wise_combat else [
+    ] + ([
         self._combat_mgr.action(0, 0),
-        self._combat_mgr.action(0, 1),
-        self._combat_mgr.action(0, 4),
+        self._combat_mgr.action(9, 4),
         self._combat_mgr.action(4, 1)
-        #for source_region_id in [0, 1, 2, 4, 5, 6, 8, 9]
-        #for target_region_id in [0, 1, 2, 4, 5, 9]
+    ] if not use_all_combat_actions else [
+        self._combat_mgr.action(source_region_id, target_region_id)
+        for source_region_id in range(self._combat_mgr.num_regions)
+        for target_region_id in range(self._combat_mgr.num_regions)
     ])
 
     self._required_pre_actions = [

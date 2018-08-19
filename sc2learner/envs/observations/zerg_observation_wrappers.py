@@ -21,7 +21,7 @@ from sc2learner.envs.observations.nonspatial_features import ActionSeqFeature
 class ZergObservationWrapper(gym.Wrapper):
 
   def __init__(self, env, use_spatial_features=False, use_game_progress=True,
-               action_seq_len=8, divide_regions=False):
+               action_seq_len=8, use_regions=False):
     super(ZergObservationWrapper, self).__init__(env)
     assert isinstance(env.observation_space, PySC2RawObservation)
     self._use_spatial_features = use_spatial_features
@@ -52,7 +52,7 @@ class ZergObservationWrapper(gym.Wrapper):
                    UNIT_TYPE.ZERG_OVERSEER.value,
                    #UNIT_TYPE.ZERG_CHANGELING.value,
                    UNIT_TYPE.ZERG_QUEEN.value],
-        divide_regions=divide_regions
+        use_regions=use_regions
     )
     self._building_count_feature = UnitTypeCountFeature(
         type_list=[UNIT_TYPE.ZERG_SPINECRAWLER.value,
@@ -73,10 +73,10 @@ class ZergObservationWrapper(gym.Wrapper):
                    UNIT_TYPE.ZERG_LAIR.value,
                    UNIT_TYPE.ZERG_HIVE.value,
                    UNIT_TYPE.ZERG_GREATERSPIRE.value],
-        divide_regions=False
+        use_regions=False
     )
     self._unit_stat_count_feature = UnitStatCountFeature(
-        divide_regions=divide_regions)
+        use_regions=use_regions)
     self._player_feature = PlayerFeature()
     if use_game_progress:
       self._game_progress_feature = GameProgressFeature()
