@@ -89,7 +89,9 @@ class ZergObservationWrapper(gym.Wrapper):
         self._building_count_feature.num_dims,
         self._player_feature.num_dims,
         self._game_progress_feature.num_dims if use_game_progress else 0,
-        self._action_seq_feature.num_dims if use_action_seq else 0
+        self._action_seq_feature.num_dims if use_action_seq else 0,
+        self.env.action_space.n if isinstance(self.env.action_space,
+                                              MaskDiscrete) else 0
     ])
 
     # spatial features
@@ -196,7 +198,9 @@ class ZergObservationWrapper(gym.Wrapper):
         unit_stat_feat,
         player_feat,
         game_progress_feat if self._use_game_progress else [],
-        action_seq_feat if self._use_action_seq else []
+        action_seq_feat if self._use_action_seq else [],
+        observation['action_mask'] if isinstance(self.env.action_space,
+                                                 MaskDiscrete) else []
     ])
 
     # spatial features
