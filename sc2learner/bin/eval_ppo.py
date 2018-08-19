@@ -78,7 +78,7 @@ def create_env(random_seed=None):
   env = ZergObservationWrapper(env,
                                use_spatial_features=False,
                                use_game_progress=(not FLAGS.policy == 'lstm'),
-                               use_action_seq=(not FLAGS.policy == 'lstm'),
+                               action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
                                divide_regions=FLAGS.use_region_wise_combat)
   return env
 
