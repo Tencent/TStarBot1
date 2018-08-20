@@ -23,7 +23,7 @@ from sc2learner.agents.ppo_agent import PPOAgent
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_episodes", 10, "Number of episodes to evaluate.")
-flags.DEFINE_enum("policy", 'lstm', ['mlp', 'lstm'], "Job type.")
+flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
@@ -32,7 +32,7 @@ flags.DEFINE_enum("difficulty", '1',
 flags.DEFINE_string("model_path", None, "Filepath to load initial model.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
-flags.DEFINE_boolean("use_region_features", True, "Use region features")
+flags.DEFINE_boolean("use_region_features", False, "Use region features")
 flags.DEFINE_boolean("use_action_mask", True, "Use action mask or not.")
 flags.FLAGS(sys.argv)
 

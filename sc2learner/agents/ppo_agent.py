@@ -283,7 +283,7 @@ class PPOLearner(object):
         Thread(target=self._prepare_batch,
                args=(self._data_queue, batch_queue,
                      self._batch_size * self._unroll_split))
-        for _ in range(4)
+        for _ in range(8)
     ]
     for thread in batch_threads:
       thread.start()
