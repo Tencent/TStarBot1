@@ -139,6 +139,7 @@ class PPOActor(object):
     self._obs = env.reset()
     self._state = self._model.initial_state
     self._done = False
+    self._cum_reward = 0
 
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
@@ -176,10 +177,12 @@ class PPOActor(object):
       mb_neglogpacs.append(neglogpac[0])
       mb_dones.append(self._done)
       self._obs, reward, self._done, info = self._env.step(action[0])
+      self._cum_reward += reward
       if self._done:
         self._obs = self._env.reset()
         self._state = self._model.initial_state
-        episode_infos.append({'r': reward})
+        episode_infos.append({'r': self._cum_reward})
+        self._cum_reward = 0
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):
       mb_obs = tuple(np.asarray(obs, dtype=self._obs[0].dtype)
@@ -450,6 +453,7 @@ class PPOSelfplayActor(object):
     self._state = self._model.initial_state
     self._oppo_state = self._oppo_model.initial_state
     self._done = False
+    self._cum_reward = 0
 
     self._model_cache = deque(maxlen=model_cache_size)
     if init_opponent_pool_filelist is not None:
@@ -503,12 +507,14 @@ class PPOSelfplayActor(object):
       mb_dones.append(self._done)
       (self._obs, self._oppo_obs), reward, self._done, info = self._env.step(
         [action[0], oppo_action[0]])
+      self._cum_reward += reward
       if self._done:
         self._obs, self._oppo_obs = self._env.reset()
         self._state = self._model.initial_state
         self._oppo_state = self._oppo_model.initial_state
         self._update_opponent()
-        episode_infos.append({'r': reward})
+        episode_infos.append({'r': self._cum_reward})
+        self._cum_reward = 0
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):
       mb_obs = tuple(np.asarray(obs, dtype=self._obs[0].dtype)

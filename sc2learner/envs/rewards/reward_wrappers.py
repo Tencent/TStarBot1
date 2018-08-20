@@ -126,7 +126,6 @@ class KillingRewardWrapper(gym.Wrapper):
     if not done:
       reward += (kill_value - self._last_kill_value) * 1e-5
     self._last_kill_value = kill_value
-    print(reward)
     return observation, reward, done, info
 
   def reset(self):
