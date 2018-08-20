@@ -34,6 +34,8 @@ flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_integer("model_cache_size", 1000, "Opponent model cache size.")
 flags.DEFINE_float("model_cache_prob", 0.2, "Opponent model cache probability.")
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
+flags.DEFINE_string("port_A", "5700", "Port for transporting model.")
+flags.DEFINE_string("port_B", "5701", "Port for transporting data.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_float("discount_gamma", 0.995, "Discount factor.")
 flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
@@ -52,7 +54,8 @@ flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 1000, "Print train cost frequency.")
 flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
-flags.DEFINE_boolean("use_region_wise_combat", False, "Use region-wise combat.")
+flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
+flags.DEFINE_boolean("use_region_features", True, "Use region features")
 flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
 flags.FLAGS(sys.argv)
 
@@ -82,12 +85,12 @@ def create_env(difficulty, random_seed=None):
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,
-                          region_wise_combat=FLAGS.use_region_wise_combat)
+                          use_all_combat_actions=FLAGS.use_all_combat_actions)
   env = ZergObservationWrapper(env,
                                use_spatial_features=False,
                                use_game_progress=(not FLAGS.policy == 'lstm'),
-                               use_action_seq=(not FLAGS.policy == 'lstm'),
-                               divide_regions=FLAGS.use_region_wise_combat)
+                               action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
+                               use_regions=FLAGS.use_region_features)
   return env
 
 
@@ -101,31 +104,33 @@ def create_selfplay_env(random_seed=None):
                           disable_fog=FLAGS.disable_fog,
                           game_steps_per_episode=FLAGS.game_steps_per_episode,
                           random_seed=random_seed)
-  env = ZergPlayerActionWrapper(player=0,
-                                env=env,
-                                game_version=FLAGS.game_version,
-                                mask=FLAGS.use_action_mask,
-                                region_wise_combat=FLAGS.use_region_wise_combat)
+  env = ZergPlayerActionWrapper(
+      player=0,
+      env=env,
+      game_version=FLAGS.game_version,
+      mask=FLAGS.use_action_mask,
+      use_all_combat_actions=FLAGS.use_all_combat_actions)
   env = ZergPlayerObservationWrapper(
       player=0,
       env=env,
       use_spatial_features=False,
       use_game_progress=(not FLAGS.policy == 'lstm'),
-      use_action_seq=(not FLAGS.policy == 'lstm'),
-      divide_regions=FLAGS.use_region_wise_combat)
+      action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
+      use_regions=FLAGS.use_region_features)
 
-  env = ZergPlayerActionWrapper(player=1,
-                                env=env,
-                                game_version=FLAGS.game_version,
-                                mask=FLAGS.use_action_mask,
-                                region_wise_combat=FLAGS.use_region_wise_combat)
+  env = ZergPlayerActionWrapper(
+      player=1,
+      env=env,
+      game_version=FLAGS.game_version,
+      mask=FLAGS.use_action_mask,
+      use_all_combat_actions=FLAGS.use_all_combat_actions)
   env = ZergPlayerObservationWrapper(
       player=1,
       env=env,
       use_spatial_features=False,
       use_game_progress=(not FLAGS.policy == 'lstm'),
-      use_action_seq=(not FLAGS.policy == 'lstm'),
-      divide_regions=FLAGS.use_region_wise_combat)
+      action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
+      use_regions=FLAGS.use_region_features)
   return env
 
 
@@ -144,7 +149,9 @@ def start_actor():
                            lam=FLAGS.lambda_return,
                            model_cache_size=FLAGS.model_cache_size,
                            model_cache_prob=FLAGS.model_cache_prob,
-                           learner_ip=FLAGS.learner_ip)
+                           learner_ip=FLAGS.learner_ip,
+                           port_A=FLAGS.port_A,
+                           port_B=FLAGS.port_B)
   actor.run()
   env.close()
 
@@ -168,7 +175,9 @@ def start_learner():
                        save_interval=FLAGS.save_interval,
                        learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
                        save_dir=FLAGS.save_dir,
-                       load_path=FLAGS.init_model_path)
+                       load_path=FLAGS.init_model_path,
+                       port_A=FLAGS.port_A,
+                       port_B=FLAGS.port_B)
   learner.run()
   env.close()
 
@@ -188,7 +197,9 @@ def start_evaluator():
                    gamma=FLAGS.discount_gamma,
                    lam=FLAGS.lambda_return,
                    enable_push=False,
-                   learner_ip=FLAGS.learner_ip)
+                   learner_ip=FLAGS.learner_ip,
+                   port_A=FLAGS.port_A,
+                   port_B=FLAGS.port_B)
   actor.run()
   env.close()
 
