@@ -30,6 +30,19 @@ class PlayerFeature(object):
     return 9 * 2 + 10
 
 
+class ScoreFeature(object):
+
+  def features(self, observation):
+    score_features = observation.score_cumulative[3:].astype(np.float32)
+    score_features /= 3000.0
+    log_features = np.log10(score_features + 1).astype(np.float32)
+    return np.concatenate((score_features, log_features))
+
+  @property
+  def num_dims(self):
+    return 10 * 2
+
+
 class UnitTypeCountFeature(object):
 
   def __init__(self, type_list, use_regions=False):

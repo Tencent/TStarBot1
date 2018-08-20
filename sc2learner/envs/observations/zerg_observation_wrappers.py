@@ -13,6 +13,7 @@ from sc2learner.envs.common.data_context import DataContext
 from sc2learner.envs.observations.spatial_features import UnitTypeCountMapFeature
 from sc2learner.envs.observations.spatial_features import AllianceCountMapFeature
 from sc2learner.envs.observations.nonspatial_features import PlayerFeature
+from sc2learner.envs.observations.nonspatial_features import ScoreFeature
 from sc2learner.envs.observations.nonspatial_features import WorkerFeature
 from sc2learner.envs.observations.nonspatial_features import UnitTypeCountFeature
 from sc2learner.envs.observations.nonspatial_features import UnitStatCountFeature
@@ -82,6 +83,7 @@ class ZergObservationWrapper(gym.Wrapper):
     self._unit_stat_count_feature = UnitStatCountFeature(
         use_regions=use_regions)
     self._player_feature = PlayerFeature()
+    self._score_feature = ScoreFeature()
     self._worker_feature = WorkerFeature()
     if use_game_progress:
       self._game_progress_feature = GameProgressFeature()
@@ -92,6 +94,7 @@ class ZergObservationWrapper(gym.Wrapper):
         self._unit_count_feature.num_dims,
         self._building_count_feature.num_dims,
         self._player_feature.num_dims,
+        self._score_feature.num_dims,
         self._worker_feature.num_dims,
         self._action_seq_feature.num_dims,
         self._game_progress_feature.num_dims if use_game_progress else 0,
@@ -193,6 +196,7 @@ class ZergObservationWrapper(gym.Wrapper):
     unit_stat_feat = self._unit_stat_count_feature.features(observation,
                                                             need_flip)
     player_feat = self._player_feature.features(observation)
+    score_feat = self._score_feature.features(observation)
     worker_feat = self._worker_feature.features(self._dc)
     if self._use_game_progress:
       game_progress_feat = self._game_progress_feature.features(observation)
@@ -202,6 +206,7 @@ class ZergObservationWrapper(gym.Wrapper):
         building_type_feat,
         unit_stat_feat,
         player_feat,
+        score_feat,
         worker_feat,
         action_seq_feat,
         game_progress_feat if self._use_game_progress else [],
