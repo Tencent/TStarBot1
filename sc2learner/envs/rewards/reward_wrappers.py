@@ -35,7 +35,7 @@ class RewardShapingWrapperV1(gym.Wrapper):
     self._n_self_combats = n_self_combats
     return observation, reward, done, info
 
-  def reset(self):
+  def reset(self, **kwargs):
     observation = self.env.reset()
     self._n_enemies, self._n_self_combats = self._get_unit_counts(observation)
     return observation
@@ -84,7 +84,7 @@ class RewardShapingWrapperV2(gym.Wrapper):
     self._n_selves = n_selves
     return observation, reward, done, info
 
-  def reset(self):
+  def reset(self, **kwargs):
     observation = self.env.reset()
     self._n_enemies, self._n_selves = self._get_unit_counts(observation)
     return observation
@@ -109,3 +109,51 @@ class RewardShapingWrapperV2(gym.Wrapper):
         if u.unit_type in self._combat_unit_types:
           num_self_units += 1
     return num_enemy_units, num_self_units
+
+
+class KillingRewardWrapper(gym.Wrapper):
+
+  def __init__(self, env):
+    super(KillingRewardWrapper, self).__init__(env)
+    assert isinstance(env.observation_space, PySC2RawObservation)
+    self.reward_range = (-np.inf, np.inf)
+    self._last_kill_value = 0
+
+  def step(self, action):
+    observation, reward, done, info = self.env.step(action)
+    kill_value = observation.score_cumulative[5] + \
+        observation.score_cumulative[6]
+    if not done:
+      reward += (kill_value - self._last_kill_value) * 1e-5
+    self._last_kill_value = kill_value
+    print(reward)
+    return observation, reward, done, info
+
+  def reset(self):
+    observation = self.env.reset()
+    kill_value = observation.score_cumulative[5] + \
+        observation.score_cumulative[6]
+    self._last_kill_value = kill_value
+    return observation
+
+  @property
+  def action_names(self):
+    if not hasattr(self.env, 'action_names'): raise NotImplementedError
+    return self.env.action_names
+
+  @property
+  def player_position(self):
+    if not hasattr(self.env, 'player_position'): raise NotImplementedError
+    return self.env.player_position
+    observation = self.env.reset()
+    return observation
+
+  @property
+  def action_names(self):
+    if not hasattr(self.env, 'action_names'): raise NotImplementedError
+    return self.env.action_names
+
+  @property
+  def player_position(self):
+    if not hasattr(self.env, 'player_position'): raise NotImplementedError
+    return self.env.player_position

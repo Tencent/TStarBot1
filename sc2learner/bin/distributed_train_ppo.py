@@ -17,6 +17,7 @@ import tensorflow as tf
 from sc2learner.agents.ppo_policies import LstmPolicy, MlpPolicy
 from sc2learner.agents.ppo_agent import PPOActor, PPOLearner
 from sc2learner.envs.raw_env import SC2RawEnv
+from sc2learner.envs.rewards.reward_wrappers import KillingRewardWrapper
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers \
     import ZergObservationWrapper
@@ -51,6 +52,7 @@ flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
 flags.DEFINE_boolean("use_region_features", False, "Use region features")
 flags.DEFINE_boolean("use_action_mask", True, "Use region-wise combat.")
+flags.DEFINE_boolean("use_reward_shaping", False, "Use reward shaping.")
 flags.FLAGS(sys.argv)
 
 
@@ -76,6 +78,7 @@ def create_env(difficulty, random_seed=None):
                   tie_to_lose=True,
                   game_steps_per_episode=FLAGS.game_steps_per_episode,
                   random_seed=random_seed)
+  if FLAGS.use_reward_shaping: env = KillingRewardWrapper(env)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
                           mask=FLAGS.use_action_mask,
