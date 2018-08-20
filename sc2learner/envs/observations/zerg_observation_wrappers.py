@@ -240,13 +240,13 @@ class ZergPlayerObservationWrapper(ZergObservationWrapper):
   def step(self, action):
     self._action_seq_feature.push_action(action[self._player])
     observation, reward, done, info = self.env.step(action)
-    self._dc.update(observation)
+    self._dc.update(observation[self._player])
     observation[self._player] = self._observation(observation[self._player])
     return observation, reward, done, info
 
   def reset(self, **kwargs):
     observation = self.env.reset()
-    self._dc.reset(observation)
+    self._dc.reset(observation[self._player])
     self._action_seq_feature.reset()
     observation[self._player] = self._observation(observation[self._player])
     return observation
