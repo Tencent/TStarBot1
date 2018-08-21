@@ -540,7 +540,7 @@ class PPOSelfplayActor(object):
       self._latest_model = model_params
 
   def _update_opponent(self):
-    if random.uniform(0, 1.0) < 0.8 or len(self._model_cache) == 0:
+    if random.uniform(0, 1.0) < 0.0 or len(self._model_cache) == 0:
       self._oppo_model.load_params(self._latest_model)
       tprint("Opponent updated with the current model.")
     else:
