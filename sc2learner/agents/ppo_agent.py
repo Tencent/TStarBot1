@@ -408,7 +408,8 @@ class PPOAgent(object):
 class PPOSelfplayActor(object):
 
   def __init__(self, env, policy, unroll_length, gamma, lam, model_cache_size,
-               model_cache_prob, queue_size=1, learner_ip="localhost",
+               model_cache_prob, queue_size=1, opponent_load_path=None,
+               enable_push=True, freeze_opponent=False, learner_ip="localhost",
                port_A="5700", port_B="5701"):
     self._env = env
     self._unroll_length = unroll_length
@@ -416,6 +417,8 @@ class PPOSelfplayActor(object):
     self._gamma = gamma
     self._model_cache = deque(maxlen=model_cache_size)
     self._model_cache_prob = model_cache_prob
+    self._freeze_opponent = freeze_opponent
+    self._enable_push = enable_push
 
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -437,6 +440,7 @@ class PPOSelfplayActor(object):
                              ent_coef=0.01,
                              vf_coef=0.5,
                              max_grad_norm=0.5)
+    if opponent_load_path is not None: self._oppo_model.load(opponent_load_path)
     self._obs, self._oppo_obs = env.reset()
     self._state = self._model.initial_state
     self._oppo_state = self._oppo_model.initial_state
@@ -448,20 +452,23 @@ class PPOSelfplayActor(object):
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
     self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
-    self._data_queue = Queue(queue_size)
-    self._push_thread = Thread(target=self._push_data, args=(
-        self._zmq_context, learner_ip, port_B, self._data_queue))
-    self._push_thread.start()
+    if enable_push:
+      self._data_queue = Queue(queue_size)
+      self._push_thread = Thread(target=self._push_data, args=(
+          self._zmq_context, learner_ip, port_B, self._data_queue))
+      self._push_thread.start()
 
   def run(self):
     while True:
       t = time.time()
       self._update_model()
-      if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
       tprint("Time update model: %f" % (time.time() - t))
       t = time.time()
-      self._data_queue.put(self._nstep_rollout())
-      tprint("Time rollout: %f" % (time.time() - t))
+      unroll = self._nstep_rollout()
+      if self._enable_push:
+        if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
+        self._data_queue.put(unroll)
+        tprint("Time rollout: %f" % (time.time() - t))
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
@@ -487,7 +494,7 @@ class PPOSelfplayActor(object):
         self._obs, self._oppo_obs = self._env.reset()
         self._state = self._model.initial_state
         self._oppo_state = self._oppo_model.initial_state
-        self._update_opponent()
+        if not self._freeze_opponent: self._update_opponent()
         episode_infos.append({'r': reward})
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):

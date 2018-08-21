@@ -28,7 +28,8 @@ from sc2learner.utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner', 'eval'], "Job type.")
+flags.DEFINE_enum("job_name", 'actor', ['actor', 'learner', 'eval', 'eval_model'],
+                  "Job type.")
 flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_integer("unroll_length", 128, "Length of rollout steps.")
 flags.DEFINE_integer("model_cache_size", 250, "Opponent model cache size.")
@@ -50,6 +51,7 @@ flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 1e-6, "Learning rate.")
 flags.DEFINE_string("init_model_path", None, "Initial model path.")
+flags.DEFINE_string("init_oppo_model_path", None, "Initial opponent model path.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 1000, "Print train cost frequency.")
@@ -135,7 +137,7 @@ def create_selfplay_env(random_seed=None):
 
 
 def start_actor():
-  tf_config(ncpu=1)
+  tf_config(ncpu=2)
   random.seed(time.time())
   game_seed =  random.randint(0, 2**32 - 1)
   print("Game Seed: %d" % game_seed)
@@ -182,7 +184,7 @@ def start_learner():
   env.close()
 
 
-def start_evaluator():
+def start_evaluator_against_builtin():
   tf_config(ncpu=2)
   random.seed(time.time())
   difficulty = random.choice(FLAGS.difficulties.split(','))
@@ -204,12 +206,38 @@ def start_evaluator():
   env.close()
 
 
+def start_evaluator_against_model():
+  tf_config(ncpu=2)
+  random.seed(time.time())
+  game_seed =  random.randint(0, 2**32 - 1)
+  print("Game Seed: %d" % game_seed)
+  env = create_selfplay_env(game_seed)
+  policy = {'lstm': LstmPolicy,
+            'mlp': MlpPolicy}[FLAGS.policy]
+  actor = PPOSelfplayActor(env=env,
+                           policy=policy,
+                           unroll_length=FLAGS.unroll_length,
+                           gamma=FLAGS.discount_gamma,
+                           lam=FLAGS.lambda_return,
+                           model_cache_size=1,
+                           model_cache_prob=FLAGS.model_cache_prob,
+                           enable_push=False,
+                           freeze_opponent=True,
+                           opponent_load_path=FLAGS.init_oppo_model_path,
+                           learner_ip=FLAGS.learner_ip,
+                           port_A=FLAGS.port_A,
+                           port_B=FLAGS.port_B)
+  actor.run()
+  env.close()
+
+
 def main(argv):
   logging.set_verbosity(logging.ERROR)
   print_arguments(FLAGS)
   if FLAGS.job_name == 'actor': start_actor()
-  if FLAGS.job_name == 'learner': start_learner()
-  else: start_evaluator()
+  elif FLAGS.job_name == 'learner': start_learner()
+  elif FLAGS.job_name == 'eval': start_evaluator_against_builtin()
+  else: start_evaluator_against_model()
 
 
 if __name__ == '__main__':
