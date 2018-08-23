@@ -51,7 +51,7 @@ flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_float("learning_rate", 1e-6, "Learning rate.")
 flags.DEFINE_string("init_model_path", None, "Initial model path.")
-flags.DEFINE_string("init_oppo_model_path", None, "Initial opponent model path.")
+flags.DEFINE_string("init_oppo_pool_filelist", None, "Initial opponent model path.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
 flags.DEFINE_integer("save_interval", 50000, "Model saving frequency.")
 flags.DEFINE_integer("print_interval", 1000, "Print train cost frequency.")
@@ -144,16 +144,20 @@ def start_actor():
   env = create_selfplay_env(game_seed)
   policy = {'lstm': LstmPolicy,
             'mlp': MlpPolicy}[FLAGS.policy]
-  actor = PPOSelfplayActor(env=env,
-                           policy=policy,
-                           unroll_length=FLAGS.unroll_length,
-                           gamma=FLAGS.discount_gamma,
-                           lam=FLAGS.lambda_return,
-                           model_cache_size=FLAGS.model_cache_size,
-                           model_cache_prob=FLAGS.model_cache_prob,
-                           learner_ip=FLAGS.learner_ip,
-                           port_A=FLAGS.port_A,
-                           port_B=FLAGS.port_B)
+  actor = PPOSelfplayActor(
+      env=env,
+      policy=policy,
+      unroll_length=FLAGS.unroll_length,
+      gamma=FLAGS.discount_gamma,
+      lam=FLAGS.lambda_return,
+      model_cache_size=FLAGS.model_cache_size,
+      model_cache_prob=FLAGS.model_cache_prob,
+      prob_latest_opponent=0.0,
+      init_opponent_pool_filelist=FLAGS.init_oppo_pool_filelist,
+      freeze_opponent_pool=False,
+      learner_ip=FLAGS.learner_ip,
+      port_A=FLAGS.port_A,
+      port_B=FLAGS.port_B)
   actor.run()
   env.close()
 
@@ -214,19 +218,21 @@ def start_evaluator_against_model():
   env = create_selfplay_env(game_seed)
   policy = {'lstm': LstmPolicy,
             'mlp': MlpPolicy}[FLAGS.policy]
-  actor = PPOSelfplayActor(env=env,
-                           policy=policy,
-                           unroll_length=FLAGS.unroll_length,
-                           gamma=FLAGS.discount_gamma,
-                           lam=FLAGS.lambda_return,
-                           model_cache_size=1,
-                           model_cache_prob=FLAGS.model_cache_prob,
-                           enable_push=False,
-                           freeze_opponent=True,
-                           opponent_load_path=FLAGS.init_oppo_model_path,
-                           learner_ip=FLAGS.learner_ip,
-                           port_A=FLAGS.port_A,
-                           port_B=FLAGS.port_B)
+  actor = PPOSelfplayActor(
+      env=env,
+      policy=policy,
+      unroll_length=FLAGS.unroll_length,
+      gamma=FLAGS.discount_gamma,
+      lam=FLAGS.lambda_return,
+      model_cache_size=1,
+      model_cache_prob=FLAGS.model_cache_prob,
+      enable_push=False,
+      prob_latest_opponent=0.0,
+      init_opponent_pool_filelist=FLAGS.init_oppo_pool_filelist,
+      freeze_opponent_pool=True,
+      learner_ip=FLAGS.learner_ip,
+      port_A=FLAGS.port_A,
+      port_B=FLAGS.port_B)
   actor.run()
   env.close()
 

@@ -408,17 +408,18 @@ class PPOAgent(object):
 class PPOSelfplayActor(object):
 
   def __init__(self, env, policy, unroll_length, gamma, lam, model_cache_size,
-               model_cache_prob, queue_size=1, opponent_load_path=None,
-               enable_push=True, freeze_opponent=False, learner_ip="localhost",
-               port_A="5700", port_B="5701"):
+               model_cache_prob, queue_size=1, prob_latest_opponent=0.0,
+               init_opponent_pool_filelist=None, freeze_opponent_pool=False,
+               enable_push=True, learner_ip="localhost", port_A="5700",
+               port_B="5701"):
     self._env = env
     self._unroll_length = unroll_length
     self._lam = lam
     self._gamma = gamma
-    self._model_cache = deque(maxlen=model_cache_size)
-    self._model_cache_prob = model_cache_prob
-    self._freeze_opponent = freeze_opponent
+    self._prob_latest_opponent = prob_latest_opponent
+    self._freeze_opponent_pool = freeze_opponent_pool
     self._enable_push = enable_push
+    self._model_cache_prob = model_cache_prob
 
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -440,14 +441,21 @@ class PPOSelfplayActor(object):
                              ent_coef=0.01,
                              vf_coef=0.5,
                              max_grad_norm=0.5)
-    if opponent_load_path is not None: self._oppo_model.load(opponent_load_path)
     self._obs, self._oppo_obs = env.reset()
     self._state = self._model.initial_state
     self._oppo_state = self._oppo_model.initial_state
     self._done = False
 
+    self._model_cache = deque(maxlen=model_cache_size)
+    if init_opponent_pool_filelist is not None:
+      with open(init_opponent_pool_filelist, 'r') as f:
+        for model_path in f.readlines():
+          print(model_path)
+          self._model_cache.append(joblib.load(model_path.strip()))
     self._latest_model = self._oppo_model.read_params()
-    self._model_cache.append(self._latest_model)
+    if len(self._model_cache) == 0:
+      self._model_cache.append(self._latest_model)
+    self._update_opponent()
 
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
@@ -494,7 +502,7 @@ class PPOSelfplayActor(object):
         self._obs, self._oppo_obs = self._env.reset()
         self._state = self._model.initial_state
         self._oppo_state = self._oppo_model.initial_state
-        if not self._freeze_opponent: self._update_opponent()
+        self._update_opponent()
         episode_infos.append({'r': reward})
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):
@@ -542,12 +550,14 @@ class PPOSelfplayActor(object):
       self._model_requestor.send_string("request model")
       model_params = self._model_requestor.recv_pyobj()
       self._model.load_params(model_params)
-      if random.uniform(0, 1.0) < self._model_cache_prob:
+      if (not self._freeze_opponent_pool and
+          random.uniform(0, 1.0) < self._model_cache_prob):
         self._model_cache.append(model_params)
       self._latest_model = model_params
 
   def _update_opponent(self):
-    if random.uniform(0, 1.0) < 0.0 or len(self._model_cache) == 0:
+    if (random.uniform(0, 1.0) < self._prob_latest_opponent or
+        len(self._model_cache) == 0):
       self._oppo_model.load_params(self._latest_model)
       tprint("Opponent updated with the current model.")
     else:
