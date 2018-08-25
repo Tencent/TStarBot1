@@ -19,7 +19,8 @@ from sc2learner.utils.utils import tprint
 
 class Model(object):
   def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
-               unroll_length, ent_coef, vf_coef, max_grad_norm, scope_name):
+               unroll_length, ent_coef, vf_coef, max_grad_norm, scope_name,
+               value_clip=False):
     sess = tf.get_default_session()
 
     act_model = policy(sess, scope_name, ob_space, ac_space, nbatch_act, 1,
@@ -42,8 +43,11 @@ class Model(object):
     vpredclipped = OLDVPRED + tf.clip_by_value(train_model.vf - OLDVPRED,
                                                -CLIPRANGE, CLIPRANGE)
     vf_losses1 = tf.square(vpred - R)
-    vf_losses2 = tf.square(vpredclipped - R)
-    vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+    if value_clip:
+      vf_losses2 = tf.square(vpredclipped - R)
+      vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+    else:
+      vf_loss = .5 * tf.reduce_mean(vf_losses1)
     ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
     pg_losses = -ADV * ratio
     pg_losses2 = -ADV * tf.clip_by_value(ratio, 1.0 - CLIPRANGE,
