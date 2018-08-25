@@ -314,10 +314,11 @@ class PPOLearner(object):
         var = explained_variance(values, returns)
         avg_reward = safemean([info['r'] for info in self._episode_infos])
         tprint("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
-               "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.7f	"
-               "Value-loss: %.5f	Policy-entropy: %.5f	Time-elapsed: %.1f" % (
+               "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.5f	"
+               "Value-loss: %.5f	Policy-entropy: %.5f	Approx-KL: %.5f	"
+               "Clip-frac: %.3f	Time: %.1f" % (
                update, train_fps, self._rollout_fps, var, avg_reward,
-               *loss_mean[:3], time_elapsed))
+               *loss_mean[:5], time_elapsed))
         time_start, loss = time.time(), []
 
       if self._save_dir is not None and update % self._save_interval == 0:
