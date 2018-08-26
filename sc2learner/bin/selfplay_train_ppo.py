@@ -93,6 +93,7 @@ def create_env(difficulty, random_seed=None):
                                use_game_progress=(not FLAGS.policy == 'lstm'),
                                action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
                                use_regions=FLAGS.use_region_features)
+  print(env.observation_space, env.action_space)
   return env
 
 
@@ -133,6 +134,7 @@ def create_selfplay_env(random_seed=None):
       use_game_progress=(not FLAGS.policy == 'lstm'),
       action_seq_len=1 if FLAGS.policy == 'lstm' else 8,
       use_regions=FLAGS.use_region_features)
+  print(env.observation_space, env.action_space)
   return env
 
 

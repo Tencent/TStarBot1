@@ -110,9 +110,11 @@ class ZergActionWrapper(gym.Wrapper):
         self._combat_mgr.action(9, 4),
         self._combat_mgr.action(4, 1)
     ] if not use_all_combat_actions else [
-        self._combat_mgr.action(source_region_id, target_region_id)
-        for source_region_id in range(self._combat_mgr.num_regions)
+        self._combat_mgr.action(0, target_region_id)
         for target_region_id in range(self._combat_mgr.num_regions)
+        #self._combat_mgr.action(source_region_id, target_region_id)
+        #for source_region_id in range(self._combat_mgr.num_regions)
+        #for target_region_id in range(self._combat_mgr.num_regions)
     ])
 
     self._required_pre_actions = [
