@@ -265,8 +265,8 @@ class PPOLearner(object):
     self._unroll_split = unroll_split if self._model.initial_state is None else 1
     assert self._unroll_length % self._unroll_split == 0
     self._data_queue = deque(maxlen=queue_size * self._unroll_split)
+    self._data_timesteps = deque(maxlen=200)
     self._episode_infos = deque(maxlen=5000)
-    self._rollout_fps = -1
     self._num_unrolls = 0
 
     self._zmq_context = zmq.Context()
@@ -317,15 +317,15 @@ class PPOLearner(object):
         batch_steps = self._batch_size * self._unroll_length
         time_elapsed = time.time() - time_start
         train_fps = self._print_interval * batch_steps / time_elapsed
-        rollout_fps = self._print_interval * batch_steps / time_elapsed
+        rollout_fps = len(self._data_timesteps) * self._unroll_length  / \
+            (time.time() - self._data_timesteps[0])
         var = explained_variance(values, returns)
         avg_reward = safemean([info['r'] for info in self._episode_infos])
         tprint("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
                "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.5f	"
                "Value-loss: %.5f	Policy-entropy: %.5f	Approx-KL: %.5f	"
-               "Clip-frac: %.3f	Time: %.1f" % (
-               update, train_fps, self._rollout_fps, var, avg_reward,
-               *loss_mean[:5], time_elapsed))
+               "Clip-frac: %.3f	Time: %.1f" % (update, train_fps, rollout_fps,
+               var, avg_reward, *loss_mean[:5], time_elapsed))
         time_start, loss = time.time(), []
 
       if self._save_dir is not None and update % self._save_interval == 0:
@@ -356,7 +356,6 @@ class PPOLearner(object):
     receiver.setsockopt(zmq.RCVHWM, 1)
     receiver.setsockopt(zmq.SNDHWM, 1)
     receiver.bind("tcp://*:%s" % port_B)
-    start_time, num_frames_now = time.time(), 0
     while True:
       data = receiver.recv_pyobj()
       if unroll_split > 1:
@@ -369,11 +368,8 @@ class PPOLearner(object):
       else:
         data_queue.append(data[:-1])
       episode_infos.extend(data[-1])
+      self._data_timesteps.append(time.time())
       self._num_unrolls += 1
-      num_frames_now += data[1].shape[0]
-      if self._num_unrolls % 2000 == 0:
-        self._rollout_fps = num_frames_now / (time.time() - start_time)
-        start_time, num_frames_now = time.time(), 0
 
   def _reply_model(self, zmq_context, model, port_A):
     receiver = zmq_context.socket(zmq.REP)
