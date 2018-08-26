@@ -37,24 +37,22 @@ class SC2SelfplayRawEnv(gym.Env):
                tie_to_lose=False,
                score_index=None,
                random_seed=None):
-    players=[sc2_env.Agent(sc2_env.Race[agent_race]),
-             sc2_env.Agent(sc2_env.Race[opponent_race])]
-    agent_interface_format=sc2_env.parse_agent_interface_format(
-        feature_screen=resolution, feature_minimap=resolution)
-    self._sc2_env = sc2_env.SC2Env(
-        map_name=map_name,
-        step_mul=step_mul,
-        players=players,
-        agent_interface_format=agent_interface_format,
-        disable_fog=disable_fog,
-        game_steps_per_episode=game_steps_per_episode,
-        visualize=False,
-        score_index=score_index,
-        random_seed=random_seed)
+    self._map_name = map_name
+    self._step_mul = step_mul
+    self._resolution = resolution
+    self._disable_fog = disable_fog
+    self._agent_race = agent_race
+    self._opponent_race = opponent_race
+    self._game_steps_per_episode = game_steps_per_episode
+    self._tie_to_lose = tie_to_lose
+    self._score_index = score_index
+    self._random_seed = random_seed
+    self._reseted = False
+    self._num_episodes = 1
+
+    self._sc2_env = self._create_env()
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
     self.action_space = PySC2RawAction()
-    self._tie_to_lose = tie_to_lose
-    self._reseted = False
 
   def step(self, actions):
     assert self._reseted
@@ -72,10 +70,37 @@ class SC2SelfplayRawEnv(gym.Env):
     return (observation, reward, done, info)
 
   def reset(self, **kwargs):
-    timesteps = self._sc2_env.reset()
+    if self._num_episodes % 10 == 0:
+      self._sc2_env.close()
+      self._sc2_env = self._create_env()
+    try:
+      timesteps = self._sc2_env.reset()
+    except:
+      print("Reset Exception. Recreate the env.")
+      self._sc2_env.close()
+      self._sc2_env = self._create_env()
+      timesteps = self._sc2_env.reset()
     observation = [timesteps[0].observation, timesteps[1].observation]
     self._reseted = True
+    self._num_episodes += 1
     return observation
 
   def close(self):
     self._sc2_env.close()
+
+  def _create_env(self):
+    self._random_seed = (self._random_seed + 1) & 0xFFFFFFFF
+    players=[sc2_env.Agent(sc2_env.Race[self._agent_race]),
+             sc2_env.Agent(sc2_env.Race[self._opponent_race])]
+    agent_interface_format=sc2_env.parse_agent_interface_format(
+        feature_screen=self._resolution, feature_minimap=self._resolution)
+    return sc2_env.SC2Env(
+        map_name=self._map_name,
+        step_mul=self._step_mul,
+        players=players,
+        agent_interface_format=agent_interface_format,
+        disable_fog=self._disable_fog,
+        game_steps_per_episode=self._game_steps_per_episode,
+        visualize=False,
+        score_index=self._score_index,
+        random_seed=self._random_seed)
