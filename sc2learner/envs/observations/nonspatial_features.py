@@ -94,7 +94,7 @@ class UnitTypeCountFeature(object):
     for u in units:
       if u.unit_type in count:
         count[u.unit_type] += 1
-    return np.array(list(count.values()), dtype=np.float32)
+    return np.array([count[t] for t in self._type_list], dtype=np.float32)
 
   def _is_in_region(self, unit, region):
     return (unit.float_attr.pos_x >= region[0] and
