@@ -5,13 +5,14 @@ from __future__ import print_function
 import os
 import sys
 import time
+import struct
 import random
 import math
 from copy import deepcopy
 import queue
-import threading
-import multiprocessing
+from threading import Thread
 from collections import deque
+import io
 
 import numpy as np
 import torch
@@ -21,416 +22,466 @@ from torch.autograd import Variable
 import torch.optim as optim
 from gym.spaces import prng
 from gym.spaces.discrete import Discrete
+from gym import spaces
+from memoire import ReplayMemoryClient
+from memoire import ReplayMemoryServer
+from memoire import Bind
+from memoire import Conn
 
 from sc2learner.agents.memory import ReplayMemory, Transition
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.utils.utils import tprint
 
 
-def tuple_cuda(tensors):
-  if isinstance(tensors, tuple):
-    return tuple(tensor.pin_memory().cuda(async=True) for tensor in tensors)
-  else:
-    return tensors.pin_memory().cuda(async=True)
+class Actor(object):
 
+  def __init__(self, network, action_space):
+    self._action_space = action_space
+    self._network = network
+    if torch.cuda.device_count() > 1:
+      self._network = nn.DataParallel(self._network)
+    if torch.cuda.is_available(): self._network.cuda()
+    self._optimizer = None
+    self._target_network = None
+    self._num_optim_steps = 0
+    self._is_network_loaded = False
 
-def tuple_variable(tensors, volatile=False):
-  if isinstance(tensors, tuple):
-    return tuple(Variable(tensor, volatile=volatile) for tensor in tensors)
-  else:
-    return Variable(tensors, volatile=volatile)
+  def act(self, observation, eps=0):
+    self._network.eval()
+    if random.uniform(0, 1) >= eps:
+      observation = torch.from_numpy(np.expand_dims(observation, 0))
+      if torch.cuda.is_available():
+        observation = observation.pin_memory().cuda(non_blocking=True)
+      with torch.no_grad():
+        q = self._network(observation)
+        action = q.data.max(1)[1].item()
+      return action
+    else:
+      return self._action_space.sample()
 
+  def optimize_step(self,
+                    obs_batch,
+                    next_obs_batch,
+                    action_batch,
+                    reward_batch,
+                    done_batch,
+                    mc_return_batch,
+                    discount,
+                    mmc_beta,
+                    gradient_clipping,
+                    adam_eps,
+                    learning_rate,
+                    target_update_freq):
+    # create optimizer
+    if self._optimizer is None:
+      self._optimizer = optim.Adam(self._network.parameters(),
+                                   eps=adam_eps,
+                                   lr=learning_rate)
+    # create target network
+    if self._target_network is None:
+      self._target_network = deepcopy(self._network)
+      if torch.cuda.is_available(): self._target_network.cuda()
+      self._target_network.eval()
 
-def actor_worker(pid, env_create_fn, q_network, difficulties, current_eps,
-                 cur_difficulty_idx, action_space, allow_eval_mode,
-                 transition_queue, outcome_queue, use_curriculum, discount):
-  np.random.seed(pid)
-  random.seed(pid)
-  prng.seed(pid)
+    # update target network
+    if self._num_optim_steps % target_update_freq == 0:
+      self._target_network.load_state_dict(self._network.state_dict())
 
-  def preprocess_observation(observation):
+    # move to gpu
+    if torch.cuda.is_available():
+      obs_batch = obs_batch.cuda(non_blocking=True)
+      next_obs_batch = next_obs_batch.cuda(non_blocking=True)
+      action_batch = action_batch.cuda(non_blocking=True)
+      reward_batch = reward_batch.cuda(non_blocking=True)
+      mc_return_batch = mc_return_batch.cuda(non_blocking=True)
+      done_batch = done_batch.cuda(non_blocking=True)
+
+    # compute max-q target
+    self._network.eval()
+    with torch.no_grad():
+      q_next_target = self._target_network(next_obs_batch)
+      q_next = self._network(next_obs_batch)
+      futures = q_next_target.gather(
+          1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
+      futures = futures * (1 - done_batch)
+      target_q = reward_batch + discount * futures
+      target_q = target_q * mmc_beta + (1.0 - mmc_beta) * mc_return_batch
+
+    # define loss
+    self._network.train()
+    q = self._network(obs_batch).gather(1, action_batch.view(-1, 1)).squeeze()
+    loss = F.mse_loss(q, target_q.detach())
+
+    # compute gradient and update parameters
+    self._optimizer.zero_grad()
+    loss.backward()
+    for param in self._network.parameters():
+      param.grad.data.clamp_(-gradient_clipping, gradient_clipping)
+    self._optimizer.step()
+    self._num_optim_steps += 1
+    return loss.data.item()
+
+  def load_network(self, state_dict):
+    self._network.load_state_dict(state_dict)
+    self._is_network_loaded = True
+
+  @property
+  def is_network_loaded(self):
+    return self._is_network_loaded
+
+  @property
+  def network(self):
+    return self._network
+
+  def _tuple_tensor_from_numpy(self, tensors):
+    if isinstance(tensors, tuple):
+      return tuple(torch.from_numpy(np.expand_dims(tensor, 0))
+                   for tensor in tensors)
+    else:
+      return torch.from_numpy(np.expand_dims(tensors, 0))
+
+  def _tuple_cuda(self, tensors):
+    if isinstance(tensors, tuple):
+      return tuple(tensor.pin_memory().cuda(async=True) for tensor in tensors)
+    else:
+      return tensors.pin_memory().cuda(async=True)
+
+  def _parse_observation(self, observation):
     action_mask = None
-    if isinstance(action_space, MaskDiscrete):
+    if isinstance(self._action_space, MaskDiscrete):
       action_mask, observation = observation[-1], observation[:-1]
       if len(observation) == 1: observation = observation[0]
     return observation, action_mask
 
-  def act(observation, eps=0):
-    if random.uniform(0, 1) >= eps:
-      if isinstance(observation, tuple):
-        observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
-                            for array in observation)
-      else:
-        observation = torch.from_numpy(np.expand_dims(observation, 0))
-      if torch.cuda.is_available(): observation = tuple_cuda(observation)
-      if allow_eval_mode: q_network.eval()
-      observation, action_mask = preprocess_observation(observation)
-      q = q_network(tuple_variable(observation, volatile=True))
-      if action_mask is not None: q[action_mask == 0] = float('-inf')
-      action = q.data.max(1)[1][0]
-      return action
-    else:
-      _, action_mask = preprocess_observation(observation)
-      if action_mask is not None:
-        return action_space.sample(np.nonzero(action_mask)[0])
-      else:
-        return action_space.sample()
 
-  episode_id = 0
-  while True:
-    try:
-      episode_id += 1
-      cum_return = 0.0
-      random_seed =  (pid * 11111111 + int(time.time() * 1000)) & 0xFFFFFFFF
-      print("Random Seed: %d" % random_seed)
-      if use_curriculum: cur_difficulty = difficulties[cur_difficulty_idx.value]
-      else: cur_difficulty = random.choice(difficulties)
-      env = env_create_fn(cur_difficulty, random_seed)
-      observation = env.reset()
-      done, n_frames, transition_list = False, 0, []
-      while not done:
-        action = act(observation, eps=current_eps.value)
-        next_observation, reward, done, _ = env.step(action)
-        transition_list.append(
-            (observation, action, reward, next_observation, done))
-        observation = next_observation
-        cum_return += reward
-        n_frames += 1
-
-      discounted_return = 0
-      for transition in reversed(transition_list):
-        discounted_return = discounted_return * discount + transition[2]
-        transition_queue.put(transition + (discounted_return,))
-      outcome_queue.put(cum_return)
-      env.close()
-      print("Actor Worker ID: %d Episode: %d Frames %d Difficulty: %s "
-            "Epsilon: %f Return: %f." % (pid, episode_id, n_frames,
-                                         cur_difficulty, current_eps.value,
-                                         cum_return))
-      sys.stdout.flush()
-
-    except:
-      print("Expection occured in PID %d. Restart." % pid)
-
-
-class DDQNAgent(object):
-  '''Deep Q-learning agent.'''
+class DistRolloutWorker(object):
 
   def __init__(self,
+               memory_size,
+               difficulties,
+               env_create_fn,
+               network,
+               action_space,
+               push_freq,
+               learner_ip="localhost"):
+    self._actor = Actor(network, action_space)
+    self._cur_epsilon = 1.0
+    self._difficulties = difficulties
+    self._env_create_fn = env_create_fn
+    self._push_freq = push_freq
+    self._num_steps = 0
+    self._num_rollouts = 0
+    self._memory_client, self._threads = self._setup_memory_client(
+        learner_ip, memory_size)
+    self._replay_memory = self._memory_client.rem
+    self._cache_size = self._replay_memory.cache_size
+    self._set_random_seed(self._replay_memory.uuid)
+
+  def run(self):
+    while not self._actor.is_network_loaded:
+      continue
+      time.sleep(1)
+
+    while True:
+      try:
+        self._rollout()
+      except KeyboardInterrupt:
+        break
+      except Exception as e:
+        tprint("[Rollout Exception]: %s" % e)
+        continue
+
+  def _set_random_seed(self, seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    prng.seed(seed)
+
+  def _setup_memory_client(self,
+                           server_ip,
+                           memory_size):
+    client = ReplayMemoryClient("tcp://%s:5560" % server_ip,
+                                "tcp://%s:5561" % server_ip,
+                                "tcp://%s:5562" % server_ip,
+                                memory_size)
+    client.rem.print_info()
+
+    def _update_network_worker(client):
+      while True:
+        try:
+          bytes_recv = client.sub_bytes('model')
+          self._cur_epsilon = struct.unpack('d', bytes_recv[:8])[0]
+          f = io.BytesIO(bytes_recv[8:])
+          self._actor.load_network(
+              torch.load(f, map_location=lambda storage, loc: storage))
+          tprint("Network updated. Epsilon = %f" % self._cur_epsilon)
+        except Exception as e:
+          tprint("[Update Network Exception]: %s" % e)
+          continue
+
+    #def _update_network_worker(client):
+      #while True:
+        #try:
+          #f = io.BytesIO(client.sub_bytes('model'))
+          #self._actor.load_network(
+              #torch.load(f, map_location=lambda storage, loc: storage))
+          #tprint("Network updated.")
+          #self._cur_epsilon = float(client.sub_bytes('epsilon'))
+          #tprint("Epsilon updated = %f."  % self._cur_epsilon)
+        #except Exception as e:
+          #tprint("[Update Network Exception]: %s" % e)
+          #continue
+
+    threads = [
+        Thread(target=_update_network_worker, args=(client,))
+    ]
+    for thread in threads:
+      thread.start()
+    return client, threads
+
+  def _rollout(self):
+    entry_reward = np.ndarray((1), dtype=np.float32)
+    entry_action = np.ndarray((1), dtype=np.float32)
+    entry_reward = np.ndarray((1), dtype=np.float32)
+    entry_prob = np.ndarray((1), dtype=np.float32)
+    entry_value = np.ndarray((1), dtype=np.float32)
+
+    random_seed =  random.randint(0, 2**32 - 1)
+    difficulty = random.choice(self._difficulties)
+    env = self._env_create_fn(difficulty, random_seed)
+    self._replay_memory.new_episode()
+    observation = env.reset()
+    done = False
+    while not done:
+      entry_state = observation
+      action = self._actor.act(observation, eps=self._cur_epsilon)
+      observation, reward, done, info = env.step(action)
+      entry_action[0], entry_reward[0]= action, reward
+      entry_prob[0] = False # entry_prob is reused as terminal
+      entry_value[0] = reward # entry_value is reused as reward
+      self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
+                                    entry_prob, entry_value, weight=1.0)
+      self._num_steps += 1
+      if (self._num_rollouts > 0 and
+          self._num_steps % int(self._cache_size / self._push_freq) == 0):
+        self._memory_client.push_cache()
+    env.close()
+    entry_action[0], entry_reward[0], entry_value[0] = -1, 0, 0
+    entry_prob[0] = True
+    entry_state = observation
+    self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
+                                  entry_prob, entry_value, weight=1.0)
+    self._replay_memory.close_episode()
+    self._memory_client.update_counter()
+    tprint("Actor uuid: %d Seed: %d Difficulty: %s Epsilon: %f Outcome: %f." %
+        (self._replay_memory.uuid, random_seed, difficulty, self._cur_epsilon,
+         reward))
+    self._num_rollouts += 1
+
+
+class DistDDQNLearner(object):
+
+  def __init__(self,
+               network,
                observation_space,
                action_space,
-               network,
-               optimizer_type,
-               learning_rate,
-               momentum,
-               adam_eps,
-               batch_size,
+               num_caches,
+               cache_size,
+               num_pull_workers,
                discount,
-               eps_method,
                eps_start,
                eps_end,
                eps_decay,
                eps_decay2,
-               memory_size,
-               init_memory_size,
-               frame_step_ratio,
-               gradient_clipping,
-               double_dqn,
-               mmc_beta,
-               mmc_discount,
-               target_update_freq,
-               winning_rate_threshold,
-               difficulties,
-               allow_eval_mode=True,
-               loss_type='mse',
-               init_model_path=None,
-               save_model_dir=None,
-               save_model_freq=50000,
-               print_freq=1000):
-    assert isinstance(action_space, Discrete)
-
-    self._batch_size = batch_size
+               init_checkpoint_path="",
+               priority_exponent=0.0):
+    state_size = observation_space.spaces[0].shape[0] \
+        if isinstance(observation_space, spaces.Tuple) \
+        else observation_space.shape[0]
+    self._memory_server, self._threads = self._setup_memory_server(
+        state_size=state_size,
+        cache_size=cache_size,
+        num_caches=num_caches,
+        num_pull_workers=num_pull_workers,
+        priority_exponent=priority_exponent,
+        discount=discount)
     self._discount = discount
-    self._eps_method = eps_method
     self._eps_start = eps_start
     self._eps_end = eps_end
     self._eps_decay = eps_decay
     self._eps_decay2 = eps_decay2
-    self._frame_step_ratio = frame_step_ratio
-    self._target_update_freq = target_update_freq
-    self._double_dqn = double_dqn
-    self._save_model_dir = save_model_dir
-    self._save_model_freq = save_model_freq
-    self._action_space = action_space
-    self._memory_size = memory_size
-    self._init_memory_size = max(init_memory_size, batch_size)
-    self._gradient_clipping = gradient_clipping
-    self._allow_eval_mode = allow_eval_mode
-    self._loss_type = loss_type
-    self._print_freq = print_freq
-    self._mmc_beta = mmc_beta
-    self._mmc_discount = mmc_discount
-    self._episode_idx = 0
-    self._current_eps = multiprocessing.Value('d', eps_start)
-    self._num_threads = 4
+    self._cur_epsilon = eps_start
 
-    self._winning_rate_threshold = winning_rate_threshold
-    self._difficulties = difficulties
-    self._cur_difficulty_idx = multiprocessing.Value('i', 0)
-    self._recent_outcomes = deque(maxlen=1000)
+    self._actor = Actor(network, action_space)
+    if init_checkpoint_path:
+      self._load_model(init_checkpoint_path)
 
-    self._q_network = network
-    self._q_network.share_memory()
-    self._target_q_network = deepcopy(network)
-    if init_model_path:
-      self._load_model(init_model_path)
-      self._episode_idx = int(init_model_path[init_model_path.rfind('-')+1:])
-    if torch.cuda.device_count() > 1:
-      self._q_network = nn.DataParallel(self._q_network)
-      self._target_q_network = nn.DataParallel(self._target_q_network)
-    if torch.cuda.is_available():
-      self._q_network.cuda()
-      self._target_q_network.cuda()
-    if self._allow_eval_mode:
-      self._target_q_network.eval()
+    self._publish_model()
+    time.sleep(5)
+    self._publish_model()
+    time.sleep(5)
 
-    self._update_target_network()
+  def learn(self,
+            batch_size,
+            mmc_beta,
+            gradient_clipping,
+            adam_eps,
+            learning_rate,
+            warmup_size,
+            target_update_freq,
+            checkpoint_dir,
+            checkpoint_freq,
+            print_freq):
+    batch_queue = queue.Queue(8)
+    batch_threads = [
+        Thread(target=self._batch_worker, args=(batch_queue, batch_size,
+                                                warmup_size)),
+        Thread(target=self._publish_model_worker)
+    ]
+    for thread in batch_threads:
+      thread.start()
 
-    if optimizer_type == "rmsprop":
-      self._optimizer = optim.RMSprop(self._q_network.parameters(),
-                                      momentum=momentum,
-                                      lr=learning_rate)
-    elif optimizer_type == "adam":
-      self._optimizer = optim.Adam(self._q_network.parameters(),
-                                   eps=adam_eps,
-                                   lr=learning_rate)
-    elif optimizer_type == "sgd":
-      self._optimizer = optim.SGD(self._q_network.parameters(),
-                                  momentum=momentum,
-                                  lr=learning_rate)
-    else:
-      raise NotImplementedError
-
-  def act(self, observation, eps=0):
-    if random.uniform(0, 1) >= eps:
-      if isinstance(observation, tuple):
-        observation = tuple(torch.from_numpy(np.expand_dims(array, 0))
-                            for array in observation)
-      else:
-        observation = torch.from_numpy(np.expand_dims(observation, 0))
-      if torch.cuda.is_available():
-        observation = tuple_cuda(observation)
-      if self._allow_eval_mode:
-        self._q_network.eval()
-
-      observation, action_mask = self._preprocess_observation(observation)
-      q = self._q_network(tuple_variable(observation, volatile=True))
-      if action_mask is not None: q[action_mask == 0] = float('-inf')
-      action = q.data.max(1)[1][0]
-      return action
-    else:
-      _, action_mask = self._preprocess_observation(observation)
-      if action_mask is not None:
-        return self._action_space.sample(np.nonzero(action_mask)[0])
-      else:
-        return self._action_space.sample()
-
-  def learn(self, create_env_fn, num_actor_workers, use_curriculum):
-    self._init_parallel_actors(create_env_fn, num_actor_workers, use_curriculum)
-    steps, loss_sum = 0, 0.0
+    num_updates, loss_sum = 1, 0.0
     t = time.time()
     while True:
-      if steps % self._target_update_freq == 0: self._update_target_network()
-      self._current_eps.value = self._get_current_eps(steps)
-      self._update_curriculum_difficulty()
-      loss_sum += self._optimize()
-      steps += 1
-      if self._save_model_dir and steps % self._save_model_freq == 0:
-        self._save_model(
-            os.path.join(self._save_model_dir, 'agent.model-%d' % steps))
-      if steps % self._print_freq == 0:
-        print("Steps: %d Time: %f Epsilon: %f Loss %f " % (
-            steps, time.time() - t, self._current_eps.value,
-            loss_sum / self._print_freq))
+      observation, next_observation, action, reward, done, mc_return = \
+          batch_queue.get()
+      self._cur_epsilon = self._schedule_epsilon(num_updates)
+      loss_sum += self._actor.optimize_step(
+          obs_batch=observation,
+          next_obs_batch=next_observation,
+          action_batch=action,
+          reward_batch=reward,
+          done_batch=done,
+          mc_return_batch=mc_return,
+          discount=self._discount,
+          mmc_beta=mmc_beta,
+          gradient_clipping=gradient_clipping,
+          adam_eps=adam_eps,
+          learning_rate=learning_rate,
+          target_update_freq=target_update_freq)
+      if num_updates % checkpoint_freq == 0:
+        ckpt_path = os.path.join(checkpoint_dir, 'agent.model-%d' % num_updates)
+        self._save_checkpoint(ckpt_path)
+      if num_updates % print_freq == 0:
+        tprint("Steps: %d Time: %f Loss %f Actor Steps: %d Current Eps: %f" % (
+            num_updates, time.time() - t, loss_sum / print_freq,
+            self._memory_server.total_steps, self._cur_epsilon))
         loss_sum = 0.0
         t = time.time()
+      num_updates += 1
 
-  def _preprocess_observation(self, observation):
-    action_mask = None
-    if isinstance(self._action_space, MaskDiscrete):
-      action_mask = observation[-1]
-      observation = observation[:-1]
-      if len(observation) == 1: observation = observation[0]
-    return observation, action_mask
-
-  def _optimize(self):
-    #print("Batch Queue Size: %d" % self._batch_queue.qsize())
-    (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch, \
-        return_batch) = self._batch_queue.get()
-    next_obs_batch, action_mask = self._preprocess_observation(next_obs_batch)
-    obs_batch, _ = self._preprocess_observation(obs_batch)
-    # compute max-q target
-    if self._allow_eval_mode: self._q_network.eval()
-    q_next_target = self._target_q_network(next_obs_batch)
-    if self._double_dqn:
-      q_next = self._q_network(next_obs_batch)
-      if action_mask is not None: q_next[action_mask == 0] = float('-inf')
-      futures = q_next_target.gather(
-          1, q_next.max(dim=1)[1].view(-1, 1)).squeeze()
-    else:
-      if action_mask is not None:
-        q_next_target[action_mask == 0] = float('-inf')
-      futures = q_next_target.max(dim=1)[0].view(-1, 1).squeeze()
-    futures = futures * (1 - done_batch)
-    target_q = reward_batch + self._discount * futures
-    target_q = target_q * self._mmc_beta + (1.0 - self._mmc_beta) * return_batch
-    # define loss
-    self._q_network.train()
-    q = self._q_network(obs_batch).gather(1, action_batch.view(-1, 1))
-    if self._loss_type == "smooth_l1":
-      loss = F.smooth_l1_loss(q, Variable(target_q.data))
-    elif self._loss_type == "mse":
-      loss = F.mse_loss(q, Variable(target_q.data))
-    else:
-      raise NotImplementedError
-    # compute gradient and update parameters
-    self._optimizer.zero_grad()
-    loss.backward()
-    for param in self._q_network.parameters():
-      param.grad.data.clamp_(-self._gradient_clipping, self._gradient_clipping)
-    self._optimizer.step()
-    return loss.data[0]
-
-  def _init_parallel_actors(self, create_env_fn, num_actor_workers,
-                            use_curriculum):
-    multiprocessing.set_start_method('spawn')
-    self._transition_queue = multiprocessing.Queue(8)
-    self._outcome_queue = multiprocessing.Queue(200000)
-    self._actor_processes = [
-        multiprocessing.Process(target=actor_worker,
-                                args=(pid,
-                                      create_env_fn,
-                                      self._q_network,
-                                      self._difficulties,
-                                      self._current_eps,
-                                      self._cur_difficulty_idx,
-                                      self._action_space,
-                                      self._allow_eval_mode,
-                                      self._transition_queue,
-                                      self._outcome_queue,
-                                      use_curriculum,
-                                      self._mmc_discount))
-        for pid in range(num_actor_workers)
-    ]
-    self._batch_queue = queue.Queue(8)
-    self._batch_thread = [threading.Thread(target=self._prepare_batch,
-                                           args=(tid,))
-                          for tid in range(self._num_threads)]
-    for process in self._actor_processes:
-      process.daemon = True
-      process.start()
-      time.sleep(3.0)
-    for thread in self._batch_thread:
-      thread.daemon = True
-      thread.start()
-      time.sleep(0.2)
-
-  def _update_curriculum_difficulty(self):
-    has_new_outcome = False
-    while not self._outcome_queue.empty():
-      self._recent_outcomes.append(self._outcome_queue.get())
-      has_new_outcome = True
-    if (has_new_outcome and
-        len(self._recent_outcomes) == self._recent_outcomes.maxlen):
-      winning_rate = (float(sum(self._recent_outcomes)) / \
-          len(self._recent_outcomes) + 1.0) / 2.0
-      print("Difficulty: %s Winning_rate %f:" % (
-          self._difficulties[self._cur_difficulty_idx.value], winning_rate))
-      if (winning_rate >= self._winning_rate_threshold and
-          len(self._difficulties) > self._cur_difficulty_idx.value + 1):
-        self._cur_difficulty_idx.value += 1
-        self._recent_outcomes.clear()
-
-  def _prepare_batch(self, tid):
-    memory = ReplayMemory(int(self._memory_size / self._num_threads))
-    steps = 0
-    if self._frame_step_ratio < 1:
-      steps_per_frame = int(1 / self._frame_step_ratio)
-    else:
-      frames_per_step = int(self._frame_step_ratio)
+  def _publish_model_worker(self):
     while True:
-      steps += 1
-      if self._frame_step_ratio < 1:
-        if steps % steps_per_frame == 0: 
-          memory.push(*(self._transition_queue.get()))
-      else:
-        #print("Trans Queue Size: %d" % self._transition_queue.qsize())
-        for i in range(frames_per_step):
-          memory.push(*(self._transition_queue.get()))
-      if len(memory) < self._init_memory_size / self._num_threads: continue
-      transitions = memory.sample(self._batch_size)
-      self._batch_queue.put(self._transitions_to_batch(transitions))
+      self._publish_model()
+      time.sleep(10)
 
-  def _transitions_to_batch(self, transitions):
-    # batch to pytorch tensor
-    batch = Transition(*zip(*transitions))
-    if isinstance(batch.next_observation[0], tuple):
-      next_obs_batch = tuple(torch.from_numpy(np.stack(feat))
-                             for feat in zip(*batch.next_observation))
+  def _batch_worker(self, batch_queue, batch_size, warmup_size):
+    while True:
+      try:
+        if self._memory_server.total_steps <= warmup_size:
+          time.sleep(5)
+          tprint("Warming up: %d frames." % self._memory_server.total_steps)
+          continue
+        prev_trans, next_trans, weight = self._memory_server.get_batch(batch_size)
+        t = time.time()
+        observation = prev_trans[0].squeeze(1)
+        next_observation = next_trans[0].squeeze(1)
+        action = prev_trans[1].squeeze()
+        mc_return = prev_trans[2].squeeze()
+        reward = prev_trans[4].squeeze()
+        done = next_trans[3].squeeze()
+
+        if np.any(action < 0):
+          np.set_printoptions(threshold=np.nan, linewidth=300)
+          tprint("Error action detected: actions %s, weights: %s" %
+              (action, weight))
+          continue
+
+        observation = torch.from_numpy(observation)
+        next_observation = torch.from_numpy(next_observation)
+        action = torch.LongTensor(action)
+        reward = torch.FloatTensor(reward)
+        mc_return = torch.FloatTensor(mc_return)
+        done = torch.FloatTensor(done)
+
+        if torch.cuda.is_available():
+          observation = observation.pin_memory()
+          next_observation = next_observation.pin_memory()
+          action = action.pin_memory()
+          reward = reward.pin_memory()
+          mc_return = mc_return.pin_memory()
+          done = done.pin_memory()
+
+        batch_queue.put(
+            (observation, next_observation, action, reward, done, mc_return))
+      except RuntimeError:
+        time.sleep(0.001)
+        continue
+
+  def _setup_memory_server(self,
+                           state_size,
+                           cache_size,
+                           num_caches,
+                           num_pull_workers,
+                           priority_exponent,
+                           discount):
+    server = ReplayMemoryServer(state_size=state_size,
+                                action_size=1,
+                                reward_size=1,
+                                prob_size=1,# reused as done
+                                value_size=1,
+                                max_step=0,
+                                n_caches=num_caches,
+                                pub_endpoint="tcp://*:5560")
+    server.rem.priority_exponent = priority_exponent
+    server.rem.mix_lambda = 1 # used as MC return
+    server.rem.frame_stack = 1
+    server.rem.multi_step = 1
+    server.rem.cache_size = cache_size
+    server.rem.discount_factor = [discount]
+    server.rem.reward_coeff = [1.0]
+    server.rem.cache_flags = [1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
+    server.print_info()
+
+    threads = [
+        Thread(target=server.rep_worker_main, args=("tcp://*:5561", Bind)),
+        Thread(target=server.pull_proxy_main,
+               args=("tcp://*:5562", "inproc://pull_workers"))
+    ] + [
+        Thread(target=server.pull_worker_main,
+               args=("inproc://pull_workers", Conn))
+        for _ in range(num_pull_workers)
+    ]
+    for thread in threads:
+      thread.start()
+    return server, threads
+
+  def _publish_model(self):
+    f = io.BytesIO()
+    if torch.cuda.device_count() > 1:
+      torch.save(self._actor.network.module.state_dict(), f)
     else:
-      next_obs_batch = torch.from_numpy(np.stack(batch.next_observation))
-    if isinstance(batch.observation[0], tuple):
-      obs_batch = tuple(torch.from_numpy(np.stack(feat))
-                        for feat in zip(*batch.observation))
+      torch.save(self._actor.network.state_dict(), f)
+    self._memory_server.pub_bytes(
+      'model', struct.pack('d', self._cur_epsilon) + f.getvalue())
+    #self._memory_server.pub_bytes('epsilon', str(self._cur_epsilon))
+
+  def _save_checkpoint(self, checkpoint_path):
+    if torch.cuda.device_count() > 1:
+      torch.save(self._actor.network.module.state_dict(), checkpoint_path)
     else:
-      obs_batch = torch.from_numpy(np.stack(batch.observation))
-    reward_batch = torch.FloatTensor(batch.reward)
-    action_batch = torch.LongTensor(batch.action)
-    done_batch = torch.Tensor(batch.done)
-    return_batch = torch.FloatTensor(batch.mc_return)
-
-    # move to cuda
-    if torch.cuda.is_available():
-      next_obs_batch = tuple_cuda(next_obs_batch)
-      obs_batch = tuple_cuda(obs_batch)
-      reward_batch = tuple_cuda(reward_batch)
-      action_batch = tuple_cuda(action_batch)
-      done_batch = tuple_cuda(done_batch)
-      return_batch = tuple_cuda(return_batch)
-
-    # create variables
-    next_obs_batch = tuple_variable(next_obs_batch, volatile=True)
-    obs_batch = tuple_variable(obs_batch)
-    reward_batch = tuple_variable(reward_batch)
-    action_batch = tuple_variable(action_batch)
-    done_batch = tuple_variable(done_batch)
-    return_batch = tuple_variable(return_batch)
-
-    return (next_obs_batch, obs_batch, reward_batch, action_batch, done_batch,
-            return_batch)
-
-  def _update_target_network(self):
-    self._target_q_network.load_state_dict(self._q_network.state_dict())
-        
-  def _save_model(self, model_path):
-    torch.save(self._q_network.state_dict(), model_path)
+      torch.save(self._actor.network.state_dict(), checkpoint_path)
 
   def _load_model(self, model_path):
-    self._q_network.load_state_dict(
+    self._actor.load_network(
         torch.load(model_path, map_location=lambda storage, loc: storage))
 
-  def _get_current_eps(self, steps):
-    if self._eps_method == 'exponential':
-      eps = self._eps_end + (self._eps_start - self._eps_end) * \
-          math.exp(-1. * steps / self._eps_decay)
-    elif self._eps_method == 'linear':
-      if steps < self._eps_decay:
-        eps = self._eps_start - (self._eps_start - self._eps_end) * \
-            steps / self._eps_decay
-      elif steps < self._eps_decay2:
-        eps = self._eps_end - (self._eps_end - 0.01) * \
-            (steps - self._eps_decay) / self._eps_decay2
-      else:
-        eps = 0.01
+  def _schedule_epsilon(self, steps):
+    if steps < self._eps_decay:
+      return self._eps_start - (self._eps_start - self._eps_end) * \
+          steps / self._eps_decay
+    elif steps < self._eps_decay2:
+      return self._eps_end - (self._eps_end - 0.01) * \
+          (steps - self._eps_decay) / self._eps_decay2
     else:
-      raise NotImplementedError
-    return eps
+      return 0.01

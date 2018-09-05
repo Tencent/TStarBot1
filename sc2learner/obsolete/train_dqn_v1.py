@@ -15,8 +15,8 @@ from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
 from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from sc2learner.agents.dqn_agent import DDQNAgent
-from sc2learner.agents.q_networks import DuelingQNet
-from sc2learner.agents.q_networks import NonspatialDuelingQNet
+from sc2learner.agents.dqn_networks import DuelingQNet
+from sc2learner.agents.dqn_networks import NonspatialDuelingQNet
 from sc2learner.utils.utils import print_arguments
 
 

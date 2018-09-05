@@ -5,13 +5,12 @@ from __future__ import print_function
 import sys
 import os
 import traceback
+import multiprocessing
 import time
 
 import torch
 from absl import app
 from absl import flags
-from absl import logging
-import numpy as np
 
 from sc2learner.envs.raw_env import SC2RawEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
@@ -20,13 +19,14 @@ from sc2learner.envs.rewards.reward_wrappers import RewardShapingWrapperV2
 from sc2learner.agents.random_agent import RandomAgent
 from sc2learner.agents.keyboard_agent import KeyboardAgent
 from sc2learner.agents.dqn_agent import DDQNAgent
-from sc2learner.agents.q_networks import DuelingQNet
-from sc2learner.agents.q_networks import NonspatialDuelingQNet
+from sc2learner.agents.dqn_networks import DuelingQNet
+from sc2learner.agents.dqn_networks import NonspatialDuelingQNet
 from sc2learner.utils.utils import print_arguments
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_integer("num_episodes", 200, "Number of episodes to evaluate.")
+flags.DEFINE_integer("num_parallels", 4, "Parallel number.")
+flags.DEFINE_integer("num_episodes", 50, "Number of episodes to evaluate.")
 flags.DEFINE_float("epsilon", 0.0, "Epsilon for policy.")
 flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
@@ -83,16 +83,8 @@ def print_actions(env):
   print("-------------------------------------------------------------------")
 
 
-def print_action_distribution(env, action_counts):
-  print("----------------------- Action Distribution -----------------------")
-  for action_id, action_name in enumerate(env.action_names):
-    print("Action ID: %d	Count: %d	Name: %s" %
-        (action_id, action_counts[action_id], action_name))
-  print("-------------------------------------------------------------------")
-
-
-def train():
-  env = create_env(int(time.time()))
+def train(pid):
+  env = create_env(0)
   print_actions(env)
 
   if FLAGS.agent == 'dqn':
@@ -109,13 +101,13 @@ def train():
                       eps_method='linear',
                       eps_start=0,
                       eps_end=0,
+                      eps_decay=5000000,
+                      eps_decay2=30000000,
+                      memory_size=1000000,
                       winning_rate_threshold=0,
                       difficulties=[],
                       mmc_beta=0,
                       mmc_discount=0,
-                      eps_decay=5000000,
-                      eps_decay2=30000000,
-                      memory_size=1000000,
                       init_memory_size=100000,
                       frame_step_ratio=1.0,
                       gradient_clipping=1.0,
@@ -128,37 +120,39 @@ def train():
     agent = KeyboardAgent(action_space=env.action_space)
   else:
     raise NotImplementedError
+  env.close()
 
   try:
     cum_return = 0.0
-    action_counts = [0] * env.action_space.n
     for i in range(FLAGS.num_episodes):
+      random_seed =  int(time.time() * 1000) & 0xFFFFFFFF
+      env = create_env(random_seed)
       observation = env.reset()
       done = False
-      step_id = 0
       while not done:
         action = agent.act(observation, eps=FLAGS.epsilon)
-        print("Step ID: %d	Take Action: %d	Available Mask: %s" % (
-            step_id, action, observation[-1]))
         observation, reward, done, _ = env.step(action)
-        action_counts[action] += 1
         cum_return += reward
-        step_id += 1
-      print_action_distribution(env, action_counts)
-      print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" % (
-          i + 1, FLAGS.num_episodes, cum_return / (i + 1),
-          ((cum_return / (i + 1)) + 1) / 2.0))
+      print("Process: %d Episode: %d Outcome: %f" % (pid, i, reward))
+      print("Process: %d Evaluated %d/%d Episodes Avg Return %f "
+            "Avg Winning Rate %f" % (pid, i + 1, FLAGS.num_episodes,
+                                     cum_return / (i + 1),
+                                     ((cum_return / (i + 1)) + 1) / 2.0))
+      env.close()
   except KeyboardInterrupt: pass
   except: traceback.print_exc()
-  env.close()
 
 
 def main(argv):
-  logging.set_verbosity(logging.ERROR)
   print_arguments(FLAGS)
-  np.set_printoptions(threshold=np.nan, linewidth=500)
-  train()
-
+  processes = [multiprocessing.Process(target=train, args=(pid,))
+               for pid in range(FLAGS.num_parallels)]
+  for p in processes:
+    p.daemon = True
+    p.start()
+    time.sleep(1)
+  for p in processes:
+    p.join()
 
 if __name__ == '__main__':
   app.run(main)
