@@ -209,9 +209,11 @@ class ZergObservationWrapper(gym.Wrapper):
         score_feat,
         worker_feat,
         action_seq_feat,
-        game_progress_feat if self._use_game_progress else [],
-        observation['action_mask'] if isinstance(self.env.action_space,
-                                                 MaskDiscrete) else []
+        game_progress_feat if self._use_game_progress \
+            else np.array([], dtype=float32),
+        np.array(observation['action_mask'], dtype=np.float32) \
+            if isinstance(self.env.action_space, MaskDiscrete) \
+            else np.array([], dtype=np.float32)
     ])
 
     # spatial features
