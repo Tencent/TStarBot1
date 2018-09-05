@@ -50,7 +50,6 @@ class SC2RawEnv(gym.Env):
     self._score_index = score_index
     self._random_seed = random_seed
     self._reseted = False
-    self._num_episodes = 1
 
     self._sc2_env = self._create_env()
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
@@ -72,26 +71,19 @@ class SC2RawEnv(gym.Env):
     return (observation, reward, done, info)
 
   def reset(self):
-    if self._num_episodes % 10 == 0:
+    if self._reseted:
       self._sc2_env.close()
       self._sc2_env = self._create_env()
-    try:
-      timestep = self._sc2_env.reset()[0]
-    except:
-      print("Reset Exception. Recreate the env.")
-      self._sc2_env.close()
-      self._sc2_env = self._create_env()
-      timestep = self._sc2_env.reset()[0]
+    timestep = self._sc2_env.reset()[0]
     observation = timestep.observation
     self._reseted = True
-    self._num_episodes += 1
     return observation
 
   def close(self):
     self._sc2_env.close()
 
   def _create_env(self):
-    self._random_seed = (self._random_seed + 1) & 0xFFFFFFFF
+    self._random_seed = (self._random_seed + 11) & 0xFFFFFFFF
     players=[sc2_env.Agent(sc2_env.Race[self._agent_race]),
              sc2_env.Bot(sc2_env.Race[self._bot_race],
                          DIFFICULTIES[self._difficulty])]
