@@ -69,7 +69,7 @@ class SC2SelfplayRawEnv(gym.Env):
     info = {}
     return (observation, reward, done, info)
 
-  def reset(self, **kwargs):
+  def reset(self):
     if self._num_episodes % 10 == 0:
       self._sc2_env.close()
       self._sc2_env = self._create_env()

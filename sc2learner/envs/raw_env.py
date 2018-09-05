@@ -50,6 +50,7 @@ class SC2RawEnv(gym.Env):
     self._score_index = score_index
     self._random_seed = random_seed
     self._reseted = False
+    self._init_create = True
 
     self._sc2_env = self._create_env()
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
@@ -71,12 +72,13 @@ class SC2RawEnv(gym.Env):
     return (observation, reward, done, info)
 
   def reset(self):
-    if self._reseted:
+    if not self._init_create:
       self._sc2_env.close()
       self._sc2_env = self._create_env()
     timestep = self._sc2_env.reset()[0]
     observation = timestep.observation
     self._reseted = True
+    self._init_create = False
     return observation
 
   def close(self):
@@ -89,6 +91,7 @@ class SC2RawEnv(gym.Env):
                          DIFFICULTIES[self._difficulty])]
     agent_interface_format=sc2_env.parse_agent_interface_format(
         feature_screen=self._resolution, feature_minimap=self._resolution)
+    tprint("Creating game with seed %d." % self._random_seed)
     return sc2_env.SC2Env(
         map_name=self._map_name,
         step_mul=self._step_mul,
