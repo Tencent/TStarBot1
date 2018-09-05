@@ -13,6 +13,7 @@ from sc2learner.envs.actions.function import Function
 import sc2learner.envs.common.utils as utils
 from sc2learner.envs.common.const import ATTACK_FORCE
 from sc2learner.envs.common.const import ALLY_TYPE
+from sc2learner.envs.common.const import PRIORITIZED_ATTACK
 
 
 Region = namedtuple('Region', ('ranges', 'rally_point_a', 'rally_point_b'))
@@ -125,6 +126,18 @@ class CombatActions(object):
 
   def _micro_attack(self, combat_units, enemy_units, dc):
 
+    def prioritized_attack(unit, target_units):
+      assert len(target_units) > 0
+      prioritized_target_units = [u for u in target_units
+                                  if u.unit_type in PRIORITIZED_ATTACK]
+      if len(prioritized_target_units) > 0:
+        closest_target = utils.closest_unit(unit, prioritized_target_units)
+      else:
+        closest_target = utils.closest_unit(unit, target_units)
+      target_pos = (closest_target.float_attr.pos_x,
+                    closest_target.float_attr.pos_y)
+      return self._unit_attack(unit, target_pos, dc)
+
     def flee_or_fight(unit, target_units):
       assert len(target_units) > 0
       closest_target = utils.closest_unit(unit, target_units)
@@ -164,13 +177,13 @@ class CombatActions(object):
     actions = []
     for unit in air_combat_units:
       if len(air_enemy_units) > 0:
-        actions.extend(flee_or_fight(unit, air_enemy_units))
+        actions.extend(prioritized_attack(unit, air_enemy_units))
     for unit in ground_combat_units:
       if len(ground_enemy_units) > 0:
-        actions.extend(flee_or_fight(unit, ground_enemy_units))
+        actions.extend(prioritized_attack(unit, ground_enemy_units))
     for unit in air_ground_combat_units:
       if len(enemy_units) > 0:
-        actions.extend(flee_or_fight(unit, enemy_units))
+        actions.extend(prioritized_attack(unit, enemy_units))
     return actions
 
   def _micro_rally(self, units, rally_point, dc):
@@ -183,9 +196,9 @@ class CombatActions(object):
     # move with attack
     if unit.unit_type == UNIT_TYPE.ZERG_RAVAGER.value:
       return self._ravager_unit_attack(unit, target_pos, dc)
-    elif (unit.unit_type == UNIT_TYPE.ZERG_ROACH.value or
-          unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value):
-      return self._roach_unit_attack(unit, target_pos, dc)
+    #elif (unit.unit_type == UNIT_TYPE.ZERG_ROACH.value or
+          #unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value):
+      #return self._roach_unit_attack(unit, target_pos, dc)
     elif (unit.unit_type == UNIT_TYPE.ZERG_LURKERMP.value or
           unit.unit_type == UNIT_TYPE.ZERG_LURKERMPBURROWED.value):
       return self._lurker_unit_attack(unit, target_pos, dc)
@@ -196,8 +209,8 @@ class CombatActions(object):
     # move without attack
     if unit.unit_type == UNIT_TYPE.ZERG_LURKERMPBURROWED.value:
       return self._lurker_unit_move(unit, target_pos)
-    elif unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value:
-      return self._roach_unit_move(unit, target_pos, dc)
+    #elif unit.unit_type == UNIT_TYPE.ZERG_ROACHBURROWED.value:
+      #return self._roach_unit_move(unit, target_pos, dc)
     else:
       return self._normal_unit_move(unit, target_pos)
 
