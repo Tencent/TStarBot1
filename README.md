@@ -7,16 +7,19 @@
 <br/>Overview of Macro Action Space for SC2Learner (TStarBot1).
 </p>
 
+## Dependencies
+
+- Python >= 3.5.2 required.
+
+- PySC2-folk: https://github.com/Tencent-Game-AI/pysc2.git
+
 ## Installation
 
-Python >= 3.5.2 required.
-
 ```bash
-pip3 install git+https://github.com/Tencent-Game-AI/pysc2.git@dev --upgrade
 pip3 install -e .
 ```
 
-## Quick Start
+## How to Run
 
 ### Run Random Agent
 ```bash
