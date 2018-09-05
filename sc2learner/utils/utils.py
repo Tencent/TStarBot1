@@ -35,3 +35,18 @@ def print_arguments(flags_FLAGS):
 
 def tprint(x):
   print("[%s] %s" % (str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')), x))
+
+
+def print_actions(env):
+  print("----------------------------- Actions -----------------------------")
+  for action_id, action_name in enumerate(env.action_names):
+    print("Action ID: %d	Action Name: %s" % (action_id, action_name))
+  print("-------------------------------------------------------------------")
+
+
+def print_action_distribution(env, action_counts):
+  print("----------------------- Action Distribution -----------------------")
+  for action_id, action_name in enumerate(env.action_names):
+    print("Action ID: %d	Count: %d	Name: %s" %
+        (action_id, action_counts[action_id], action_name))
+  print("-------------------------------------------------------------------")

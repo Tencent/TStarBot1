@@ -17,8 +17,8 @@ from memoire import Conn
 from sc2learner.envs.raw_env import SC2RawEnv
 from sc2learner.envs.actions.zerg_action_wrappers import ZergActionWrapper
 from sc2learner.envs.observations.zerg_observation_wrappers import ZergObservationWrapper
-from sc2learner.agents.dqn_agent import DistRolloutWorker
-from sc2learner.agents.dqn_agent import DistDDQNLearner
+from sc2learner.agents.dqn_agent import DQNActor
+from sc2learner.agents.dqn_agent import DQNLearner
 from sc2learner.agents.dqn_networks import NonspatialDuelingQNet
 from sc2learner.utils.utils import print_arguments
 
@@ -90,19 +90,19 @@ def start_learner_job():
 
   env = create_env('1', 0)
   network = create_network(env)
-  agent = DistDDQNLearner(network=network,
-                          observation_space=env.observation_space,
-                          action_space=env.action_space,
-                          num_caches=FLAGS.num_caches,
-                          cache_size=FLAGS.cache_size,
-                          num_pull_workers=FLAGS.num_pull_workers,
-                          eps_start=FLAGS.eps_start,
-                          eps_end=FLAGS.eps_end,
-                          eps_decay=FLAGS.eps_decay,
-                          eps_decay2=FLAGS.eps_decay2,
-                          discount=FLAGS.discount,
-                          init_checkpoint_path=FLAGS.init_checkpoint_path,
-                          priority_exponent=FLAGS.priority_exponent)
+  agent = DQNLearner(network=network,
+                     observation_space=env.observation_space,
+                     action_space=env.action_space,
+                     num_caches=FLAGS.num_caches,
+                     cache_size=FLAGS.cache_size,
+                     num_pull_workers=FLAGS.num_pull_workers,
+                     eps_start=FLAGS.eps_start,
+                     eps_end=FLAGS.eps_end,
+                     eps_decay=FLAGS.eps_decay,
+                     eps_decay2=FLAGS.eps_decay2,
+                     discount=FLAGS.discount,
+                     init_checkpoint_path=FLAGS.init_checkpoint_path,
+                     priority_exponent=FLAGS.priority_exponent)
   env.close()
   env = None
   agent.learn(batch_size=FLAGS.batch_size,
@@ -120,13 +120,13 @@ def start_learner_job():
 def start_actor_job():
   env = create_env('1', 0)
   network = create_network(env)
-  worker = DistRolloutWorker(memory_size=FLAGS.client_memory_size,
-                             difficulties=FLAGS.difficulties.split(','),
-                             env_create_fn=create_env,
-                             network=network,
-                             action_space=env.action_space,
-                             push_freq=FLAGS.push_freq,
-                             learner_ip=FLAGS.learner_ip)
+  worker = DQNActor(memory_size=FLAGS.client_memory_size,
+                    difficulties=FLAGS.difficulties.split(','),
+                    env_create_fn=create_env,
+                    network=network,
+                    action_space=env.action_space,
+                    push_freq=FLAGS.push_freq,
+                    learner_ip=FLAGS.learner_ip)
   env.close()
   env = None
   worker.run()

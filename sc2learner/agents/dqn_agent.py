@@ -33,11 +33,15 @@ from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 from sc2learner.utils.utils import tprint
 
 
-class Actor(object):
+class DQNAgent(object):
 
-  def __init__(self, network, action_space):
+  def __init__(self, network, action_space, init_model_path=None):
     self._action_space = action_space
     self._network = network
+    if init_model_path is not None:
+      self._actor.load_network(
+          torch.load(init_model_path,
+                     map_location=lambda storage, loc: storage))
     if torch.cuda.device_count() > 1:
       self._network = nn.DataParallel(self._network)
     if torch.cuda.is_available(): self._network.cuda()
@@ -125,6 +129,9 @@ class Actor(object):
     self._network.load_state_dict(state_dict)
     self._is_network_loaded = True
 
+  def reset(self):
+    pass
+
   @property
   def is_network_loaded(self):
     return self._is_network_loaded
@@ -154,7 +161,7 @@ class Actor(object):
     return observation, action_mask
 
 
-class DistRolloutWorker(object):
+class DQNActor(object):
 
   def __init__(self,
                memory_size,
@@ -164,7 +171,7 @@ class DistRolloutWorker(object):
                action_space,
                push_freq,
                learner_ip="localhost"):
-    self._actor = Actor(network, action_space)
+    self._actor = DQNAgent(network, action_space)
     self._cur_epsilon = 1.0
     self._difficulties = difficulties
     self._env_create_fn = env_create_fn
@@ -278,7 +285,7 @@ class DistRolloutWorker(object):
     self._num_rollouts += 1
 
 
-class DistDDQNLearner(object):
+class DQNLearner(object):
 
   def __init__(self,
                network,

@@ -70,7 +70,6 @@ def start_lan_agent():
                      config_port=FLAGS.config_port,
                      agent_race='zerg',
                      step_mul=FLAGS.step_mul,
-                     resolution=16,
                      visualize_feature_map=False)
   env = ZergActionWrapper(env,
                           game_version=FLAGS.game_version,
