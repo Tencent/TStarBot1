@@ -21,7 +21,7 @@ from sc2learner.agents.ppo_agent import PPOAgent
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
+flags.DEFINE_string("game_version", '4.5.1', "Game core version.")
 flags.DEFINE_string("model_path", None, "Filepath to load initial model.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("host", "127.0.0.1", "Game Host. Can be 127.0.0.1 or ::1")
