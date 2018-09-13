@@ -13,6 +13,7 @@ import queue
 from threading import Thread
 from collections import deque
 import io
+import zmq
 
 import numpy as np
 import torch
@@ -23,32 +24,27 @@ import torch.optim as optim
 from gym.spaces import prng
 from gym.spaces.discrete import Discrete
 from gym import spaces
-from memoire import ReplayMemoryClient
-from memoire import ReplayMemoryServer
-from memoire import Bind
-from memoire import Conn
 
-from sc2learner.agents.memory import ReplayMemory, Transition
-from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.agents.replay_memory import Transition
+from sc2learner.agents.replay_memory import RemoteReplayMemory
 from sc2learner.utils.utils import tprint
 
 
 class DQNAgent(object):
 
   def __init__(self, network, action_space, init_model_path=None):
+    assert type(action_space) == spaces.Discrete
     self._action_space = action_space
     self._network = network
     if init_model_path is not None:
-      self._actor.load_network(
-          torch.load(init_model_path,
-                     map_location=lambda storage, loc: storage))
+      self.load_params(torch.load(init_model_path,
+                                  map_location=lambda storage, loc: storage))
     if torch.cuda.device_count() > 1:
       self._network = nn.DataParallel(self._network)
     if torch.cuda.is_available(): self._network.cuda()
     self._optimizer = None
     self._target_network = None
     self._num_optim_steps = 0
-    self._is_network_loaded = False
 
   def act(self, observation, eps=0):
     self._network.eval()
@@ -75,7 +71,7 @@ class DQNAgent(object):
                     gradient_clipping,
                     adam_eps,
                     learning_rate,
-                    target_update_freq):
+                    target_update_interval):
     # create optimizer
     if self._optimizer is None:
       self._optimizer = optim.Adam(self._network.parameters(),
@@ -88,7 +84,7 @@ class DQNAgent(object):
       self._target_network.eval()
 
     # update target network
-    if self._num_optim_steps % target_update_freq == 0:
+    if self._num_optim_steps % target_update_interval == 0:
       self._target_network.load_state_dict(self._network.state_dict())
 
     # move to gpu
@@ -125,370 +121,228 @@ class DQNAgent(object):
     self._num_optim_steps += 1
     return loss.data.item()
 
-  def load_network(self, state_dict):
-    self._network.load_state_dict(state_dict)
-    self._is_network_loaded = True
-
   def reset(self):
     pass
 
-  @property
-  def is_network_loaded(self):
-    return self._is_network_loaded
+  def load_params(self, state_dict):
+    self._network.load_state_dict(state_dict)
 
-  @property
-  def network(self):
-    return self._network
-
-  def _tuple_tensor_from_numpy(self, tensors):
-    if isinstance(tensors, tuple):
-      return tuple(torch.from_numpy(np.expand_dims(tensor, 0))
-                   for tensor in tensors)
+  def read_params(self):
+    if torch.cuda.device_count() > 1:
+      return self._network.module.state_dict()
     else:
-      return torch.from_numpy(np.expand_dims(tensors, 0))
-
-  def _tuple_cuda(self, tensors):
-    if isinstance(tensors, tuple):
-      return tuple(tensor.pin_memory().cuda(async=True) for tensor in tensors)
-    else:
-      return tensors.pin_memory().cuda(async=True)
-
-  def _parse_observation(self, observation):
-    action_mask = None
-    if isinstance(self._action_space, MaskDiscrete):
-      action_mask, observation = observation[-1], observation[:-1]
-      if len(observation) == 1: observation = observation[0]
-    return observation, action_mask
+      return self._network.state_dict()
 
 
 class DQNActor(object):
 
   def __init__(self,
                memory_size,
-               difficulties,
-               env_create_fn,
+               memory_warmup_size,
+               env,
                network,
-               action_space,
-               push_freq,
+               discount,
+               send_freq=4.0,
+               ports=("5700", "5701", "5702"),
                learner_ip="localhost"):
-    self._actor = DQNAgent(network, action_space)
-    self._cur_epsilon = 1.0
-    self._difficulties = difficulties
-    self._env_create_fn = env_create_fn
-    self._push_freq = push_freq
-    self._num_steps = 0
-    self._num_rollouts = 0
-    self._memory_client, self._threads = self._setup_memory_client(
-        learner_ip, memory_size)
-    self._replay_memory = self._memory_client.rem
-    self._cache_size = self._replay_memory.cache_size
-    self._set_random_seed(self._replay_memory.uuid)
+    assert type(env.action_space) == spaces.Discrete
+    assert len(ports) == 3
+    self._env = env
+    self._discount = discount
+    self._epsilon = 1.0
+
+    self._agent = DQNAgent(network, env.action_space)
+    self._replay_memory = RemoteReplayMemory(
+        is_server=False,
+        memory_size=memory_size,
+        memory_warmup_size=memory_warmup_size,
+        send_freq=send_freq,
+        ports=ports[:2],
+        server_ip=learner_ip)
+
+    self._zmq_context = zmq.Context()
+    self._model_requestor = self._zmq_context.socket(zmq.REQ)
+    self._model_requestor.connect("tcp://%s:%s" % (learner_ip, ports[2]))
 
   def run(self):
-    while not self._actor.is_network_loaded:
-      continue
-      time.sleep(1)
-
     while True:
-      try:
-        self._rollout()
-      except KeyboardInterrupt:
-        break
-      except Exception as e:
-        tprint("[Rollout Exception]: %s" % e)
-        continue
-
-  def _set_random_seed(self, seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    prng.seed(seed)
-
-  def _setup_memory_client(self,
-                           server_ip,
-                           memory_size):
-    client = ReplayMemoryClient("tcp://%s:5560" % server_ip,
-                                "tcp://%s:5561" % server_ip,
-                                "tcp://%s:5562" % server_ip,
-                                memory_size)
-    client.rem.print_info()
-
-    def _update_network_worker(client):
-      while True:
-        try:
-          bytes_recv = client.sub_bytes('model')
-          self._cur_epsilon = struct.unpack('d', bytes_recv[:8])[0]
-          f = io.BytesIO(bytes_recv[8:])
-          self._actor.load_network(
-              torch.load(f, map_location=lambda storage, loc: storage))
-          tprint("Network updated. Epsilon = %f" % self._cur_epsilon)
-        except Exception as e:
-          tprint("[Update Network Exception]: %s" % e)
-          continue
-
-    #def _update_network_worker(client):
-      #while True:
-        #try:
-          #f = io.BytesIO(client.sub_bytes('model'))
-          #self._actor.load_network(
-              #torch.load(f, map_location=lambda storage, loc: storage))
-          #tprint("Network updated.")
-          #self._cur_epsilon = float(client.sub_bytes('epsilon'))
-          #tprint("Epsilon updated = %f."  % self._cur_epsilon)
-        #except Exception as e:
-          #tprint("[Update Network Exception]: %s" % e)
-          #continue
-
-    threads = [
-        Thread(target=_update_network_worker, args=(client,))
-    ]
-    for thread in threads:
-      thread.start()
-    return client, threads
+      # fetch model
+      t = time.time()
+      self._update_model()
+      tprint("Update model time: %f eps: %f" % (time.time() - t, self._epsilon))
+      # rollout
+      t = time.time()
+      self._rollout()
+      tprint("Rollout time: %f" % (time.time() - t))
 
   def _rollout(self):
-    entry_reward = np.ndarray((1), dtype=np.float32)
-    entry_action = np.ndarray((1), dtype=np.float32)
-    entry_reward = np.ndarray((1), dtype=np.float32)
-    entry_prob = np.ndarray((1), dtype=np.float32)
-    entry_value = np.ndarray((1), dtype=np.float32)
-
-    random_seed =  random.randint(0, 2**32 - 1)
-    difficulty = random.choice(self._difficulties)
-    env = self._env_create_fn(difficulty, random_seed)
-    self._replay_memory.new_episode()
-    observation = env.reset()
-    done = False
+    rollout, done = [], False
+    observation = self._env.reset()
     while not done:
-      entry_state = observation
-      action = self._actor.act(observation, eps=self._cur_epsilon)
-      observation, reward, done, info = env.step(action)
-      entry_action[0], entry_reward[0]= action, reward
-      entry_prob[0] = False # entry_prob is reused as terminal
-      entry_value[0] = reward # entry_value is reused as reward
-      self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
-                                    entry_prob, entry_value, weight=1.0)
-      self._num_steps += 1
-      if (self._num_rollouts > 0 and
-          self._num_steps % int(self._cache_size / self._push_freq) == 0):
-        self._memory_client.push_cache()
-    env.close()
-    entry_action[0], entry_reward[0], entry_value[0] = -1, 0, 0
-    entry_prob[0] = True
-    entry_state = observation
-    self._replay_memory.add_entry(entry_state, entry_action, entry_reward,
-                                  entry_prob, entry_value, weight=1.0)
-    self._replay_memory.close_episode()
-    self._memory_client.update_counter()
-    tprint("Actor uuid: %d Seed: %d Difficulty: %s Epsilon: %f Outcome: %f." %
-        (self._replay_memory.uuid, random_seed, difficulty, self._cur_epsilon,
-         reward))
-    self._num_rollouts += 1
+      action = self._agent.act(observation, eps=self._epsilon)
+      next_observation, reward, done, info = self._env.step(action)
+      rollout.append(
+          (observation, action, reward, next_observation, done))
+      observation = next_observation
+
+    discounted_return = 0
+    for transition in reversed(rollout):
+      reward = transition[2]
+      discounted_return = discounted_return * self._discount + reward
+      self._replay_memory.push(*transition, discounted_return)
+
+  def _update_model(self):
+      self._model_requestor.send_string("request model")
+      file_object = io.BytesIO(self._model_requestor.recv_pyobj())
+      self._agent.load_params(
+          torch.load(file_object, map_location=lambda storage, loc: storage))
+      self._epsilon = self._model_requestor.recv_pyobj()
 
 
 class DQNLearner(object):
 
   def __init__(self,
                network,
-               observation_space,
                action_space,
-               num_caches,
-               cache_size,
-               num_pull_workers,
+               memory_size,
+               memory_warmup_size,
                discount,
                eps_start,
                eps_end,
-               eps_decay,
-               eps_decay2,
-               init_checkpoint_path="",
-               priority_exponent=0.0):
-    state_size = observation_space.spaces[0].shape[0] \
-        if isinstance(observation_space, spaces.Tuple) \
-        else observation_space.shape[0]
-    self._memory_server, self._threads = self._setup_memory_server(
-        state_size=state_size,
-        cache_size=cache_size,
-        num_caches=num_caches,
-        num_pull_workers=num_pull_workers,
-        priority_exponent=priority_exponent,
-        discount=discount)
+               eps_decay_steps,
+               eps_decay_steps2,
+               batch_size,
+               mmc_beta,
+               gradient_clipping,
+               adam_eps,
+               learning_rate,
+               target_update_interval,
+               checkpoint_dir,
+               checkpoint_interval,
+               print_interval,
+               ports=("5700", "5701", "5702"),
+               init_model_path=None):
+    assert type(action_space) == spaces.Discrete
+    self._agent = DQNAgent(network, action_space)
+    self._replay_memory = RemoteReplayMemory(
+        is_server=True,
+        memory_size=memory_size,
+        memory_warmup_size=memory_warmup_size,
+        ports=ports[:2])
+    if init_model_path is not None:
+      self._agent.load_params(
+          torch.load(init_model_path,
+                     map_location=lambda storage, loc: storage))
+
+    self._batch_size = batch_size
+    self._mmc_beta = mmc_beta
+    self._gradient_clipping = gradient_clipping
+    self._adam_eps = adam_eps
+    self._learning_rate = learning_rate
+    self._target_update_interval = target_update_interval
+    self._checkpoint_dir = checkpoint_dir
+    self._checkpoint_interval = checkpoint_interval
+    self._print_interval = print_interval
     self._discount = discount
     self._eps_start = eps_start
     self._eps_end = eps_end
-    self._eps_decay = eps_decay
-    self._eps_decay2 = eps_decay2
-    self._cur_epsilon = eps_start
+    self._eps_decay_steps = eps_decay_steps
+    self._eps_decay_steps2 = eps_decay_steps2
+    self._epsilon = eps_start
 
-    self._actor = Actor(network, action_space)
-    if init_checkpoint_path:
-      self._load_model(init_checkpoint_path)
+    self._zmq_context = zmq.Context()
+    self._reply_model_thread = Thread(
+        target=self._reply_model, args=(self._zmq_context, ports[2]))
+    self._reply_model_thread.start()
 
-    self._publish_model()
-    time.sleep(5)
-    self._publish_model()
-    time.sleep(5)
-
-  def learn(self,
-            batch_size,
-            mmc_beta,
-            gradient_clipping,
-            adam_eps,
-            learning_rate,
-            warmup_size,
-            target_update_freq,
-            checkpoint_dir,
-            checkpoint_freq,
-            print_freq):
+  def run(self):
     batch_queue = queue.Queue(8)
-    batch_threads = [
-        Thread(target=self._batch_worker, args=(batch_queue, batch_size,
-                                                warmup_size)),
-        Thread(target=self._publish_model_worker)
-    ]
-    for thread in batch_threads:
-      thread.start()
+    batch_thread = Thread(target=self._prepare_batch,
+                          args=(batch_queue, self._batch_size,))
+    batch_thread.start()
 
-    num_updates, loss_sum = 1, 0.0
-    t = time.time()
+    updates, loss, total_rollout_frames = 0, [], 0
+    time_start = time.time()
     while True:
+      updates += 1
       observation, next_observation, action, reward, done, mc_return = \
           batch_queue.get()
-      self._cur_epsilon = self._schedule_epsilon(num_updates)
-      loss_sum += self._actor.optimize_step(
-          obs_batch=observation,
-          next_obs_batch=next_observation,
-          action_batch=action,
-          reward_batch=reward,
-          done_batch=done,
-          mc_return_batch=mc_return,
-          discount=self._discount,
-          mmc_beta=mmc_beta,
-          gradient_clipping=gradient_clipping,
-          adam_eps=adam_eps,
-          learning_rate=learning_rate,
-          target_update_freq=target_update_freq)
-      if num_updates % checkpoint_freq == 0:
-        ckpt_path = os.path.join(checkpoint_dir, 'agent.model-%d' % num_updates)
+      self._epsilon = self._schedule_epsilon(updates)
+      loss.append(
+          self._agent.optimize_step(
+              obs_batch=observation,
+              next_obs_batch=next_observation,
+              action_batch=action,
+              reward_batch=reward,
+              done_batch=done,
+              mc_return_batch=mc_return,
+              discount=self._discount,
+              mmc_beta=self._mmc_beta,
+              gradient_clipping=self._gradient_clipping,
+              adam_eps=self._adam_eps,
+              learning_rate=self._learning_rate,
+              target_update_interval=self._target_update_interval)
+      )
+      if updates % self._checkpoint_interval == 0:
+        ckpt_path = os.path.join(self._checkpoint_dir,
+                                 'checkpoint-%d' % updates)
         self._save_checkpoint(ckpt_path)
-      if num_updates % print_freq == 0:
-        tprint("Steps: %d Time: %f Loss %f Actor Steps: %d Current Eps: %f" % (
-            num_updates, time.time() - t, loss_sum / print_freq,
-            self._memory_server.total_steps, self._cur_epsilon))
-        loss_sum = 0.0
-        t = time.time()
-      num_updates += 1
+      if updates % self._print_interval == 0:
+        time_elapsed = time.time() - time_start
+        train_fps = self._print_interval * self._batch_size / time_elapsed
+        rollout_fps = (self._replay_memory.total - total_rollout_frames) \
+            / time_elapsed
+        loss_mean = np.mean(loss)
+        tprint("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
+               "Loss: %.5f	Epsilon: %.5f	Time: %.1f" % (updates, train_fps,
+               rollout_fps, loss_mean, self._epsilon, time_elapsed))
+        time_start, loss = time.time(), []
+        total_rollout_frames = self._replay_memory.total
 
-  def _publish_model_worker(self):
+  def _prepare_batch(self, batch_queue, batch_size):
     while True:
-      self._publish_model()
-      time.sleep(10)
+      transitions = self._replay_memory.sample(batch_size)
+      batch = self._transitions_to_batch(transitions)
+      batch_queue.put(batch)
 
-  def _batch_worker(self, batch_queue, batch_size, warmup_size):
-    while True:
-      try:
-        if self._memory_server.total_steps <= warmup_size:
-          time.sleep(5)
-          tprint("Warming up: %d frames." % self._memory_server.total_steps)
-          continue
-        prev_trans, next_trans, weight = self._memory_server.get_batch(batch_size)
-        t = time.time()
-        observation = prev_trans[0].squeeze(1)
-        next_observation = next_trans[0].squeeze(1)
-        action = prev_trans[1].squeeze()
-        mc_return = prev_trans[2].squeeze()
-        reward = prev_trans[4].squeeze()
-        done = next_trans[3].squeeze()
+  def _transitions_to_batch(self, transitions):
+    batch = Transition(*zip(*transitions))
+    observation = torch.from_numpy(np.stack(batch.observation))
+    next_observation = torch.from_numpy(np.stack(batch.next_observation))
+    reward = torch.FloatTensor(batch.reward)
+    action = torch.LongTensor(batch.action)
+    done = torch.Tensor(batch.done)
+    mc_return = torch.FloatTensor(batch.mc_return)
 
-        if np.any(action < 0):
-          np.set_printoptions(threshold=np.nan, linewidth=300)
-          tprint("Error action detected: actions %s, weights: %s" %
-              (action, weight))
-          continue
+    if torch.cuda.is_available():
+      observation = observation.pin_memory()
+      next_observation = next_observation.pin_memory()
+      action = action.pin_memory()
+      reward = reward.pin_memory()
+      mc_return = mc_return.pin_memory()
+      done = done.pin_memory()
 
-        observation = torch.from_numpy(observation)
-        next_observation = torch.from_numpy(next_observation)
-        action = torch.LongTensor(action)
-        reward = torch.FloatTensor(reward)
-        mc_return = torch.FloatTensor(mc_return)
-        done = torch.FloatTensor(done)
-
-        if torch.cuda.is_available():
-          observation = observation.pin_memory()
-          next_observation = next_observation.pin_memory()
-          action = action.pin_memory()
-          reward = reward.pin_memory()
-          mc_return = mc_return.pin_memory()
-          done = done.pin_memory()
-
-        batch_queue.put(
-            (observation, next_observation, action, reward, done, mc_return))
-      except RuntimeError:
-        time.sleep(0.001)
-        continue
-
-  def _setup_memory_server(self,
-                           state_size,
-                           cache_size,
-                           num_caches,
-                           num_pull_workers,
-                           priority_exponent,
-                           discount):
-    server = ReplayMemoryServer(state_size=state_size,
-                                action_size=1,
-                                reward_size=1,
-                                prob_size=1,# reused as done
-                                value_size=1,
-                                max_step=0,
-                                n_caches=num_caches,
-                                pub_endpoint="tcp://*:5560")
-    server.rem.priority_exponent = priority_exponent
-    server.rem.mix_lambda = 1 # used as MC return
-    server.rem.frame_stack = 1
-    server.rem.multi_step = 1
-    server.rem.cache_size = cache_size
-    server.rem.discount_factor = [discount]
-    server.rem.reward_coeff = [1.0]
-    server.rem.cache_flags = [1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
-    server.print_info()
-
-    threads = [
-        Thread(target=server.rep_worker_main, args=("tcp://*:5561", Bind)),
-        Thread(target=server.pull_proxy_main,
-               args=("tcp://*:5562", "inproc://pull_workers"))
-    ] + [
-        Thread(target=server.pull_worker_main,
-               args=("inproc://pull_workers", Conn))
-        for _ in range(num_pull_workers)
-    ]
-    for thread in threads:
-      thread.start()
-    return server, threads
-
-  def _publish_model(self):
-    f = io.BytesIO()
-    if torch.cuda.device_count() > 1:
-      torch.save(self._actor.network.module.state_dict(), f)
-    else:
-      torch.save(self._actor.network.state_dict(), f)
-    self._memory_server.pub_bytes(
-      'model', struct.pack('d', self._cur_epsilon) + f.getvalue())
-    #self._memory_server.pub_bytes('epsilon', str(self._cur_epsilon))
+    return observation, next_observation, action, reward, done, mc_return
 
   def _save_checkpoint(self, checkpoint_path):
-    if torch.cuda.device_count() > 1:
-      torch.save(self._actor.network.module.state_dict(), checkpoint_path)
-    else:
-      torch.save(self._actor.network.state_dict(), checkpoint_path)
-
-  def _load_model(self, model_path):
-    self._actor.load_network(
-        torch.load(model_path, map_location=lambda storage, loc: storage))
+    torch.save(self._agent.read_parmas(), checkpoint_path)
 
   def _schedule_epsilon(self, steps):
-    if steps < self._eps_decay:
+    if steps < self._eps_decay_steps:
       return self._eps_start - (self._eps_start - self._eps_end) * \
-          steps / self._eps_decay
-    elif steps < self._eps_decay2:
+          steps / self._eps_decay_steps
+    elif steps < self._eps_decay_steps2:
       return self._eps_end - (self._eps_end - 0.01) * \
-          (steps - self._eps_decay) / self._eps_decay2
+          (steps - self._eps_decay_steps) / self._eps_decay_steps2
     else:
       return 0.01
+
+  def _reply_model(self, zmq_context, port):
+    receiver = zmq_context.socket(zmq.REP)
+    receiver.bind("tcp://*:%s" % port)
+    while True:
+      assert receiver.recv_string() == "request model"
+      f = io.BytesIO()
+      torch.save(self._agent.read_params(), f)
+      receiver.send_pyobj(f.getvalue(), zmq.SNDMORE)
+      receiver.send_pyobj(self._epsilon)

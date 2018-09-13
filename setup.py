@@ -25,7 +25,7 @@ setup(
     ],
     install_requires=[
         'gym==0.10.5',
-        'torch',
+        'torch==0.4.0',
         'tensorflow>=1.4.1'
     ]
 )

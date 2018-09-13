@@ -152,15 +152,17 @@ class PPOActor(object):
 
   def run(self):
     while True:
+      # fetch model
       t = time.time()
       self._update_model()
-      tprint("Time update model: %f" % (time.time() - t))
+      tprint("Update model time: %f" % (time.time() - t))
       t = time.time()
+      # rollout
       unroll = self._nstep_rollout()
       if self._enable_push:
         if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
         self._data_queue.put(unroll)
-        tprint("Time rollout: %f" % (time.time() - t))
+        tprint("Rollout time: %f" % (time.time() - t))
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
@@ -235,8 +237,9 @@ class PPOLearner(object):
   def __init__(self, env, policy, unroll_length, lr, clip_range, batch_size,
                ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, queue_size=8,
                print_interval=100, save_interval=10000, learn_act_speed_ratio=0,
-               unroll_split=8, save_dir=None, load_path=None,
+               unroll_split=8, save_dir=None, init_model_path=None,
                port_A="5700", port_B="5701"):
+    assert isinstance(env.action_space) == spaces.Discrete
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)
     if isinstance(clip_range, float): clip_range = constfn(clip_range)
@@ -260,7 +263,7 @@ class PPOLearner(object):
                         ent_coef=ent_coef,
                         vf_coef=vf_coef,
                         max_grad_norm=max_grad_norm)
-    if load_path is not None: self._model.load(load_path)
+    if init_model_path is not None: self._model.load(init_model_path)
     self._model_params = self._model.read_params()
     self._unroll_split = unroll_split if self._model.initial_state is None else 1
     assert self._unroll_length % self._unroll_split == 0
@@ -277,7 +280,7 @@ class PPOLearner(object):
     )
     self._pull_data_thread.start()
     self._reply_model_thread = Thread(
-        target=self._reply_model, args=(self._zmq_context, self._model, port_A))
+        target=self._reply_model, args=(self._zmq_context, port_A))
     self._reply_model_thread.start()
 
   def run(self):
@@ -295,16 +298,16 @@ class PPOLearner(object):
     for thread in batch_threads:
       thread.start()
 
-    update, loss = 0, []
+    updates, loss = 0, []
     time_start = time.time()
     while True:
       while (self._learn_act_speed_ratio > 0 and
-          update * self._batch_size >= \
+          updates * self._batch_size >= \
           self._num_unrolls * self._learn_act_speed_ratio):
         time.sleep(0.001)
-      update += 1
-      lr_now = self._lr(update)
-      clip_range_now = self._clip_range(update)
+      updates += 1
+      lr_now = self._lr(updates)
+      clip_range_now = self._clip_range(updates)
 
       batch = batch_queue.get()
       obs, returns, dones, actions, values, neglogpacs, states = batch
@@ -312,7 +315,7 @@ class PPOLearner(object):
                                     actions, values, neglogpacs, states))
       self._model_params = self._model.read_params()
 
-      if update % self._print_interval == 0:
+      if updates % self._print_interval == 0:
         loss_mean = np.mean(loss, axis=0)
         batch_steps = self._batch_size * self._unroll_length
         time_elapsed = time.time() - time_start
@@ -324,13 +327,13 @@ class PPOLearner(object):
         tprint("Update: %d	Train-fps: %.1f	Rollout-fps: %.1f	"
                "Explained-var: %.5f	Avg-reward %.2f	Policy-loss: %.5f	"
                "Value-loss: %.5f	Policy-entropy: %.5f	Approx-KL: %.5f	"
-               "Clip-frac: %.3f	Time: %.1f" % (update, train_fps, rollout_fps,
+               "Clip-frac: %.3f	Time: %.1f" % (updates, train_fps, rollout_fps,
                var, avg_reward, *loss_mean[:5], time_elapsed))
         time_start, loss = time.time(), []
 
-      if self._save_dir is not None and update % self._save_interval == 0:
+      if self._save_dir is not None and updates % self._save_interval == 0:
         os.makedirs(self._save_dir, exist_ok=True)
-        save_path = os.path.join(self._save_dir, 'checkpoints-%i' % update)
+        save_path = os.path.join(self._save_dir, 'checkpoint-%d' % updates)
         self._model.save(save_path)
         tprint('Saved to %s.' % save_path)
 
@@ -371,7 +374,7 @@ class PPOLearner(object):
       self._data_timesteps.append(time.time())
       self._num_unrolls += 1
 
-  def _reply_model(self, zmq_context, model, port_A):
+  def _reply_model(self, zmq_context, port_A):
     receiver = zmq_context.socket(zmq.REP)
     receiver.bind("tcp://*:%s" % port_A)
     while True:
@@ -383,6 +386,7 @@ class PPOLearner(object):
 class PPOAgent(object):
 
   def __init__(self, env, policy, model_path=None):
+    assert isinstance(env.action_space) == spaces.Discrete
     self._model = Model(policy=policy,
                         scope_name="model",
                         ob_space=env.observation_space,
@@ -416,6 +420,7 @@ class PPOSelfplayActor(object):
                init_opponent_pool_filelist=None, freeze_opponent_pool=False,
                enable_push=True, learner_ip="localhost", port_A="5700",
                port_B="5701"):
+    assert isinstance(env.action_space) == spaces.Discrete
     self._env = env
     self._unroll_length = unroll_length
     self._lam = lam
