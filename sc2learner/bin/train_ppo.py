@@ -132,7 +132,7 @@ def start_learner():
                        save_interval=FLAGS.save_interval,
                        learn_act_speed_ratio=FLAGS.learn_act_speed_ratio,
                        save_dir=FLAGS.save_dir,
-                       load_path=FLAGS.init_model_path,
+                       init_model_path=FLAGS.init_model_path,
                        port_A=FLAGS.port_A,
                        port_B=FLAGS.port_B)
   learner.run()

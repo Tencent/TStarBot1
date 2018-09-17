@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 import zmq
 from baselines.common import explained_variance
+from gym import spaces
 
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 from sc2learner.utils.utils import tprint
@@ -239,7 +240,7 @@ class PPOLearner(object):
                print_interval=100, save_interval=10000, learn_act_speed_ratio=0,
                unroll_split=8, save_dir=None, init_model_path=None,
                port_A="5700", port_B="5701"):
-    assert isinstance(env.action_space) == spaces.Discrete
+    assert isinstance(env.action_space, spaces.Discrete)
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)
     if isinstance(clip_range, float): clip_range = constfn(clip_range)
@@ -386,7 +387,7 @@ class PPOLearner(object):
 class PPOAgent(object):
 
   def __init__(self, env, policy, model_path=None):
-    assert isinstance(env.action_space) == spaces.Discrete
+    assert isinstance(env.action_space, spaces.Discrete)
     self._model = Model(policy=policy,
                         scope_name="model",
                         ob_space=env.observation_space,
@@ -420,7 +421,7 @@ class PPOSelfplayActor(object):
                init_opponent_pool_filelist=None, freeze_opponent_pool=False,
                enable_push=True, learner_ip="localhost", port_A="5700",
                port_B="5701"):
-    assert isinstance(env.action_space) == spaces.Discrete
+    assert isinstance(env.action_space, spaces.Discrete)
     self._env = env
     self._unroll_length = unroll_length
     self._lam = lam
