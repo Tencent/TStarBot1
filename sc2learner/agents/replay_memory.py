@@ -17,9 +17,8 @@ Transition = namedtuple('Transition',
 
 
 class LocalReplayMemory(object):
-  def __init__(self, memory_size, memory_warmup_size):
-    self._memory = deque(maxlen=memory_size)
-    self._memory_warmup_size = memory_warmup_size
+  def __init__(self, capacity):
+    self._memory = deque(maxlen=capacity)
     self._total = 0
 
   def push(self, *args):
@@ -27,9 +26,6 @@ class LocalReplayMemory(object):
     self._total += 1
 
   def sample(self, batch_size):
-    while (len(self._memory) < self._memory_warmup_size or
-        len(self._memory) < batch_size):
-      time.sleep(0.001)
     return random.sample(self._memory, batch_size)
 
   @property
@@ -44,16 +40,20 @@ class RemoteReplayMemory(object):
                memory_warmup_size,
                block_size=128,
                send_freq=1.0,
-               num_pull_threads=8,
+               num_pull_threads=4,
                ports=("5700", "5701"),
                server_ip="localhost"):
     assert len(ports) == 2
-    self._memory = LocalReplayMemory(memory_size, memory_warmup_size)
+    assert memory_warmup_size <= memory_size
     self._is_server = is_server
+    self._memory_warmup_size = memory_warmup_size
+    self._block_size = block_size
 
     if is_server:
       self._num_received, self._num_used, self._total = 0, 0, 0
+      self._cache_blocks = deque(maxlen=memory_size // block_size)
       self._zmq_context = zmq.Context()
+
       self._receiver_threads = [Thread(target=self._server_proxy_worker,
                                        args=(self._zmq_context, ports,))]
       self._receiver_threads += [Thread(target=self._server_receiver_worker,
@@ -61,10 +61,10 @@ class RemoteReplayMemory(object):
                                  for _ in range(num_pull_threads)]
       for thread in self._receiver_threads: thread.start()
     else:
-      self._memory_warmup_size = memory_warmup_size
-      self._block_size = block_size
+      self._memory = LocalReplayMemory(memory_size)
       self._memory_total_last = 0
       self._send_interval = int(block_size / send_freq)
+
       self._zmq_context = zmq.Context()
       self._sender = self._zmq_context.socket(zmq.PUSH)
       self._sender.connect("tcp://%s:%s" % (server_ip, ports[0]))
@@ -83,10 +83,13 @@ class RemoteReplayMemory(object):
 
   def sample(self, batch_size, reuse_ratio=1.0):
     assert self._is_server, "sample() cannot be called when is_server=False."
-    while self._num_used / reuse_ratio >= self._num_received: time.sleep(0.001)
-    block = self._memory.sample(batch_size)
+    while (self._num_used / reuse_ratio >= self._num_received or
+        self._memory_warmup_size > len(self._cache_blocks) * self._block_size):
+      time.sleep(0.001)
+    batch = [random.choice(random.choice(self._cache_blocks))
+             for _ in range(batch_size)]
     self._num_used += batch_size
-    return block
+    return batch
 
   @property
   def total(self):
@@ -100,10 +103,9 @@ class RemoteReplayMemory(object):
     receiver.connect("tcp://localhost:%s" % port)
     while True:
       block, delta = receiver.recv_pyobj()
+      self._cache_blocks.append(block)
       self._total += delta
-      for transition in block:
-        self._memory.push(*transition)
-        self._num_received += len(block)
+      self._num_received += len(block)
 
   def _server_proxy_worker(self, zmq_context, ports):
     assert len(ports) == 2

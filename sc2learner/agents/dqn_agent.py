@@ -233,6 +233,7 @@ class DQNLearner(object):
       self._agent.load_params(
           torch.load(init_model_path,
                      map_location=lambda storage, loc: storage))
+    self._model_params = self._agent.read_params()
 
     self._batch_size = batch_size
     self._mmc_beta = mmc_beta
@@ -268,21 +269,20 @@ class DQNLearner(object):
       observation, next_observation, action, reward, done, mc_return = \
           batch_queue.get()
       self._epsilon = self._schedule_epsilon(updates)
-      loss.append(
-          self._agent.optimize_step(
-              obs_batch=observation,
-              next_obs_batch=next_observation,
-              action_batch=action,
-              reward_batch=reward,
-              done_batch=done,
-              mc_return_batch=mc_return,
-              discount=self._discount,
-              mmc_beta=self._mmc_beta,
-              gradient_clipping=self._gradient_clipping,
-              adam_eps=self._adam_eps,
-              learning_rate=self._learning_rate,
-              target_update_interval=self._target_update_interval)
-      )
+      loss.append(self._agent.optimize_step(
+          obs_batch=observation,
+          next_obs_batch=next_observation,
+          action_batch=action,
+          reward_batch=reward,
+          done_batch=done,
+          mc_return_batch=mc_return,
+          discount=self._discount,
+          mmc_beta=self._mmc_beta,
+          gradient_clipping=self._gradient_clipping,
+          adam_eps=self._adam_eps,
+          learning_rate=self._learning_rate,
+          target_update_interval=self._target_update_interval))
+      self._model_params = self._agent.read_params()
       if updates % self._checkpoint_interval == 0:
         ckpt_path = os.path.join(self._checkpoint_dir,
                                  'checkpoint-%d' % updates)
@@ -343,6 +343,6 @@ class DQNLearner(object):
     while True:
       assert receiver.recv_string() == "request model"
       f = io.BytesIO()
-      torch.save(self._agent.read_params(), f)
+      torch.save(self._model_params, f)
       receiver.send_pyobj(f.getvalue(), zmq.SNDMORE)
       receiver.send_pyobj(self._epsilon)
