@@ -325,7 +325,7 @@ class DQNLearner(object):
     return observation, next_observation, action, reward, done, mc_return
 
   def _save_checkpoint(self, checkpoint_path):
-    torch.save(self._agent.read_parmas(), checkpoint_path)
+    torch.save(self._model_params, checkpoint_path)
 
   def _schedule_epsilon(self, steps):
     if steps < self._eps_decay_steps:
