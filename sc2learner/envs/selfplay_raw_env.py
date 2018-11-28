@@ -48,9 +48,9 @@ class SC2SelfplayRawEnv(gym.Env):
     self._score_index = score_index
     self._random_seed = random_seed
     self._reseted = False
-    self._num_episodes = 1
+    self._first_create = True
 
-    self._sc2_env = self._create_env()
+    self._sc2_env = self._safe_create_env()
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
     self.action_space = PySC2RawAction()
 
@@ -70,20 +70,22 @@ class SC2SelfplayRawEnv(gym.Env):
     return (observation, reward, done, info)
 
   def reset(self):
-    if self._num_episodes % 10 == 0:
-      self._sc2_env.close()
-      self._sc2_env = self._create_env()
-    try:
-      timesteps = self._sc2_env.reset()
-    except:
-      print("Reset Exception. Recreate the env.")
-      self._sc2_env.close()
-      self._sc2_env = self._create_env()
-      timesteps = self._sc2_env.reset()
-    observation = [timesteps[0].observation, timesteps[1].observation]
+    timesteps = self._safe_reset()
     self._reseted = True
-    self._num_episodes += 1
-    return observation
+    return [timesteps[0].observation, timesteps[1].observation]
+
+  def _reset(self):
+    if not self._first_create:
+      self._sc2_env.close()
+      self._sc2_env = self._create_env()
+      self._first_create = False
+    return self._sc2_env.reset()
+
+  def _safe_reset(self, max_retry=10):
+    for _ in range(max_retry - 1):
+      try: return self._reset()
+      except: pass
+    return self._reset()
 
   def close(self):
     self._sc2_env.close()
@@ -104,3 +106,9 @@ class SC2SelfplayRawEnv(gym.Env):
         visualize=False,
         score_index=self._score_index,
         random_seed=self._random_seed)
+
+  def _safe_create_env(self, max_retry=10):
+    for _ in range(max_retry - 1):
+      try: return self._create_env()
+      except: pass
+    return self._create_env()

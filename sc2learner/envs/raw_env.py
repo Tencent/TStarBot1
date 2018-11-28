@@ -50,9 +50,9 @@ class SC2RawEnv(gym.Env):
     self._score_index = score_index
     self._random_seed = random_seed
     self._reseted = False
-    self._init_create = True
+    self._first_create = True
 
-    self._sc2_env = self._create_env()
+    self._sc2_env = self._safe_create_env()
     self.observation_space = PySC2RawObservation(self._sc2_env.observation_spec)
     self.action_space = PySC2RawAction()
 
@@ -72,14 +72,22 @@ class SC2RawEnv(gym.Env):
     return (observation, reward, done, info)
 
   def reset(self):
-    if not self._init_create:
+    timesteps = self._safe_reset()
+    self._reseted = True
+    return timesteps[0].observation
+
+  def _reset(self):
+    if not self._first_create:
       self._sc2_env.close()
       self._sc2_env = self._create_env()
-    timestep = self._sc2_env.reset()[0]
-    observation = timestep.observation
-    self._reseted = True
-    self._init_create = False
-    return observation
+      self._first_create = False
+    return self._sc2_env.reset()
+
+  def _safe_reset(self, max_retry=10):
+    for _ in range(max_retry - 1):
+      try: return self._reset()
+      except: pass
+    return self._reset()
 
   def close(self):
     self._sc2_env.close()
@@ -102,3 +110,9 @@ class SC2RawEnv(gym.Env):
         visualize=False,
         score_index=self._score_index,
         random_seed=self._random_seed)
+
+  def _safe_create_env(self, max_retry=10):
+    for _ in range(max_retry - 1):
+      try: return self._create_env()
+      except: pass
+    return self._create_env()
