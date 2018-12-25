@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import time
 from collections import deque
@@ -11,10 +15,10 @@ import joblib
 import numpy as np
 import tensorflow as tf
 import zmq
-from baselines.common import explained_variance
 from gym import spaces
 
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
+from sc2learner.agents.utils_tf import explained_variance
 from sc2learner.utils.utils import tprint
 
 
@@ -29,7 +33,7 @@ class Model(object):
     train_model = policy(sess, scope_name, ob_space, ac_space, nbatch_train,
                          unroll_length, reuse=True)
 
-    A = train_model.pdtype.sample_placeholder([None])
+    A = tf.placeholder(shape=(nbatch_train,), dtype=tf.int32)
     ADV = tf.placeholder(tf.float32, [None])
     R = tf.placeholder(tf.float32, [None])
     OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
@@ -68,20 +72,20 @@ class Model(object):
     new_params = [tf.placeholder(p.dtype, shape=p.get_shape()) for p in params]
     param_assign_ops = [p.assign(new_p) for p, new_p in zip(params, new_params)]
 
-    def train(lr, cliprange, obs, returns, masks, actions, values, neglogpacs,
+    def train(lr, cliprange, obs, returns, dones, actions, values, neglogpacs,
               states=None):
       advs = returns - values
       advs = (advs - advs.mean()) / (advs.std() + 1e-8)
       if isinstance(ac_space, MaskDiscrete):
-        td_map = {train_model.X:obs[0], train_model.Mask:obs[-1], A:actions,
+        td_map = {train_model.X:obs[0], train_model.MASK:obs[-1], A:actions,
                   ADV:advs, R:returns, LR:lr, CLIPRANGE:cliprange,
                   OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
       else:
         td_map = {train_model.X:obs, A:actions, ADV:advs, R:returns, LR:lr,
                   CLIPRANGE:cliprange, OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
       if states is not None:
-        td_map[train_model.S] = states
-        td_map[train_model.M] = masks
+        td_map[train_model.STATE] = states
+        td_map[train_model.DONE] = dones
       return sess.run(
         [pg_loss, vf_loss, entropy, approxkl, clipfrac, _train],
         td_map
@@ -113,6 +117,7 @@ class Model(object):
     self.load = load
     self.read_params = read_params
     self.load_params = load_params
+
     tf.global_variables_initializer().run(session=sess)
 
 

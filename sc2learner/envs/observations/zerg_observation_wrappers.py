@@ -210,7 +210,7 @@ class ZergObservationWrapper(gym.Wrapper):
         worker_feat,
         action_seq_feat,
         game_progress_feat if self._use_game_progress \
-            else np.array([], dtype=float32),
+            else np.array([], dtype=np.float32),
         np.array(observation['action_mask'], dtype=np.float32) \
             if isinstance(self.env.action_space, MaskDiscrete) \
             else np.array([], dtype=np.float32)
