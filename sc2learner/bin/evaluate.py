@@ -16,6 +16,8 @@ from sc2learner.envs.observations.zerg_observation_wrappers \
 from sc2learner.utils.utils import print_arguments
 from sc2learner.utils.utils import print_actions
 from sc2learner.utils.utils import print_action_distribution
+from sc2learner.agents.random_agent import RandomAgent
+from sc2learner.agents.keyboard_agent import KeyboardAgent
 
 
 FLAGS = flags.FLAGS
@@ -23,7 +25,7 @@ flags.DEFINE_integer("num_episodes", 10, "Number of episodes to evaluate.")
 flags.DEFINE_enum("agent", 'ppo', ['ppo', 'dqn', 'random', 'keyboard'],
                   "Agent name.")
 flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
-flags.DEFINE_string("game_version", '4.5.1', "Game core version.")
+flags.DEFINE_string("game_version", '4.6', "Game core version.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],

@@ -37,7 +37,7 @@ flags.DEFINE_float("model_cache_prob", 0.05, "Opponent model cache probability."
 flags.DEFINE_string("learner_ip", "localhost", "Learner IP address.")
 flags.DEFINE_string("port_A", "5700", "Port for transporting model.")
 flags.DEFINE_string("port_B", "5701", "Port for transporting data.")
-flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
+flags.DEFINE_string("game_version", '4.6', "Game core version.")
 flags.DEFINE_float("discount_gamma", 0.998, "Discount factor.")
 flags.DEFINE_float("lambda_return", 0.95, "Lambda return factor.")
 flags.DEFINE_float("clip_range", 0.1, "Clip range for PPO.")

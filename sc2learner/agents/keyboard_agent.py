@@ -51,3 +51,6 @@ class KeyboardAgent(object):
       return action
     else:
       return 0
+
+  def reset(self):
+    pass

@@ -35,7 +35,7 @@ flags.DEFINE_integer("server_memory_size", 1000000,
                      "Total size of server memory.")
 flags.DEFINE_integer("server_memory_warmup_size", 100000,
                      "Memory warmup size for client.")
-flags.DEFINE_string("game_version", '4.1.2', "Game core version.")
+flags.DEFINE_string("game_version", '4.6', "Game core version.")
 flags.DEFINE_float("discount", 0.995, "Discount factor.")
 flags.DEFINE_float("send_freq", 4.0, "Probability of a step being pushed.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")

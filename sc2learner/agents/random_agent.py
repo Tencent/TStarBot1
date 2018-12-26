@@ -21,3 +21,6 @@ class RandomAgent(object):
       return self._action_space.sample(np.nonzero(action_mask)[0])
     else:
       return self._action_space.sample()
+
+  def reset(self):
+    pass
